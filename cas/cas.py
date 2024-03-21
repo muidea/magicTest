@@ -13,7 +13,7 @@ class MyTestCase(unittest.TestCase):
 
     def setUp(self):
         warnings.simplefilter('ignore', ResourceWarning)
-        self.namespace = 'autotest'
+        self.namespace = ''
         self.server_url = 'http://autotest.local.vpc/api/v1'
 
     def test_account(self):
