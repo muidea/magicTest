@@ -22,8 +22,13 @@ class File:
         print(val['reason'])
         return None
 
-    def delete_file(self, param):
-        val = self.session.delete('/static/file/delete/{0}'.format(param))
+    def delete_file(self, file_id, param = None):
+        if not param:
+            param = {'fileSource': self.source}
+        else:
+            param['fileSource'] = self.source
+
+        val = self.session.delete('/static/file/delete/{0}'.format(file_id), param)
         if val and val['errorCode'] == 0:
             return val['file']
 
@@ -54,7 +59,7 @@ class File:
 def main(server_url, namespace):
     """main"""
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
-    app = File(namespace, work_session)
+    app = File("autotest", work_session)
     file_path = "./file/file.py"
     new_file = app.upload_file(file_path)
     if not new_file:

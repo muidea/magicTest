@@ -83,11 +83,11 @@ class MagicSession(object):
 
         return ret
 
-    def delete(self, url):
+    def delete(self, url, params = None):
         """Delete"""
         ret = None
         try:
-            response = self.current_session.delete('%s%s' % (self.base_url, url), headers=self.header())
+            response = self.current_session.delete('%s%s' % (self.base_url, url), headers=self.header(), params=params)
             ret = json.loads(response.text)
         except ValueError as except_value:
             print(except_value)

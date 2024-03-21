@@ -1,3 +1,3 @@
-from file import file
+import file
 
-file.main('http://autotest.local.vpc/api/v1', 'autotest')
+file.main('http://autotest.local.vpc/api/v1', '')
