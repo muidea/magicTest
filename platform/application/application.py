@@ -9,7 +9,7 @@ class Application:
         self.session = work_session
 
     def filter_application(self, filter):
-        url = '/application/filter/'
+        url = '/core/application/filter/'
 
         val = self.session.post(url, filter)
         if val and val['errorCode'] == 0:
@@ -20,7 +20,7 @@ class Application:
         return None
 
     def query_application(self, id):
-        val = self.session.get('/application/query/{0}'.format(id))
+        val = self.session.get('/core/application/query/{0}'.format(id))
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -29,7 +29,7 @@ class Application:
         return None
 
     def create_application(self, param):
-        val = self.session.post('/application/create/', param)
+        val = self.session.post('/core/application/create/', param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -38,7 +38,7 @@ class Application:
         return None
 
     def update_application(self, id, param):
-        val = self.session.put('/application/update/{0}'.format(id), param)
+        val = self.session.put('/core/application/update/{0}'.format(id), param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -47,7 +47,7 @@ class Application:
         return None
 
     def delete_application(self, id):
-        val = self.session.delete('/application/destroy/{0}'.format(id))
+        val = self.session.delete('/core/application/destroy/{0}'.format(id))
         if val and val['errorCode'] == 0:
             return val['value']
 

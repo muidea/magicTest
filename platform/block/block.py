@@ -9,7 +9,7 @@ class Block:
         self.session = work_session
 
     def filter_block(self, filter):
-        url = '/block/filter/'
+        url = '/core/block/filter/'
 
         val = self.session.post(url, filter)
         if val and val['errorCode'] == 0:
@@ -20,7 +20,7 @@ class Block:
         return None
 
     def query_block(self, id):
-        val = self.session.get('/block/query/{0}'.format(id))
+        val = self.session.get('/core/block/query/{0}'.format(id))
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -29,7 +29,7 @@ class Block:
         return None
 
     def create_block(self, param):
-        val = self.session.post('/block/create/', param)
+        val = self.session.post('/core/block/create/', param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -38,7 +38,7 @@ class Block:
         return None
 
     def update_block(self, id, param):
-        val = self.session.put('/block/update/{0}'.format(id), param)
+        val = self.session.put('/core/block/update/{0}'.format(id), param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -47,7 +47,7 @@ class Block:
         return None
 
     def delete_block(self, id):
-        val = self.session.delete('/block/destroy/{0}'.format(id))
+        val = self.session.delete('/core/block/destroy/{0}'.format(id))
         if val and val['errorCode'] == 0:
             return val['value']
 

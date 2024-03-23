@@ -104,7 +104,7 @@ class Entity:
         self.session = work_session
 
     def filter_entity(self, filter):
-        url = '/entity/filter/'
+        url = '/core/entity/filter/'
 
         val = self.session.post(url, filter)
         if val and val['errorCode'] == 0:
@@ -115,7 +115,7 @@ class Entity:
         return None
 
     def query_entity(self, id):
-        val = self.session.get('/entity/query/{0}'.format(id))
+        val = self.session.get('/core/entity/query/{0}'.format(id))
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -124,7 +124,7 @@ class Entity:
         return None
 
     def create_entity(self, param):
-        val = self.session.post('/entity/create/', param)
+        val = self.session.post('/core/entity/create/', param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -133,7 +133,7 @@ class Entity:
         return None
 
     def update_entity(self, id, param):
-        val = self.session.put('/entity/update/{0}'.format(id), param)
+        val = self.session.put('/core/entity/update/{0}'.format(id), param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -142,7 +142,7 @@ class Entity:
         return None
 
     def delete_entity(self, id):
-        val = self.session.delete('/entity/destroy/{0}'.format(id))
+        val = self.session.delete('/core/entity/destroy/{0}'.format(id))
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -151,7 +151,7 @@ class Entity:
         return None
 
     def enable_entity(self, id):
-        val = self.session.put('/entity/enable/{0}'.format(id), None)
+        val = self.session.put('/core/entity/enable/{0}'.format(id), None)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -160,7 +160,7 @@ class Entity:
         return None
 
     def disable_entity(self, id):
-        val = self.session.put('/entity/disable/{0}'.format(id), None)
+        val = self.session.put('/core/entity/disable/{0}'.format(id), None)
         if val and val['errorCode'] == 0:
             return val['value']
 

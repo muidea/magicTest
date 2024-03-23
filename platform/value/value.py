@@ -116,7 +116,7 @@ class Value:
         self.session = work_session
 
     def filter_value(self, filter):
-        url = '/value/filter/'
+        url = '/core/value/filter/'
 
         val = self.session.post(url, filter)
         if val and val['errorCode'] == 0:
@@ -127,7 +127,7 @@ class Value:
         return None
 
     def query_value(self, data):
-        val = self.session.post('/value/query/', data)
+        val = self.session.post('/core/value/query/', data)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -136,7 +136,7 @@ class Value:
         return None
 
     def insert_value(self, param):
-        val = self.session.post('/value/insert/', param)
+        val = self.session.post('/core/value/insert/', param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -145,7 +145,7 @@ class Value:
         return None
 
     def update_value(self, param):
-        val = self.session.post('/value/update/', param)
+        val = self.session.post('/core/value/update/', param)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -154,7 +154,7 @@ class Value:
         return None
 
     def delete_value(self, param):
-        val = self.session.post('/value/delete/', param)
+        val = self.session.post('/core/value/delete/', param)
         if val and val['errorCode'] == 0:
             return val['value']
 
