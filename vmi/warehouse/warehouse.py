@@ -27,6 +27,15 @@ def main(server_url, namespace):
         print('create new warehouse failed')
         return
 
+    cur_warehouse001 = warehouse_instance.query(new_warehouse001['id'])
+    if not cur_warehouse001:
+        print('query new warehouse failed')
+
+    cur_warehouse001['description'] = mock.sentence()
+    cur_warehouse001 = warehouse_instance.update(new_warehouse001['id'], new_warehouse001)
+    if not cur_warehouse001:
+        print('update new warehouse failed')
+
     warehouse_instance.delete(new_warehouse001['id'])
 
 
