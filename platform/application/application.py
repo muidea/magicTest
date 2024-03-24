@@ -89,7 +89,7 @@ def main(server_url, namespace):
     new_app10['version'] = '0.0.2'
     new_app10['description'] = mock.sentence()
     new_app11 = app_instance.update_application(new_app10['id'], new_app10)
-    if new_app11['description'] != new_app10['description'] :
+    if new_app11['description'] != new_app10['description']:
         print('update application failed')
 
     app002 = mock_application_param()

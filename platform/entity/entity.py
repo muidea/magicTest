@@ -278,6 +278,7 @@ def main(server_url, namespace):
     entity002 = mock_entity_param([block])
     new_entity20 = entity_instance.create_entity(entity002)
     if not new_entity20:
+        teardown_data(work_session, app, block)
         print('create new entity failed')
         return
 

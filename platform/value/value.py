@@ -223,6 +223,7 @@ def main(server_url, namespace):
     value001 = mock_entity_value(entity)
     new_value10 = value_instance.insert_value(value001)
     if not new_value10:
+        teardown_data(work_session, app, block, entity)
         print('create new value failed')
         return
 
