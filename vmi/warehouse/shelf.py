@@ -4,9 +4,21 @@ from cas.cas import cas
 from warehouse import warehouse
 
 
+"""
+{
+    "id": 100,
+    "code": "HJ-0003"
+    "description": "保利书或月达断学就达格领。",
+    "used": 10,
+    "capacity": 77,
+    "warehouse": 1
+}
+"""
+
+
 def mock_shelf_param(warehouse):
     return {
-        'name': mock.name(),
+        'name': 'HJ'+mock.name(),
         'description': mock.sentence(),
         'capacity': mock.int(),
         'warehouse': warehouse['id'],

@@ -2,6 +2,31 @@ from mock import common as mock
 from session import session, common
 from cas.cas import cas
 
+"""
+{
+    "sku": "abc2323",
+    "description": "测试SKU001",
+    "image": "fsdffsd"
+}
+
+{
+    "id": 1,
+    "name": "testPro",
+    "description": "测试产品描述",
+    "sku":[
+        {
+            "sku": "abc2323",
+            "description": "测试SKU001",
+            "image": "fsdffsd"
+        },
+    ],
+    "image": ["afd"],
+    "expire": 100,
+    "status": 3,
+    "tags": [],
+}
+"""
+
 
 def mock_product_param():
     return {
@@ -12,7 +37,7 @@ def mock_product_param():
             'description': mock.sentence(),
             'image': [mock.url(), mock.url(), ],
         }],
-        'image': mock.url(),
+        'image': [mock.url()],
         'expire': 100,
         'tags': ['a', 'b', 'c'],
     }

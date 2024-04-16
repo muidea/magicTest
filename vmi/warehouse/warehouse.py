@@ -3,9 +3,19 @@ from session import session, common
 from cas.cas import cas
 
 
+"""
+{
+    "id": 199,
+    "cod": "CK-0001",
+    "name": "testCK",
+    "description": "测试仓库描述"
+}
+"""
+
+
 def mock_warehouse_param():
     return {
-        'name': mock.name(),
+        'name': 'CK'+mock.name(),
         'description': mock.sentence(),
     }
 
