@@ -8,8 +8,9 @@ from mock import common
 class Namespace:
     """Namespace"""
 
-    def __init__(self, work_session):
+    def __init__(self, work_session, superNamespace):
         self.session = work_session
+        self.superNamespace = superNamespace
 
     def filter_namespace(self, param):
         val = self.session.get('/cas/namespace/query/', param)
@@ -30,14 +31,14 @@ class Namespace:
         return None
 
     def create_namespace(self, param):
-        val = self.session.post('/cas/namespace/create/', param)
+        val = self.session.post('/cas/namespace/create/?X-Namespace={0}'.format(self.superNamespace), param)
         if val and val['errorCode'] == 0:
             return val['namespace']
 
         return None
 
     def update_namespace(self, param):
-        val = self.session.put('/cas/namespace/update/{0}'.format(param['id']), param)
+        val = self.session.put('/cas/namespace/update/{0}?X-Namespace={1}'.format(param['id'], self.superNamespace), param)
         if val and val['errorCode'] == 0:
             return val['namespace']
 
@@ -46,7 +47,7 @@ class Namespace:
         return None
 
     def delete_namespace(self, param):
-        val = self.session.delete('/cas/namespace/delete/{0}'.format(param))
+        val = self.session.delete('/cas/namespace/delete/{0}?X-Namespace={1}'.format(param, self.superNamespace))
         if val and val['errorCode'] == 0:
             return val['namespace']
 
@@ -68,7 +69,7 @@ def main(server_url, namespace):
         return False
 
     work_session.bind_token(cas_session.get_session_token())
-    app = Namespace(work_session)
+    app = Namespace(work_session, "super")
     param = mock_namespace_param()
     new_namespace = app.create_namespace(param)
     if not new_namespace:

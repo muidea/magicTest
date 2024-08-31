@@ -26,7 +26,7 @@ class MyTestCase(unittest.TestCase):
         self.assertEqual(True, role.main(self.server_url, self.namespace))
 
     def test_namespace(self):
-        self.assertEqual(True, namespace.main(self.server_url, 'super'))
+        self.assertEqual(True, namespace.main(self.server_url, self.namespace))
 
 
 if __name__ == '__main__':
