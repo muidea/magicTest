@@ -46,7 +46,7 @@ def main(server_url, namespace):
     cas_session = cas.Cas(work_session)
     if not cas_session.login('administrator', 'administrator'):
         print('cas failed')
-        return False
+        return
 
     work_session.bind_token(cas_session.get_session_token())
 

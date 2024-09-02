@@ -66,8 +66,8 @@ def mock_application_param():
         'author': mock.name(),
         'description': mock.sentence(),
         'database': {
-            'dbserver': '127.0.0.1:3306',
-            'dbname': 'testdb',
+            'dbserver': 'mysql:3306',
+            'dbname': 'testDB',
             'username': 'root',
             'password': 'rootkit',
         }
