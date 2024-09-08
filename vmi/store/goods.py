@@ -3,32 +3,23 @@ from session import session, common
 from cas.cas import cas
 
 
-"""
-{
-    "id": 199,
-    "cod": "CK-0001",
-    "name": "testCK",
-    "description": "测试仓库描述"
-}
-"""
-
-
-def mock_goodsInfo(product):
+def mock_goods(product):
     return {
         'sku': 'a003',
         'product': product,
         'type': 1,
         'count': 100,
         'price': 120,
-        'status': {
-            'id': 16
-        }
+        'shelf': [],
+        'description': '',
+        'parameter': '',
+        'serviceInfo': ''
     }
 
 
 def mock_stockin_param(store, product):
     return {
-        'goodsInfo': [mock_goodsInfo(product),],
+        'goodsInfo': [mock_goods(product), ],
         'description': mock.sentence(),
         'store': store,
         'status': {
