@@ -13,7 +13,7 @@ from cas.cas import cas
 """
 
 
-def mock_store_param():
+def mock_store():
     return {
         'name': 'STORE'+mock.name(),
         'description': mock.sentence(),
@@ -31,7 +31,7 @@ def main(server_url, namespace):
     work_session.bind_token(cas_session.get_session_token())
 
     store_instance = common.MagicEntity("/vmi/store", work_session)
-    store_param = mock_store_param()
+    store_param = mock_store()
     new_store001 = store_instance.insert(store_param)
     if not new_store001:
         print('create new store failed')

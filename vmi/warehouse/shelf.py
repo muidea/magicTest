@@ -16,9 +16,8 @@ from warehouse import warehouse
 """
 
 
-def mock_shelf_param(warehouse):
+def mock_shelf(warehouse):
     return {
-        'name': 'HJ'+mock.name(),
         'description': mock.sentence(),
         'capacity': mock.int(),
         'warehouse': warehouse['id'],
@@ -56,7 +55,7 @@ def main(server_url, namespace):
         return
 
     shelf_instance = common.MagicEntity("/vmi/warehouse/shelf", work_session)
-    shelf_param = mock_shelf_param(warehouse_val)
+    shelf_param = mock_shelf(warehouse_val)
     new_shelf001 = shelf_instance.insert(shelf_param)
     if not new_shelf001:
         print('create new shelf failed')
