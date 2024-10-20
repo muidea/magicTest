@@ -11,7 +11,7 @@ class MagicEntity:
         if val and val['errorCode'] == 0:
             return val['values']
 
-        print(f'--------filter failed,url:{0}, filter:{1}-----------'.formar(url, filter_val))
+        print(f'--------filter failed,url:{0}, filter:{1}-----------'.format(url, filter_val))
         print(val['reason'])
         return None
 
