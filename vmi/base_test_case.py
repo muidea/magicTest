@@ -229,6 +229,7 @@ class BaseTestCase(unittest.TestCase):
             return
 
     def tearDown(self):
+        return
         ii = 0
         while ii < self._warehouse_count:
             destroy_warehouse(self._work_session, self._warehouse_list[ii])
