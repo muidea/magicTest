@@ -1,8 +1,9 @@
 import logging
 import time
 import unittest
-from session import session, common
+
 from cas.cas import cas
+from session import session, common
 
 
 def mock_warehouse(idx):
@@ -73,6 +74,15 @@ def destroy_warehouse(work_session, warehouse_val):
     return warehouse_val
 
 
+def count_warehouse(work_session):
+    warehouse_instance = common.MagicEntity("/vmi/warehouse", work_session)
+    warehouse_val = warehouse_instance.count()
+    if not warehouse_val:
+        logging.warning("count warehouse failed")
+        return None
+    return warehouse_val
+
+
 def create_shelf(work_session, idx, warehouse_val):
     shelf_instance = common.MagicEntity("/vmi/warehouse/shelf", work_session)
     shelf_val = shelf_instance.insert(mock_shelf(idx, warehouse_val))
@@ -87,6 +97,15 @@ def destroy_shelf(work_session, shelf_val):
     shelf_val = shelf_instance.delete(shelf_val)
     if not shelf_val:
         logging.warning("create new shelf {0} failed".format(shelf_val['code']))
+        return None
+    return shelf_val
+
+
+def count_shelf(work_session):
+    shelf_instance = common.MagicEntity("/vmi/warehouse/shelf", work_session)
+    shelf_val = shelf_instance.count()
+    if not shelf_val:
+        logging.warning("count shelf failed")
         return None
     return shelf_val
 
@@ -109,6 +128,15 @@ def destroy_store(work_session, store_val):
     return store_val
 
 
+def count_store(work_session):
+    store_instance = common.MagicEntity("/vmi/store", work_session)
+    store_val = store_instance.count()
+    if not store_val:
+        logging.warning("count store failed")
+        return None
+    return store_val
+
+
 def create_product(work_session, idx):
     product_instance = common.MagicEntity("/vmi/product", work_session)
     product_val = product_instance.insert(mock_product(idx))
@@ -123,6 +151,15 @@ def destroy_product(work_session, product_val):
     product_val = product_instance.delete(product_val['id'])
     if not product_val:
         logging.warning("delete product {0} failed".format(product_val['name']))
+        return None
+    return product_val
+
+
+def count_product(work_session):
+    product_instance = common.MagicEntity("/vmi/product", work_session)
+    product_val = product_instance.count()
+    if not product_val:
+        logging.warning("count product failed")
         return None
     return product_val
 
@@ -144,6 +181,15 @@ def destroy_product_sku(work_session, product_sku_val):
     sku_val = product_sku_instance.delete(product_sku_val['sku'])
     if not sku_val:
         logging.warning("delete product skuInfo {0} failed".format(sku_val['sku']))
+        return None
+    return sku_val
+
+
+def count_product_sku(work_session):
+    product_sku_instance = common.MagicEntity("/vmi/product/skuInfo", work_session)
+    sku_val = product_sku_instance.count()
+    if not sku_val:
+        logging.warning("count product skuInfo failed")
         return None
     return sku_val
 
@@ -176,6 +222,7 @@ class BaseTestCase(unittest.TestCase):
         work_session.bind_token(cas_session.get_session_token())
         self._work_session = work_session
 
+        return
         ii = 0
         while ii < self._warehouse_count:
             warehouse_val = create_warehouse(self._work_session, ii)
@@ -259,4 +306,13 @@ class BaseTestCase(unittest.TestCase):
                 ii += 1
 
     def test_something(self):
-        self.assertEqual(True, False)  # add assertion here
+        warehouse_count = count_warehouse(self._work_session)
+        self.assertEqual(warehouse_count, self._warehouse_count)  # add assertion here
+        shelf_count = count_shelf(self._work_session)
+        self.assertEqual(shelf_count, self._shelf_count)  # add assertion here
+        store_count = count_store(self._work_session)
+        self.assertEqual(store_count, self._store_count)  # add assertion here
+        product_count = count_product(self._work_session)
+        self.assertEqual(product_count, self._product_count)  # add assertion here
+        sku_count = count_product_sku(self._work_session)
+        self.assertEqual(sku_count, self._product_count * 3)  # add assertion here

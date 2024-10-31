@@ -74,3 +74,13 @@ class MagicEntity:
         print('--------delete failed, url:{0}-----------'.format(url))
         print(val['reason'])
         return None
+
+    def count(self):
+        url = '{0}/count/'.format(self.base_url)
+        val = self.session.get(url)
+        if val and val['errorCode'] == 0:
+            return val['total']
+
+        print('--------count failed, url:{0}-----------'.format(url))
+        print(val['reason'])
+        return None
