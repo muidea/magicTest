@@ -98,6 +98,7 @@ class MagicSession(object):
         """Upload"""
         ret = None
         try:
+            print('%s%s' % (self.base_url, url))
             response = self.current_session.post('%s%s' % (self.base_url, url),
                                                  headers=self.header(), params=params, files=files)
             ret = json.loads(response.text)
