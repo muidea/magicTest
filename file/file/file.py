@@ -13,37 +13,37 @@ class File:
         self.path = path
         self.session = work_session
 
-    def filter_file(self, param=None):
+    def filter_file(self, params=None):
         if self.source:
-            if not param:
-                param = {'fileSource': self.source}
+            if not params:
+                params = {'fileSource': self.source}
             else:
-                param['fileSource'] = self.source
+                params['fileSource'] = self.source
         if self.scope:
-            if not param:
-                param = {'fileScope': self.scope}
+            if not params:
+                params = {'fileScope': self.scope}
             else:
-                param['fileScope'] = self.scope
+                params['fileScope'] = self.scope
 
-        val = self.session.get('/api/v1/static/file/filter/', param)
+        val = self.session.get('/api/v1/static/file/filter/', params)
         if val and val['errorCode'] == 0:
             return val['values']
         print('--------filter_file-----------')
         print(val['reason'])
         return None
 
-    def query_file(self, file_id, param = None):
-        if not param:
-            param = {'fileSource': self.source}
+    def query_file(self, file_id, params = None):
+        if not params:
+            params = {'fileSource': self.source}
         else:
-            param['fileSource'] = self.source
+            params['fileSource'] = self.source
         if self.scope:
-            if not param:
-                param = {'fileScope': self.scope}
+            if not params:
+                params = {'fileScope': self.scope}
             else:
-                param['fileScope'] = self.scope
+                params['fileScope'] = self.scope
 
-        val = self.session.get('/api/v1/static/file/query/{0}'.format(file_id), param)
+        val = self.session.get('/api/v1/static/file/query/{0}'.format(file_id), params)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -51,22 +51,44 @@ class File:
         print(val['reason'])
         return None
 
-    def delete_file(self, file_id, param = None):
-        if not param:
-            param = {'fileSource': self.source}
+    def delete_file(self, file_id, params = None):
+        if not params:
+            params = {'fileSource': self.source}
         else:
-            param['fileSource'] = self.source
+            params['fileSource'] = self.source
         if self.scope:
-            if not param:
-                param = {'fileScope': self.scope}
+            if not params:
+                params = {'fileScope': self.scope}
             else:
-                param['fileScope'] = self.scope
+                params['fileScope'] = self.scope
 
-        val = self.session.delete('/api/v1/static/file/delete/{0}'.format(file_id), param)
+        val = self.session.delete('/api/v1/static/file/delete/{0}'.format(file_id), params)
         if val and val['errorCode'] == 0:
             return val['value']
 
         print('--------delete_file-----------')
+        print(val['reason'])
+        return None
+
+    def view_file(self, file_token, params = None):
+        if not params:
+            params = {'fileSource': self.source}
+        else:
+            params['fileSource'] = self.source
+        if self.scope:
+            if not params:
+                params = {'fileScope': self.scope}
+            else:
+                params['fileScope'] = self.scope
+        if file_token:
+            if not params:
+                params = {'fileToken': file_token}
+            else:
+                params['fileToken'] = file_token
+        val = self.session.get('/api/v1/static/file/view/', params)
+        if val and val['errorCode'] == 0:
+            return val['value']
+        print('--------view_file-----------')
         print(val['reason'])
         return None
 
@@ -98,8 +120,22 @@ class File:
         print(val['reason'])
         return None
 
-    def download_file(self, file_token, file_path):
-        params = {'fileToken': file_token, 'fileSource': self.source}
+    def download_file(self, file_token, file_path, params = None):
+        if not params:
+            params = {'fileSource': self.source}
+        else:
+            params['fileSource'] = self.source
+        if self.scope:
+            if not params:
+                params = {'fileScope': self.scope}
+            else:
+                params['fileScope'] = self.scope
+        if file_token:
+            if not params:
+                params = {'fileToken': file_token}
+            else:
+                params['fileToken'] = file_token
+
         val = self.session.download('/static/file/', file_path, params)
         if val:
             return val
@@ -136,6 +172,14 @@ def main(server_url, namespace):
         return False
     if cur_file['token'] != new_file['token']:
         print('query file failed, mismatch file')
+        return False
+
+    pre_file = app.view_file(new_file['token'])
+    if not pre_file:
+        print('view file failed')
+        return False
+    if pre_file['path'] != new_file['path']:
+        print('view file failed, mismatch file')
         return False
 
     old_file = app.delete_file(new_file['id'])
