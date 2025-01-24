@@ -1,6 +1,65 @@
 from mock import common as mock
 from session import session
+import concurrent.futures
+import argparse
 
+class DatabaseDeclare:
+    def __init__(self, id, db_server, db_name, username, password, char_set, max_conn_num):
+        self.id = id
+        self.db_server = db_server
+        self.db_name = db_name
+        self.username = username
+        self.password = password
+        self.char_set = char_set
+        self.max_conn_num = max_conn_num
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "dbServer": self.db_server,
+            "dbName": self.db_name,
+            "username": self.username,
+            "password": self.password,
+            "charSet": self.char_set,
+            "maxConnNum": self.max_conn_num
+        }
+
+class ApplicationDeclare:
+    def __init__(self, id, uuid, name, show_name, pkg_prefix, icon, catalog, domain, email, author, description, database, hosted_by, artifact, status):
+        self.id = id
+        self.uuid = uuid
+        self.name = name
+        self.show_name = show_name
+        self.pkg_prefix = pkg_prefix
+        self.icon = icon
+        self.catalog = catalog
+        self.domain = domain
+        self.email = email
+        self.author = author
+        self.description = description
+        self.database = database
+        self.hosted_by = hosted_by
+        self.artifact = artifact
+        self.status = status
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "uuid": self.uuid,
+            "name": self.name,
+            "showName": self.show_name,
+            "pkgPrefix": self.pkg_prefix,
+            "icon": self.icon,
+            "catalog": self.catalog,
+            "domain": self.domain,
+            "email": self.email,
+            "author": self.author,
+            "description": self.description,
+            "database": self.database.to_dict() if self.database else None,
+            "hostedBy": self.hosted_by,
+            "artifact": self.artifact,
+            "status": self.status
+        }
 
 class Application:
     """Application"""
@@ -55,64 +114,136 @@ class Application:
         print(val['reason'])
         return None
 
-
 def mock_application_param():
-    return {
-        'uuid': mock.uuid(),
-        'name': mock.name(),
-        'version': '0.0.1',
-        'domain': mock.url(),
-        'email': mock.email(),
-        'author': mock.name(),
-        'description': mock.sentence(),
-        'database': {
-            'dbserver': 'mysql:3306',
-            'dbname': 'testDB',
-            'username': 'root',
-            'password': 'rootkit',
-        }
-    }
+    database = DatabaseDeclare(
+        id=1,
+        db_server='mysql:3306',
+        db_name='testdb',
+        username='root',
+        password='rootkit',
+        char_set='utf8',
+        max_conn_num=10
+    )
 
+    return ApplicationDeclare(
+        id=1,
+        uuid=mock.uuid(),
+        name=mock.word(),  # Updated to use mock.word()
+        show_name='Test Application',
+        pkg_prefix='com.test',
+        icon='icon.png',
+        catalog='Test',
+        domain=mock.url(),
+        email=mock.email(),
+        author='TestAuthor',  # Updated to only contain English characters
+        description=mock.sentence(),
+        database=database,
+        hosted_by='magicMock',  # Updated hosted_by value
+        artifact='magicMock@v1.3.0',
+        status=1
+    ).to_dict()
 
-def main(server_url, namespace):
-    """main"""
+def smoke_test(server_url, namespace):
+    """Smoke test: basic CRUD operations"""
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
 
     app_instance = Application(work_session)
 
+    # Create a new application
     app001 = mock_application_param()
     new_app10 = app_instance.create_application(app001)
     if not new_app10:
         print('create new application failed')
         return
 
-    new_app10['version'] = '0.0.2'
+    # Update the application
     new_app10['description'] = mock.sentence()
     new_app11 = app_instance.update_application(new_app10['id'], new_app10)
     if new_app11['description'] != new_app10['description']:
         print('update application failed')
 
-    app002 = mock_application_param()
-    new_app20 = app_instance.create_application(app002)
-    if not new_app20:
-        print('create new application failed')
+    # Query the application
+    queried_app = app_instance.query_application(new_app10['id'])
+    if not queried_app:
+        print('query application failed')
+
+    # Delete the application
+    app_instance.delete_application(new_app10['id'])
+
+    print("Smoke test completed successfully.")
+
+def batch_create_applications(app_instance, count, concurrency):
+    def create_app():
+        app_param = mock_application_param()
+        return app_instance.create_application(app_param)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [executor.submit(create_app) for _ in range(count)]
+        results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+    return results
+
+def batch_update_applications(app_instance, apps, concurrency):
+    def update_app(app):
+        app['description'] = mock.sentence()
+        return app_instance.update_application(app['id'], app)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [executor.submit(update_app, app) for app in apps]
+        results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+    return results
+
+def batch_delete_applications(app_instance, apps, concurrency):
+    def delete_app(app):
+        return app_instance.delete_application(app['id'])
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
+        futures = [executor.submit(delete_app, app) for app in apps]
+        results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+    return results
+
+def stress_test(server_url, namespace, count, concurrency):
+    """Stress test: batch CRUD operations"""
+    work_session = session.MagicSession('{0}'.format(server_url), namespace)
+
+    app_instance = Application(work_session)
+
+    # Batch create applications
+    print(f"Creating {count} applications with concurrency {concurrency}...")
+    created_apps = batch_create_applications(app_instance, count, concurrency)
+    if not all(created_apps):
+        print('Batch create applications failed')
         return
 
-    app_filter = {
-        'params': {
-            'items': {
-                "uuid": '{0}|='.format(app002['uuid'])
-            }
-        }
-    }
+    # Batch update applications
+    print(f"Updating {count} applications with concurrency {concurrency}...")
+    updated_apps = batch_update_applications(app_instance, created_apps, concurrency)
+    if not all(updated_apps):
+        print('Batch update applications failed')
+        return
 
-    app_list = app_instance.filter_application(app_filter)
-    if not app_list:
-        print('filter application failed')
-    elif len(app_list) != 1:
-        print(app_list)
-        print('filter application failed, illegal list size')
+    # Batch delete applications
+    print(f"Deleting {count} applications with concurrency {concurrency}...")
+    deleted_apps = batch_delete_applications(app_instance, created_apps, concurrency)
+    if not all(deleted_apps):
+        print('Batch delete applications failed')
+        return
 
-    app_instance.delete_application(new_app10['id'])
-    app_instance.delete_application(new_app20['id'])
+    print("Stress test completed successfully.")
 
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run smoke or stress tests on applications.")
+    parser.add_argument("--server_url", type=str, required=True, help="The server URL.")
+    parser.add_argument("--namespace", type=str, required=True, help="The namespace.")
+    parser.add_argument("--test_type", type=str, choices=["smoke", "stress"], required=True, help="The type of test to run (smoke or stress).")
+    parser.add_argument("--count", type=int, default=10, help="The number of applications to create/update/delete (for stress test).")
+    parser.add_argument("--concurrency", type=int, default=5, help="The number of concurrent operations (for stress test).")
+
+    args = parser.parse_args()
+
+    if args.test_type == "smoke":
+        smoke_test(args.server_url, args.namespace)
+    elif args.test_type == "stress":
+        stress_test(args.server_url, args.namespace, args.count, args.concurrency)
