@@ -17,7 +17,7 @@ def mock_shelf(idx, warehouse):
     return {
         'description': '测试货架{0}的描述信息'.format(idx),
         'capacity': 5000,
-        'warehouse': warehouse['id'],
+        'warehouse': warehouse,
     }
 
 

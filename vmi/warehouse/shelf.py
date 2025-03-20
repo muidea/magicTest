@@ -20,7 +20,7 @@ def mock_shelf(warehouse):
     return {
         'description': mock.sentence(),
         'capacity': mock.int(),
-        'warehouse': warehouse['id'],
+        'warehouse': warehouse,
     }
 
 

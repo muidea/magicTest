@@ -49,7 +49,7 @@ def mock_shelf_param(warehouse):
         'name': 'HJ'+mock.name(),
         'description': mock.sentence(),
         'capacity': mock.int(),
-        'warehouse': warehouse['id'],
+        'warehouse': warehouse,
     }
 
 
