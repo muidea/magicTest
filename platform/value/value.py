@@ -120,35 +120,35 @@ class Value:
 
         val = self.session.post(url, filter)
         if 'error' in val:
-            print(f"过滤数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("过滤数值失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('values')
 
     def query_value(self, data):
         val = self.session.post('/core/value/query/', data)
         if 'error' in val:
-            print(f"查询数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("查询数值失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def insert_value(self, param):
         val = self.session.post('/core/value/insert/', param)
         if 'error' in val:
-            print(f"插入数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("插入数值失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_value(self, param):
         val = self.session.post('/core/value/update/', param)
         if 'error' in val:
-            print(f"更新数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("更新数值失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def delete_value(self, param):
         val = self.session.post('/core/value/delete/', param)
         if 'error' in val:
-            print(f"删除数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("删除数值失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 

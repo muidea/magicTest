@@ -13,41 +13,41 @@ class Role:
 
     def filter_role(self, param):
         val = self.session.get('/cas/role/filter/', param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------filter_role-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('values')
 
     def query_role(self, param):
         val = self.session.get('/cas/role/query/{0}'.format(param))
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------query_role-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_role(self, param):
         val = self.session.post('/cas/role/create/', param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------create_role-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_role(self, param):
         val = self.session.put('/cas/role/update/{0}'.format(param['id']), param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------update_role-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def delete_role(self, param):
         val = self.session.delete('/cas/role/delete/{0}'.format(param))
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------delete_role-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 

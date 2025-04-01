@@ -108,49 +108,49 @@ class Entity:
 
         val = self.session.post(url, filter)
         if 'error' in val:
-            print(f"过滤实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("过滤实体失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('values')
 
     def query_entity(self, id):
         val = self.session.get('/core/entity/query/{0}'.format(id))
         if 'error' in val:
-            print(f"查询实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("查询实体失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_entity(self, param):
         val = self.session.post('/core/entity/create/', param)
         if 'error' in val:
-            print(f"创建实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("创建实体失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_entity(self, id, param):
         val = self.session.put('/core/entity/update/{0}'.format(id), param)
         if 'error' in val:
-            print(f"更新实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("更新实体失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def delete_entity(self, id):
         val = self.session.delete('/core/entity/destroy/{0}'.format(id))
         if 'error' in val:
-            print(f"删除实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("删除实体失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def enable_entity(self, id):
         val = self.session.put('/core/entity/enable/{0}'.format(id), None)
         if 'error' in val:
-            print(f"启用实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("启用实体失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def disable_entity(self, id):
         val = self.session.put('/core/entity/disable/{0}'.format(id), None)
         if 'error' in val:
-            print(f"禁用实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("禁用实体失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 

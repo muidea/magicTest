@@ -13,35 +13,35 @@ class Block:
 
         val = self.session.post(url, filter)
         if 'error' in val:
-            print(f"过滤区块失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("过滤区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('values')
 
     def query_block(self, id):
         val = self.session.get('/core/block/query/{0}'.format(id))
         if 'error' in val:
-            print(f"查询区块失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("查询区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_block(self, param):
         val = self.session.post('/core/block/create/', param)
         if 'error' in val:
-            print(f"创建区块失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("创建区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_block(self, id, param):
         val = self.session.put('/core/block/update/{0}'.format(id), param)
         if 'error' in val:
-            print(f"更新区块失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("更新区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def delete_block(self, id):
         val = self.session.delete('/core/block/destroy/{0}'.format(id))
         if 'error' in val:
-            print(f"删除区块失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("删除区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 

@@ -60,7 +60,7 @@ class MagicSession(object):
             ret = {
                 "error": {
                     "code": 100,
-                    "message": f"HTTP请求失败: {str(except_value)}"
+                    "message": "HTTP请求失败: {}".format(str(except_value))
                 }
             }
         return ret
@@ -75,7 +75,7 @@ class MagicSession(object):
             ret = {
                 "error": {
                     "code": 100,
-                    "message": f"HTTP请求失败: {str(except_value)}"
+                    "message": "HTTP请求失败: {}".format(str(except_value))
                 }
             }
         return ret
@@ -90,12 +90,12 @@ class MagicSession(object):
             ret = {
                 "error": {
                     "code": 100,
-                    "message": f"HTTP请求失败: {str(except_value)}"
+                    "message": "HTTP请求失败: {}".format(str(except_value))
                 }
             }
         return ret
 
-    def delete(self, url, params = None):
+    def delete(self, url, params=None):
         """Delete"""
         ret = None
         try:
@@ -105,7 +105,7 @@ class MagicSession(object):
             ret = {
                 "error": {
                     "code": 100,
-                    "message": f"HTTP请求失败: {str(except_value)}"
+                    "message": "HTTP请求失败: {}".format(str(except_value))
                 }
             }
         return ret
@@ -122,7 +122,7 @@ class MagicSession(object):
             ret = {
                 "error": {
                     "code": 100,
-                    "message": f"HTTP请求失败: {str(except_value)}"
+                    "message": "HTTP请求失败: {}".format(str(except_value))
                 }
             }
         return ret
@@ -139,7 +139,7 @@ class MagicSession(object):
             ret = {
                 "error": {
                     "code": 100,
-                    "message": f"文件下载失败: {str(except_value)}"
+                    "message": "文件下载失败: {}".format(str(except_value))
                 }
             }
         return ret

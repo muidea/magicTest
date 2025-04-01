@@ -13,41 +13,41 @@ class Account:
 
     def filter_account(self, param):
         val = self.session.get('/cas/account/filter/', param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------filter_account-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('values')
 
     def query_account(self, param):
         val = self.session.get('/cas/account/query/{0}'.format(param))
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------query_account-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_account(self, param):
         val = self.session.post('/cas/account/create/', param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------create_account-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_account(self, param):
         val = self.session.put('/cas/account/update/{0}'.format(param['id']), param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------update_account-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def delete_account(self, param):
         val = self.session.delete('/cas/account/delete/{0}'.format(param))
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------delete_account-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 

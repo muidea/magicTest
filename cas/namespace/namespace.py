@@ -14,41 +14,41 @@ class Namespace:
 
     def filter_namespace(self, param):
         val = self.session.get('/cas/namespace/filter/', param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------filter_namespace-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('values')
 
     def query_namespace(self, param):
         val = self.session.get('/cas/namespace/query/{0}'.format(param))
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------query_namespace-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_namespace(self, param):
         val = self.session.post('/cas/namespace/create/?X-Namespace={0}'.format(self.superNamespace), param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------create_namespace-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_namespace(self, param):
         val = self.session.put('/cas/namespace/update/{0}?X-Namespace={1}'.format(param['id'], self.superNamespace), param)
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------update_namespace-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def delete_namespace(self, param):
         val = self.session.delete('/cas/namespace/delete/{0}?X-Namespace={1}'.format(param, self.superNamespace))
-        if 'error' in val:
+        if val.get('error') is not None:
             print('--------delete_namespace-----------')
-            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 

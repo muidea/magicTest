@@ -224,12 +224,12 @@ def date(start_date="2020-01-01", end_date="2023-12-31"):
 
 def phone_number():
     """Generate a random phone number"""
-    return f"{random.randint(100, 999)}-{random.randint(100, 999)}-{random.randint(1000, 9999)}"
+    return "%03d-%03d-%04d" % (random.randint(100, 999), random.randint(100, 999), random.randint(1000, 9999))
 
 
 def chinese_phone_number():
     """Generate a random Chinese phone number"""
-    return f"1{random.randint(30, 99)}{random.randint(1000, 9999)}{random.randint(1000, 9999)}"
+    return "1%d%04d%04d" % (random.randint(30, 99), random.randint(1000, 9999), random.randint(1000, 9999))
 
 
 def address():
@@ -239,7 +239,7 @@ def address():
     city = word().capitalize()
     state = random.choice(["北京", "上海", "广州", "深圳", "杭州", "成都", "重庆", "武汉", "南京", "西安"])
     zip_code = random.randint(10000, 99999)
-    return f"{street_number} {street_name} St, {city}, {state} {zip_code}"
+    return "%d %s St, %s, %s %d" % (street_number, street_name, city, state, zip_code)
 
 
 def chinese_address():
@@ -249,7 +249,7 @@ def chinese_address():
     district = random.choice(["朝阳区", "浦东新区", "天河区", "南山区", "西湖区", "武侯区", "渝中区", "江汉区", "玄武区", "雁塔区"])
     street = random.choice(["长安街", "南京路", "珠江新城", "科技园路", "西湖大道", "天府大道", "解放碑", "江汉路", "中山路", "雁塔路"])
     number = random.randint(1, 999)
-    return f"{province}{city}{district}{street}{number}号"
+    return "%s%s%s%s%d号" % (province, city, district, street, number)
 
 
 def boolean():
@@ -259,12 +259,12 @@ def boolean():
 
 def color():
     """Generate a random color in hex format"""
-    return f"#{random.randint(0, 255):02x}{random.randint(0, 255):02x}{random.randint(0, 255):02x}"
+    return "#%02x%02x%02x" % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
 
 def ip_address():
     """Generate a random IP address"""
-    return f"{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}"
+    return "%d.%d.%d.%d" % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
 
 if __name__ == '__main__':

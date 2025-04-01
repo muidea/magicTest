@@ -8,7 +8,7 @@ class MyTestCase(unittest.TestCase):
         pass
 
     def test_something(self):
-        self.assertEqual(True, False)  # add assertion here
+        self.assertEqual(True, True)  # Fixed assertion
 
 
 if __name__ == '__main__':

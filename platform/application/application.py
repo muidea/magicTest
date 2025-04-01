@@ -72,35 +72,35 @@ class Application:
 
         val = self.session.post(url, filter)
         if 'error' in val:
-            print(f"过滤应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("过滤应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('values')
 
     def query_application(self, id):
         val = self.session.get('/core/application/query/{0}'.format(id))
         if 'error' in val:
-            print(f"查询应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("查询应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_application(self, param):
         val = self.session.post('/core/application/create/', param)
         if 'error' in val:
-            print(f"创建应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("创建应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_application(self, id, param):
         val = self.session.put('/core/application/update/{0}'.format(id), param)
         if 'error' in val:
-            print(f"更新应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("更新应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def delete_application(self, id):
         val = self.session.delete('/core/application/destroy/{0}'.format(id))
         if 'error' in val:
-            print(f"删除应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            print("删除应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
@@ -201,21 +201,21 @@ def stress_test(server_url, namespace, count, concurrency):
     app_instance = Application(work_session)
 
     # Batch create applications
-    print(f"Creating {count} applications with concurrency {concurrency}...")
+    print("Creating %d applications with concurrency %d..." % (count, concurrency))
     created_apps = batch_create_applications(app_instance, count, concurrency)
     if not all(created_apps):
         print('Batch create applications failed')
         return
 
     # Batch update applications
-    print(f"Updating {count} applications with concurrency {concurrency}...")
+    print("Updating %d applications with concurrency %d..." % (count, concurrency))
     updated_apps = batch_update_applications(app_instance, created_apps, concurrency)
     if not all(updated_apps):
         print('Batch update applications failed')
         return
 
     # Batch delete applications
-    print(f"Deleting {count} applications with concurrency {concurrency}...")
+    print("Deleting %d applications with concurrency %d..." % (count, concurrency))
     deleted_apps = batch_delete_applications(app_instance, created_apps, concurrency)
     if not all(deleted_apps):
         print('Batch delete applications failed')

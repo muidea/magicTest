@@ -22,8 +22,8 @@ class Cas:
         """login"""
         params = {'account': account, 'password': password}
         val = self.session.post('/cas/account/login/', params)
-        if 'error' in val:
-            print(f"登录失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+        if val.get('error') is not None:
+            print("登录失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return False
         self.session_token = val.get('sessionToken')
         self.current_entity = val.get('entity')
@@ -33,8 +33,8 @@ class Cas:
         """logout"""
         self.session.bind_token(session_token)
         val = self.session.delete('/cas/account/logout/')
-        if 'error' in val:
-            print(f"注销失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+        if val.get('error') is not None:
+            print("注销失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return False
         return True
 
@@ -42,8 +42,8 @@ class Cas:
         """verify"""
         self.session.bind_token(session_token)
         val = self.session.get('/cas/session/verify/')
-        if 'error' in val:
-            print(f"验证失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+        if val.get('error') is not None:
+            print("验证失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return None
         self.session_token = val.get('sessionToken')
         self.current_entity = val.get('entity')
