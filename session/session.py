@@ -57,8 +57,12 @@ class MagicSession(object):
             response = self.current_session.post('%s%s' % (self.base_url, url), headers=self.header(), json=params)
             ret = json.loads(response.text)
         except ValueError as except_value:
-            print(except_value)
-
+            ret = {
+                "error": {
+                    "code": 100,
+                    "message": f"HTTP请求失败: {str(except_value)}"
+                }
+            }
         return ret
 
     def get(self, url, params=None):
@@ -68,8 +72,12 @@ class MagicSession(object):
             response = self.current_session.get('%s%s' % (self.base_url, url), headers=self.header(), params=params)
             ret = json.loads(response.text)
         except ValueError as except_value:
-            print(except_value)
-
+            ret = {
+                "error": {
+                    "code": 100,
+                    "message": f"HTTP请求失败: {str(except_value)}"
+                }
+            }
         return ret
 
     def put(self, url, params):
@@ -79,8 +87,12 @@ class MagicSession(object):
             response = self.current_session.put('%s%s' % (self.base_url, url), headers=self.header(), json=params)
             ret = json.loads(response.text)
         except ValueError as except_value:
-            print(except_value)
-
+            ret = {
+                "error": {
+                    "code": 100,
+                    "message": f"HTTP请求失败: {str(except_value)}"
+                }
+            }
         return ret
 
     def delete(self, url, params = None):
@@ -90,8 +102,12 @@ class MagicSession(object):
             response = self.current_session.delete('%s%s' % (self.base_url, url), headers=self.header(), params=params)
             ret = json.loads(response.text)
         except ValueError as except_value:
-            print(except_value)
-
+            ret = {
+                "error": {
+                    "code": 100,
+                    "message": f"HTTP请求失败: {str(except_value)}"
+                }
+            }
         return ret
 
     def upload(self, url, files, params=None):
@@ -103,8 +119,12 @@ class MagicSession(object):
                                                  headers=self.header(), params=params, files=files)
             ret = json.loads(response.text)
         except ValueError as except_value:
-            print(except_value)
-
+            ret = {
+                "error": {
+                    "code": 100,
+                    "message": f"HTTP请求失败: {str(except_value)}"
+                }
+            }
         return ret
 
     def download(self, url, dst_file, params=None):
@@ -114,10 +134,13 @@ class MagicSession(object):
             response = self.current_session.get('%s%s' % (self.base_url, url), headers=self.header(), params=params)
             with open(dst_file, "wb") as code:
                 code.write(response.content)
-
             ret = dst_file
         except ValueError as except_value:
-            print(except_value)
-
+            ret = {
+                "error": {
+                    "code": 100,
+                    "message": f"文件下载失败: {str(except_value)}"
+                }
+            }
         return ret
 

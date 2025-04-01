@@ -8,79 +8,79 @@ class MagicEntity:
         url = '{0}/filter/'.format(self.base_url)
 
         val = self.session.post(url, filter_val)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['values']
 
-        print('--------filter failed,url:{0}, filter:{1}-----------'.format(url, filter_val))
-        print(val['reason'])
+        print('--------filter validation error,url:{0}, filter:{1}-----------'.format(url, filter_val))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None
 
     def query(self, id_val):
         url = '{0}/query/{1}'.format(self.base_url, id_val)
         val = self.session.get(url)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['value']
 
-        print('--------query failed, url:{0}-----------'.format(url))
-        print(val['reason'])
+        print('--------query execution error, url:{0}-----------'.format(url))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None
 
     def create(self, param_val):
         url = '{0}/create/'.format(self.base_url)
         val = self.session.post(url, param_val)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['value']
 
-        print('--------create failed, url:{0}, param:{1}-----------'.format(url, param_val))
-        print(val['reason'])
+        print('--------create operation error, url:{0}, param:{1}-----------'.format(url, param_val))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None
 
     def destroy(self, id_val):
         url = '{0}/destroy/{1}'.format(self.base_url, id_val)
         val = self.session.delete(url)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['value']
 
-        print('--------destroy failed, url:{0}-----------'.format(url))
-        print(val['reason'])
+        print('--------destroy execution error, url:{0}-----------'.format(url))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None
 
     def insert(self, param_val):
         url = '{0}/insert/'.format(self.base_url)
         val = self.session.post(url, param_val)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['value']
 
-        print('--------insert failed, url:{0}, param:{1}-----------'.format(url, param_val))
-        print(val['reason'])
+        print('--------insert operation error, url:{0}, param:{1}-----------'.format(url, param_val))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None
 
     def update(self, id_val, param_val):
         url = '{0}/update/{1}'.format(self.base_url, id_val)
         val = self.session.put(url, param_val)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['value']
 
-        print('--------update failed, url:{0}, param:{1}-----------'.format(url, param_val))
-        print(val['reason'])
+        print('--------update validation error, url:{0}, param:{1}-----------'.format(url, param_val))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None
 
     def delete(self, id_val):
         url = '{0}/delete/{1}'.format(self.base_url, id_val)
         val = self.session.delete(url)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['value']
 
-        print('--------delete failed, url:{0}-----------'.format(url))
-        print(val['reason'])
+        print('--------delete execution error, url:{0}-----------'.format(url))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None
 
     def count(self):
         url = '{0}/count/'.format(self.base_url)
         val = self.session.get(url)
-        if val and val['errorCode'] == 0:
+        if val and (val.get('error') is None):
             return val['total']
 
-        print('--------count failed, url:{0}-----------'.format(url))
-        print(val['reason'])
+        print('--------count operation error, url:{0}-----------'.format(url))
+        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
         return None

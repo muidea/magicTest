@@ -22,39 +22,32 @@ class Cas:
         """login"""
         params = {'account': account, 'password': password}
         val = self.session.post('/cas/account/login/', params)
-        if val and val['errorCode'] == 0:
-            self.session_token = val['sessionToken']
-            self.current_entity = val['entity']
-            return True
-
-        print(val)
-        print('--------login-----------')
-        print(val['reason'])
-        return False
+        if 'error' in val:
+            print(f"登录失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return False
+        self.session_token = val.get('sessionToken')
+        self.current_entity = val.get('entity')
+        return self.session_token is not None
 
     def logout(self, session_token):
         """logout"""
         self.session.bind_token(session_token)
         val = self.session.delete('/cas/account/logout/')
-        if val and val['errorCode'] == 0:
-            return True
-
-        print('--------logout-----------')
-        print(val['reason'])
-        return False
+        if 'error' in val:
+            print(f"注销失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return False
+        return True
 
     def verify(self, session_token):
         """verify"""
         self.session.bind_token(session_token)
         val = self.session.get('/cas/session/verify/')
-        if val and val['errorCode'] == 0:
-            self.session_token = val['sessionToken']
-            self.current_entity = val['entity']
-            return self.session_token
-
-        print('--------verify-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"验证失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        self.session_token = val.get('sessionToken')
+        self.current_entity = val.get('entity')
+        return self.session_token
 
 
 def main(server_url, namespace):

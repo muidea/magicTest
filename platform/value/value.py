@@ -119,48 +119,38 @@ class Value:
         url = '/core/value/filter/'
 
         val = self.session.post(url, filter)
-        if val and val['errorCode'] == 0:
-            return val['values']
-
-        print('--------filter_value-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"过滤数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('values')
 
     def query_value(self, data):
         val = self.session.post('/core/value/query/', data)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------query_value-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"查询数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def insert_value(self, param):
         val = self.session.post('/core/value/insert/', param)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------insert_value-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"插入数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def update_value(self, param):
         val = self.session.post('/core/value/update/', param)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------update_value-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"更新数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def delete_value(self, param):
         val = self.session.post('/core/value/delete/', param)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------delete_value-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"删除数值失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
 
 def setup_data(session):

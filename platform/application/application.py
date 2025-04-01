@@ -71,48 +71,38 @@ class Application:
         url = '/core/application/filter/'
 
         val = self.session.post(url, filter)
-        if val and val['errorCode'] == 0:
-            return val['values']
-
-        print('--------filter_application-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"过滤应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('values')
 
     def query_application(self, id):
         val = self.session.get('/core/application/query/{0}'.format(id))
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------query_application-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"查询应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def create_application(self, param):
         val = self.session.post('/core/application/create/', param)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------create_application-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"创建应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def update_application(self, id, param):
         val = self.session.put('/core/application/update/{0}'.format(id), param)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------update_application-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"更新应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def delete_application(self, id):
         val = self.session.delete('/core/application/destroy/{0}'.format(id))
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------delete_application-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"删除应用失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
 def mock_application_param():
     database = DatabaseDeclare(

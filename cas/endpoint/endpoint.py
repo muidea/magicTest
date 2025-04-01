@@ -12,47 +12,44 @@ class Endpoint:
         self.session = work_session
 
     def filter_endpoint(self, param):
-        val = self.session.get('/cas/endpoint/query/', param)
-        if val and val['errorCode'] == 0:
-            return val['endpoint']
-
-        print('--------filter_endpoint-----------')
-        print(val['reason'])
-        return None
+        val = self.session.get('/cas/endpoint/filter/', param)
+        if 'error' in val:
+            print('--------filter_endpoint-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('values')
 
     def query_endpoint(self, param):
         val = self.session.get('/cas/endpoint/query/{0}'.format(param))
-        if val and val['errorCode'] == 0:
-            return val['endpoint']
-
-        print('--------query_endpoint-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------query_endpoint-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def create_endpoint(self, param):
         val = self.session.post('/cas/endpoint/create/', param)
-        if val and val['errorCode'] == 0:
-            return val['endpoint']
-
-        return None
+        if 'error' in val:
+            print('--------create_endpoint-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def update_endpoint(self, param):
         val = self.session.put('/cas/endpoint/update/{0}'.format(param['id']), param)
-        if val and val['errorCode'] == 0:
-            return val['endpoint']
-
-        print('--------update_endpoint-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------update_endpoint-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def delete_endpoint(self, param):
         val = self.session.delete('/cas/endpoint/delete/{0}'.format(param))
-        if val and val['errorCode'] == 0:
-            return val['endpoint']
-
-        print('--------delete_endpoint-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------delete_endpoint-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
 
 def mock_endpoint_param():

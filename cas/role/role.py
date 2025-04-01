@@ -12,47 +12,44 @@ class Role:
         self.session = work_session
 
     def filter_role(self, param):
-        val = self.session.get('/cas/role/query/', param)
-        if val and val['errorCode'] == 0:
-            return val['role']
-
-        print('--------filter_role-----------')
-        print(val['reason'])
-        return None
+        val = self.session.get('/cas/role/filter/', param)
+        if 'error' in val:
+            print('--------filter_role-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('values')
 
     def query_role(self, param):
         val = self.session.get('/cas/role/query/{0}'.format(param))
-        if val and val['errorCode'] == 0:
-            return val['role']
-
-        print('--------query_role-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------query_role-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def create_role(self, param):
         val = self.session.post('/cas/role/create/', param)
-        if val and val['errorCode'] == 0:
-            return val['role']
-
-        return None
+        if 'error' in val:
+            print('--------create_role-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def update_role(self, param):
         val = self.session.put('/cas/role/update/{0}'.format(param['id']), param)
-        if val and val['errorCode'] == 0:
-            return val['role']
-
-        print('--------update_role-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------update_role-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def delete_role(self, param):
         val = self.session.delete('/cas/role/delete/{0}'.format(param))
-        if val and val['errorCode'] == 0:
-            return val['role']
-
-        print('--------delete_role-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------delete_role-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
 
 def mock_role_param(namespace):

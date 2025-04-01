@@ -107,66 +107,52 @@ class Entity:
         url = '/core/entity/filter/'
 
         val = self.session.post(url, filter)
-        if val and val['errorCode'] == 0:
-            return val['values']
-
-        print('--------filter_entity-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"过滤实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('values')
 
     def query_entity(self, id):
         val = self.session.get('/core/entity/query/{0}'.format(id))
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------query_entity-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"查询实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def create_entity(self, param):
         val = self.session.post('/core/entity/create/', param)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------create_entity-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"创建实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def update_entity(self, id, param):
         val = self.session.put('/core/entity/update/{0}'.format(id), param)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------update_entity-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"更新实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def delete_entity(self, id):
         val = self.session.delete('/core/entity/destroy/{0}'.format(id))
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------delete_entity-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"删除实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def enable_entity(self, id):
         val = self.session.put('/core/entity/enable/{0}'.format(id), None)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------enable_entity-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"启用实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def disable_entity(self, id):
         val = self.session.put('/core/entity/disable/{0}'.format(id), None)
-        if val and val['errorCode'] == 0:
-            return val['value']
-
-        print('--------disable_entity-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print(f"禁用实体失败 Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
 
 def setup_data(session):

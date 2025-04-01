@@ -13,47 +13,44 @@ class Namespace:
         self.superNamespace = superNamespace
 
     def filter_namespace(self, param):
-        val = self.session.get('/cas/namespace/query/', param)
-        if val and val['errorCode'] == 0:
-            return val['namespace']
-
-        print('--------filter_namespace-----------')
-        print(val['reason'])
-        return None
+        val = self.session.get('/cas/namespace/filter/', param)
+        if 'error' in val:
+            print('--------filter_namespace-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('values')
 
     def query_namespace(self, param):
         val = self.session.get('/cas/namespace/query/{0}'.format(param))
-        if val and val['errorCode'] == 0:
-            return val['namespace']
-
-        print('--------query_namespace-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------query_namespace-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def create_namespace(self, param):
         val = self.session.post('/cas/namespace/create/?X-Namespace={0}'.format(self.superNamespace), param)
-        if val and val['errorCode'] == 0:
-            return val['namespace']
-
-        return None
+        if 'error' in val:
+            print('--------create_namespace-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def update_namespace(self, param):
         val = self.session.put('/cas/namespace/update/{0}?X-Namespace={1}'.format(param['id'], self.superNamespace), param)
-        if val and val['errorCode'] == 0:
-            return val['namespace']
-
-        print('--------update_namespace-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------update_namespace-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def delete_namespace(self, param):
         val = self.session.delete('/cas/namespace/delete/{0}?X-Namespace={1}'.format(param, self.superNamespace))
-        if val and val['errorCode'] == 0:
-            return val['namespace']
-
-        print('--------delete_namespace-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------delete_namespace-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
 
 def mock_namespace_param():

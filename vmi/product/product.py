@@ -13,7 +13,7 @@ from cas.cas import cas
     "id": 1,
     "name": "testPro",
     "description": "测试产品描述",
-    "sku":[
+    "skuInfo":[
         {
             "sku": "abc2323",
             "description": "测试SKU001",
@@ -32,7 +32,7 @@ def mock_product_param():
     return {
         'name': mock.name(),
         'description': mock.sentence(),
-        'sku': [{
+        'skuInfo': [{
             'sku': 'a001',
             'description': mock.sentence(),
             'image': [mock.url(), mock.url(), ],

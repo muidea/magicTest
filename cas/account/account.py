@@ -12,47 +12,44 @@ class Account:
         self.session = work_session
 
     def filter_account(self, param):
-        val = self.session.get('/cas/account/query/', param)
-        if val and val['errorCode'] == 0:
-            return val['account']
-
-        print('--------filter_account-----------')
-        print(val['reason'])
-        return None
+        val = self.session.get('/cas/account/filter/', param)
+        if 'error' in val:
+            print('--------filter_account-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('values')
 
     def query_account(self, param):
         val = self.session.get('/cas/account/query/{0}'.format(param))
-        if val and val['errorCode'] == 0:
-            return val['account']
-
-        print('--------query_account-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------query_account-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def create_account(self, param):
         val = self.session.post('/cas/account/create/', param)
-        if val and val['errorCode'] == 0:
-            return val['account']
-
-        return None
+        if 'error' in val:
+            print('--------create_account-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def update_account(self, param):
         val = self.session.put('/cas/account/update/{0}'.format(param['id']), param)
-        if val and val['errorCode'] == 0:
-            return val['account']
-
-        print('--------update_account-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------update_account-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
     def delete_account(self, param):
         val = self.session.delete('/cas/account/delete/{0}'.format(param))
-        if val and val['errorCode'] == 0:
-            return val['account']
-
-        print('--------delete_account-----------')
-        print(val['reason'])
-        return None
+        if 'error' in val:
+            print('--------delete_account-----------')
+            print(f"Code: {val['error']['code']}, Message: {val['error']['message']}")
+            return None
+        return val.get('value')
 
 
 def mock_account_param(namespace):
