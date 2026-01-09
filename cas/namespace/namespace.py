@@ -29,7 +29,7 @@ class Namespace:
         return val.get('value')
 
     def create_namespace(self, param):
-        val = self.session.post('/cas/namespaces?X-Namespace={0}'.format(self.superNamespace), param)
+        val = self.session.post('/cas/namespaces?X-Mp-Namespace={0}'.format(self.superNamespace), param)
         if val.get('error') is not None:
             print('--------create_namespace-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -37,7 +37,7 @@ class Namespace:
         return val.get('value')
 
     def update_namespace(self, param):
-        val = self.session.put('/cas/namespaces/{0}?X-Namespace={1}'.format(param['id'], self.superNamespace), param)
+        val = self.session.put('/cas/namespaces/{0}?X-Mp-Namespace={1}'.format(param['id'], self.superNamespace), param)
         if val.get('error') is not None:
             print('--------update_namespace-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -45,7 +45,7 @@ class Namespace:
         return val.get('value')
 
     def delete_namespace(self, param):
-        val = self.session.delete('/cas/namespaces/{0}?X-Namespace={1}'.format(param, self.superNamespace))
+        val = self.session.delete('/cas/namespaces/{0}?X-Mp-Namespace={1}'.format(param, self.superNamespace))
         if val.get('error') is not None:
             print('--------delete_namespace-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))

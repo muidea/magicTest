@@ -35,10 +35,10 @@ class MagicSession(object):
         header = {}
 
         if self.namespace:
-            header['X-Namespace'] = self.namespace
+            header['X-Mp-Namespace'] = self.namespace
 
         if self.application:
-            header['X-Application'] = self.application
+            header['X-Mp-Application'] = self.application
 
         if self.session_token:
             header["Authorization"] = 'Bearer %s' % self.session_token
