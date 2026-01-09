@@ -1,3 +1,3 @@
 from block import block
 
-block.main('http://autotest.local.vpc/api/v1', '')
+block.main('https://autotest.remote.vpc/api/v1', '')

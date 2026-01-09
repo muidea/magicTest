@@ -2,7 +2,8 @@
 
 import json
 import requests
-
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class MagicSession(object):
     """MagicSession"""
@@ -54,7 +55,7 @@ class MagicSession(object):
         """Post"""
         ret = None
         try:
-            response = self.current_session.post('%s%s' % (self.base_url, url), headers=self.header(), json=params)
+            response = self.current_session.post('%s%s' % (self.base_url, url), headers=self.header(), json=params, verify=False)
             ret = json.loads(response.text)
         except ValueError as except_value:
             ret = {
@@ -69,7 +70,7 @@ class MagicSession(object):
         """Get"""
         ret = None
         try:
-            response = self.current_session.get('%s%s' % (self.base_url, url), headers=self.header(), params=params)
+            response = self.current_session.get('%s%s' % (self.base_url, url), headers=self.header(), params=params, verify=False)
             ret = json.loads(response.text)
         except ValueError as except_value:
             ret = {
@@ -84,7 +85,7 @@ class MagicSession(object):
         """Put"""
         ret = None
         try:
-            response = self.current_session.put('%s%s' % (self.base_url, url), headers=self.header(), json=params)
+            response = self.current_session.put('%s%s' % (self.base_url, url), headers=self.header(), json=params, verify=False)
             ret = json.loads(response.text)
         except ValueError as except_value:
             ret = {
@@ -99,7 +100,7 @@ class MagicSession(object):
         """Delete"""
         ret = None
         try:
-            response = self.current_session.delete('%s%s' % (self.base_url, url), headers=self.header(), params=params)
+            response = self.current_session.delete('%s%s' % (self.base_url, url), headers=self.header(), params=params, verify=False)
             ret = json.loads(response.text)
         except ValueError as except_value:
             ret = {
@@ -116,7 +117,7 @@ class MagicSession(object):
         try:
             print('%s%s' % (self.base_url, url))
             response = self.current_session.post('%s%s' % (self.base_url, url),
-                                                 headers=self.header(), params=params, files=files)
+                                                 headers=self.header(), params=params, files=files, verify=False)
             ret = json.loads(response.text)
         except ValueError as except_value:
             ret = {
@@ -131,7 +132,7 @@ class MagicSession(object):
         """Download"""
         ret = None
         try:
-            response = self.current_session.get('%s%s' % (self.base_url, url), headers=self.header(), params=params)
+            response = self.current_session.get('%s%s' % (self.base_url, url), headers=self.header(), params=params, verify=False)
             with open(dst_file, "wb") as code:
                 code.write(response.content)
             ret = dst_file

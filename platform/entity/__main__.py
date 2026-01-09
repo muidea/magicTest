@@ -1,3 +1,3 @@
 from entity import entity
 
-entity.main('http://autotest.local.vpc/api/v1', '')
+entity.main('https://autotest.remote.vpc/api/v1', '')

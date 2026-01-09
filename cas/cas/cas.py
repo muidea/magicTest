@@ -21,7 +21,7 @@ class Cas:
     def login(self, account, password):
         """login"""
         params = {'account': account, 'password': password}
-        val = self.session.post('/cas/account/login/', params)
+        val = self.session.post('/cas/session/login/', params)
         if val.get('error') is not None:
             print("登录失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return False
@@ -32,16 +32,16 @@ class Cas:
     def logout(self, session_token):
         """logout"""
         self.session.bind_token(session_token)
-        val = self.session.delete('/cas/account/logout/')
+        val = self.session.delete('/cas/session/logout/')
         if val.get('error') is not None:
             print("注销失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return False
         return True
 
-    def verify(self, session_token):
+    def refresh(self, session_token):
         """verify"""
         self.session.bind_token(session_token)
-        val = self.session.get('/cas/session/verify/')
+        val = self.session.get('/cas/session/refresh/')
         if val.get('error') is not None:
             print("验证失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return None
@@ -55,5 +55,5 @@ def main(server_url, namespace):
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
     app = Cas(work_session)
     app.login('administrator', 'administrator')
-    app.verify(app.session_token)
+    app.refresh(app.session_token)
     app.logout(app.session_token)

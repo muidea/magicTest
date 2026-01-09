@@ -1,3 +1,3 @@
 from application import application
 
-application.main('http://autotest.local.vpc/api/v1', '')
+application.main('https://autotest.remote.vpc/api/v1', '')
