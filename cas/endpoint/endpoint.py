@@ -12,7 +12,7 @@ class Endpoint:
         self.session = work_session
 
     def filter_endpoint(self, param):
-        val = self.session.get('/cas/endpoint/filter/', param)
+        val = self.session.get('/cas/endpoints', param)
         if val.get('error') is not None:
             print('--------filter_endpoint-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -20,7 +20,7 @@ class Endpoint:
         return val.get('values')
 
     def query_endpoint(self, param):
-        val = self.session.get('/cas/endpoint/query/{0}'.format(param))
+        val = self.session.get('/cas/endpoints/{0}'.format(param))
         if val.get('error') is not None:
             print('--------query_endpoint-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -28,7 +28,7 @@ class Endpoint:
         return val.get('value')
 
     def create_endpoint(self, param):
-        val = self.session.post('/cas/endpoint/create/', param)
+        val = self.session.post('/cas/endpoints', param)
         if val.get('error') is not None:
             print('--------create_endpoint-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -36,7 +36,7 @@ class Endpoint:
         return val.get('value')
 
     def update_endpoint(self, param):
-        val = self.session.put('/cas/endpoint/update/{0}'.format(param['id']), param)
+        val = self.session.put('/cas/endpoints/{0}'.format(param['id']), param)
         if val.get('error') is not None:
             print('--------update_endpoint-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -44,7 +44,7 @@ class Endpoint:
         return val.get('value')
 
     def delete_endpoint(self, param):
-        val = self.session.delete('/cas/endpoint/delete/{0}'.format(param))
+        val = self.session.delete('/cas/endpoints/{0}'.format(param))
         if val.get('error') is not None:
             print('--------delete_endpoint-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))

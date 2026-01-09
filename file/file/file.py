@@ -25,7 +25,7 @@ class File:
             else:
                 params['fileScope'] = self.scope
 
-        val = self.session.get('/api/v1/static/file/filter/', params)
+        val = self.session.get('/api/v1/static/files', params)
         if val and val['errorCode'] == 0:
             return val['values']
         print('--------filter_file-----------')
@@ -43,7 +43,7 @@ class File:
             else:
                 params['fileScope'] = self.scope
 
-        val = self.session.get('/api/v1/static/file/query/{0}'.format(file_id), params)
+        val = self.session.get('/api/v1/static/files/{0}'.format(file_id), params)
         if val and val['errorCode'] == 0:
             return val['value']
 
@@ -62,7 +62,7 @@ class File:
             else:
                 params['fileScope'] = self.scope
 
-        val = self.session.delete('/api/v1/static/file/delete/{0}'.format(file_id), params)
+        val = self.session.delete('/api/v1/static/files/{0}'.format(file_id), params)
         if val and val['errorCode'] == 0:
             return val['value']
 

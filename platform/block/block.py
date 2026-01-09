@@ -9,7 +9,7 @@ class Block:
         self.session = work_session
 
     def filter_block(self, filter):
-        url = '/core/block/filter/'
+        url = '/core/blocks'
 
         val = self.session.post(url, filter)
         if 'error' in val:
@@ -18,21 +18,21 @@ class Block:
         return val.get('values')
 
     def query_block(self, id):
-        val = self.session.get('/core/block/query/{0}'.format(id))
+        val = self.session.get('/core/blocks/{0}'.format(id))
         if 'error' in val:
             print("查询区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_block(self, param):
-        val = self.session.post('/core/block/create/', param)
+        val = self.session.post('/core/blocks', param)
         if 'error' in val:
             print("创建区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_block(self, id, param):
-        val = self.session.put('/core/block/update/{0}'.format(id), param)
+        val = self.session.put('/core/blocks/{0}'.format(id), param)
         if 'error' in val:
             print("更新区块失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None

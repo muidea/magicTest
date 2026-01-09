@@ -68,7 +68,7 @@ class Application:
         self.session = work_session
 
     def filter_application(self, filter):
-        url = '/core/application/filter/'
+        url = '/core/applications'
 
         val = self.session.post(url, filter)
         if 'error' in val:
@@ -77,21 +77,21 @@ class Application:
         return val.get('values')
 
     def query_application(self, id):
-        val = self.session.get('/core/application/query/{0}'.format(id))
+        val = self.session.get('/core/applications/{0}'.format(id))
         if 'error' in val:
             print("查询应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def create_application(self, param):
-        val = self.session.post('/core/application/create/', param)
+        val = self.session.post('/core/applications', param)
         if 'error' in val:
             print("创建应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
         return val.get('value')
 
     def update_application(self, id, param):
-        val = self.session.put('/core/application/update/{0}'.format(id), param)
+        val = self.session.put('/core/applications/{0}'.format(id), param)
         if 'error' in val:
             print("更新应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
             return None
@@ -228,7 +228,7 @@ if __name__ == "__main__":
     parser.add_argument("--server_url", type=str, required=True, help="The server URL.")
     parser.add_argument("--namespace", type=str, required=True, help="The namespace.")
     parser.add_argument("--test_type", type=str, choices=["smoke", "stress"], required=True, help="The type of test to run (smoke or stress).")
-    parser.add_argument("--count", type=int, default=10, help="The number of applications to create/update/delete (for stress test).")
+    parser.add_argument("--count", type=int, default=10, help="The number of applications to createss (for stress test).")
     parser.add_argument("--concurrency", type=int, default=5, help="The number of concurrent operations (for stress test).")
 
     args = parser.parse_args()

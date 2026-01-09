@@ -5,7 +5,7 @@ class MagicEntity:
         self.base_url = base_url
 
     def filter(self, filter_val):
-        url = '{0}/filter/'.format(self.base_url)
+        url = '{0}s'.format(self.base_url)
 
         val = self.session.post(url, filter_val)
         if val and (val.get('error') is None):
@@ -16,7 +16,7 @@ class MagicEntity:
         return None
 
     def query(self, id_val):
-        url = '{0}/query/{1}'.format(self.base_url, id_val)
+        url = '{0}s/{1}'.format(self.base_url, id_val)
         val = self.session.get(url)
         if val and (val.get('error') is None):
             return val['value']
@@ -26,7 +26,7 @@ class MagicEntity:
         return None
 
     def create(self, param_val):
-        url = '{0}/create/'.format(self.base_url)
+        url = '{0}s'.format(self.base_url)
         val = self.session.post(url, param_val)
         if val and (val.get('error') is None):
             return val['value']
@@ -56,7 +56,7 @@ class MagicEntity:
         return None
 
     def update(self, id_val, param_val):
-        url = '{0}/update/{1}'.format(self.base_url, id_val)
+        url = '{0}s/{1}'.format(self.base_url, id_val)
         val = self.session.put(url, param_val)
         if val and (val.get('error') is None):
             return val['value']
@@ -66,7 +66,7 @@ class MagicEntity:
         return None
 
     def delete(self, id_val):
-        url = '{0}/delete/{1}'.format(self.base_url, id_val)
+        url = '{0}s/{1}'.format(self.base_url, id_val)
         val = self.session.delete(url)
         if val and (val.get('error') is None):
             return val['value']

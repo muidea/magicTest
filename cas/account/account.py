@@ -12,7 +12,7 @@ class Account:
         self.session = work_session
 
     def filter_account(self, param):
-        val = self.session.get('/cas/account/filter/', param)
+        val = self.session.get('/cas/accounts', param)
         if val.get('error') is not None:
             print('--------filter_account-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -20,7 +20,7 @@ class Account:
         return val.get('values')
 
     def query_account(self, param):
-        val = self.session.get('/cas/account/query/{0}'.format(param))
+        val = self.session.get('/cas/accounts/{0}'.format(param))
         if val.get('error') is not None:
             print('--------query_account-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -28,7 +28,7 @@ class Account:
         return val.get('value')
 
     def create_account(self, param):
-        val = self.session.post('/cas/account/create/', param)
+        val = self.session.post('/cas/accounts', param)
         if val.get('error') is not None:
             print('--------create_account-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -36,7 +36,7 @@ class Account:
         return val.get('value')
 
     def update_account(self, param):
-        val = self.session.put('/cas/account/update/{0}'.format(param['id']), param)
+        val = self.session.put('/cas/accounts/{0}'.format(param['id']), param)
         if val.get('error') is not None:
             print('--------update_account-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
@@ -44,7 +44,7 @@ class Account:
         return val.get('value')
 
     def delete_account(self, param):
-        val = self.session.delete('/cas/account/delete/{0}'.format(param))
+        val = self.session.delete('/cas/accounts/{0}'.format(param))
         if val.get('error') is not None:
             print('--------delete_account-----------')
             print("Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
