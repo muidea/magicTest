@@ -1,4 +1,9 @@
 
+import logging
+
+# 配置日志
+logger = logging.getLogger(__name__)
+
 class MagicEntity:
     def __init__(self, base_url, work_session):
         self.session = work_session
@@ -7,12 +12,15 @@ class MagicEntity:
     def filter(self, filter_val):
         url = '{0}s'.format(self.base_url)
 
-        val = self.session.post(url, filter_val)
+        val = self.session.get(url, filter_val)
         if val and (val.get('error') is None):
             return val['values']
 
-        print('--------filter validation error,url:{0}, filter:{1}-----------'.format(url, filter_val))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('过滤验证错误, URL: %s, 过滤条件: %s', url, filter_val)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('过滤请求失败, URL: %s, 过滤条件: %s', url, filter_val)
         return None
 
     def query(self, id_val):
@@ -21,8 +29,11 @@ class MagicEntity:
         if val and (val.get('error') is None):
             return val['value']
 
-        print('--------query execution error, url:{0}-----------'.format(url))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('查询执行错误, URL: %s', url)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('查询请求失败, URL: %s', url)
         return None
 
     def create(self, param_val):
@@ -31,8 +42,11 @@ class MagicEntity:
         if val and (val.get('error') is None):
             return val['value']
 
-        print('--------create operation error, url:{0}, param:{1}-----------'.format(url, param_val))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('创建操作错误, URL: %s, 参数: %s', url, param_val)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('创建请求失败, URL: %s, 参数: %s', url, param_val)
         return None
 
     def destroy(self, id_val):
@@ -41,18 +55,24 @@ class MagicEntity:
         if val and (val.get('error') is None):
             return val['value']
 
-        print('--------destroy execution error, url:{0}-----------'.format(url))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('销毁执行错误, URL: %s', url)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('销毁请求失败, URL: %s', url)
         return None
 
     def insert(self, param_val):
-        url = '{0}/insert/'.format(self.base_url)
+        url = '{0}s'.format(self.base_url)
         val = self.session.post(url, param_val)
         if val and (val.get('error') is None):
             return val['value']
 
-        print('--------insert operation error, url:{0}, param:{1}-----------'.format(url, param_val))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('插入操作错误, URL: %s, 参数: %s', url, param_val)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('插入请求失败, URL: %s, 参数: %s', url, param_val)
         return None
 
     def update(self, id_val, param_val):
@@ -61,8 +81,11 @@ class MagicEntity:
         if val and (val.get('error') is None):
             return val['value']
 
-        print('--------update validation error, url:{0}, param:{1}-----------'.format(url, param_val))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('更新验证错误, URL: %s, 参数: %s', url, param_val)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('更新请求失败, URL: %s, 参数: %s', url, param_val)
         return None
 
     def delete(self, id_val):
@@ -71,8 +94,11 @@ class MagicEntity:
         if val and (val.get('error') is None):
             return val['value']
 
-        print('--------delete execution error, url:{0}-----------'.format(url))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('删除执行错误, URL: %s', url)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('删除请求失败, URL: %s', url)
         return None
 
     def count(self):
@@ -81,6 +107,9 @@ class MagicEntity:
         if val and (val.get('error') is None):
             return val['total']
 
-        print('--------count operation error, url:{0}-----------'.format(url))
-        print('Code: {0}, Message: {1}'.format(val['error']['code'], val['error']['message']))
+        if val:
+            logger.error('计数操作错误, URL: %s', url)
+            logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+        else:
+            logger.error('计数请求失败, URL: %s', url)
         return None
