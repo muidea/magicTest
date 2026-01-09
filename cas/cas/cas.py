@@ -25,8 +25,12 @@ class Cas:
         if val.get('error') is not None:
             print("登录失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return False
-        self.session_token = val.get('sessionToken')
-        self.current_entity = val.get('entity')
+        value = val.get('value')
+        if value is None:
+            print("登录失败")
+            return False
+        self.session_token = value.get('sessionToken')
+        self.current_entity = value.get('entity')
         return self.session_token is not None
 
     def logout(self, session_token):
@@ -45,8 +49,12 @@ class Cas:
         if val.get('error') is not None:
             print("验证失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
             return None
-        self.session_token = val.get('sessionToken')
-        self.current_entity = val.get('entity')
+        value = val.get('value')
+        if value is None:
+            print("验证失败")
+            return None
+        self.session_token = value.get('sessionToken')
+        self.current_entity = value.get('entity')
         return self.session_token
 
 
