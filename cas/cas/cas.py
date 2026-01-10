@@ -1,6 +1,10 @@
 """Cas"""
 
+import logging
 from session import session
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class Cas:
@@ -22,39 +26,54 @@ class Cas:
         """login"""
         params = {'account': account, 'password': password}
         val = self.session.post('/cas/session/login/', params)
-        if val.get('error') is not None:
-            print("登录失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('登录失败, 账户: %s', account)
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('登录失败: 无响应, 账户: %s', account)
             return False
         value = val.get('value')
         if value is None:
-            print("登录失败")
+            logger.error('登录失败: 响应值为空, 账户: %s', account)
             return False
         self.session_token = value.get('sessionToken')
         self.current_entity = value.get('entity')
+        logger.info('登录成功, 账户: %s, 实体: %s', account, self.current_entity)
         return self.session_token is not None
 
     def logout(self, session_token):
         """logout"""
         self.session.bind_token(session_token)
         val = self.session.delete('/cas/session/logout/')
-        if val.get('error') is not None:
-            print("注销失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('注销失败')
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('注销失败: 无响应')
             return False
+        logger.info('注销成功')
         return True
 
     def refresh(self, session_token):
         """verify"""
         self.session.bind_token(session_token)
         val = self.session.get('/cas/session/refresh/')
-        if val.get('error') is not None:
-            print("验证失败 Code: {0}, Message: {1}".format(val['error']['code'], val['error']['message']))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('会话刷新失败')
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('会话刷新失败: 无响应')
             return None
         value = val.get('value')
         if value is None:
-            print("验证失败")
+            logger.error('会话刷新失败: 响应值为空')
             return None
         self.session_token = value.get('sessionToken')
         self.current_entity = value.get('entity')
+        logger.info('会话刷新成功, 实体: %s', self.current_entity)
         return self.session_token
 
 
