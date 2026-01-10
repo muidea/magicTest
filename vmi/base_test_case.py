@@ -200,7 +200,7 @@ def verify_session(cas_session, work_session):
 
 
 class BaseTestCase(unittest.TestCase):
-    _server_url = 'https://autotest.remote.vpc/api/v1'
+    _server_url = 'https://autotest.local.vpc/api/v1'
     _user = 'administrator'
     _password = 'administrator'
     _warehouse_count = 1

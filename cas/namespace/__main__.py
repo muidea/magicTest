@@ -1,3 +1,3 @@
 from namespace import namespace
 
-namespace.main('http://super.local.vpc/api/v1', '')
+namespace.main('http://panel.local.vpc/api/v1', '')

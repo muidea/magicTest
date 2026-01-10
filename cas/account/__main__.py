@@ -1,3 +1,3 @@
 from account import account
 
-account.main('https://autotest.remote.vpc/api/v1', '')
+account.main('https://autotest.local.vpc/api/v1', '')

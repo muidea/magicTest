@@ -1,3 +1,3 @@
 from value import value
 
-value.main('https://autotest.remote.vpc/api/v1', '')
+value.main('https://autotest.local.vpc/api/v1', '')
