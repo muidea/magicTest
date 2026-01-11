@@ -76,6 +76,17 @@ class Cas:
         logger.info('会话刷新成功, 实体: %s', self.current_entity)
         return self.session_token
 
+    def get_privileges(self):
+        """get_privileges"""
+        val = self.session.get('/cas/privileges/')
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('获取权限失败')
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('获取权限失败: 无响应')
+        else:
+            return  val.get('values')
 
 def main(server_url, namespace):
     """main"""
@@ -83,4 +94,6 @@ def main(server_url, namespace):
     app = Cas(work_session)
     app.login('administrator', 'administrator')
     app.refresh(app.session_token)
+    privileges = app.get_privileges()
+    print('权限列表: %s', privileges)
     app.logout(app.session_token)
