@@ -1,47 +1,66 @@
-"""common"""
+"""common - Faker-based mock data generator"""
 
 import random
 import uuid as id
 import time as dt
 from datetime import datetime, timedelta
+from faker import Faker
 
-# Chinese characters for generating names, words, etc.
-CHINESE_CHARS = '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海口东导器压志世金增争济阶油思术极交受联什认六共权收证改清己美再采转更单风切打白教速花带安场身车例真务具万每目至达走积示议声报斗完类八离华名确才科张信马节话米整空元况今集温传土许步群广石记需段研界拉林律叫且究观越织装影算低持音众书布复容儿须际商非验连断深难近矿千周委素技备半办青省列习响约支般史感劳便团往酸历市克何除消构府称太准精值号率族维划选标写存候毛亲快效斯院查江型眼王按格养易置派层片始却专状育厂京识适属圆包火住调满县局照参红细引听该铁价严'
+# Create Faker instances for different locales
+_faker_en = Faker()
+_faker_zh = Faker('zh_CN')
 
-RAW_CONTENT = 'abcdefghijklmnopqrstuvwxyz'
 
-
-def uuid():
+def generate_uuid():
+    """Generate a random UUID (hex string)"""
     return id.uuid4().hex
 
 
-def int(b=10, e=100):
+def random_int(b=10, e=100):
+    """Generate a random integer between b and e (inclusive)"""
     return random.randint(b, e)
 
 
-def float(b=12, e=200):
+def random_float(b=12.0, e=200.0):
+    """Generate a random float between b and e"""
     return random.uniform(b, e)
 
 
-def time():
-    import time as time_module
-    return time_module.strftime("%Y-%m-%d %H:%M:%S", time_module.localtime())
+def current_time():
+    """Generate current time formatted as YYYY-MM-DD HH:MM:SS"""
+    return dt.strftime("%Y-%m-%d %H:%M:%S", dt.localtime())
 
 
 def word():
     """Generate a random word"""
-    ret = ""
-    return ret.join(random.sample(RAW_CONTENT, random.randint(3, 12)))
+    return _faker_en.word()
 
 
 def chinese_word(length=2):
     """Generate a random Chinese word"""
-    return ''.join(random.sample(CHINESE_CHARS, length))
+    # Faker doesn't have direct Chinese word generator
+    # For short lengths, use a pool of common Chinese characters
+    if length <= 0:
+        return ''
+    
+    # Generate longer text and extract characters
+    min_chars = max(5, length * 2)  # Ensure at least 5 characters for faker.text()
+    text = _faker_zh.text(max_nb_chars=min_chars).replace(' ', '').replace('\n', '')
+    
+    # If text is too short, pad with common characters
+    common_chars = '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海口东导器压志世金增争济阶油思术极交受联什认六共权收证改清己美再采转更单风切打白教速花带安场身车例真务具万每目至达走积示议声报斗完类八离华名确才科张信马节话米整空元况今集温传土许步群广石记需段研界拉林律叫且究观越织装影算低持音众书布复容儿须际商非验连断深难近矿千周委素技备半办青省列习响约支般史感劳便团往酸历市克何除消构府称太准精值号率族维划选标写存候毛亲快效斯院查江型眼王按格养易置派层片始却专状育厂京识适属圆包火住调满县局照参红细引听该铁价严'
+    
+    if len(text) >= length:
+        return text[:length]
+    
+    # If faker text is too short, supplement with common characters
+    supplement = ''.join(random.choice(common_chars) for _ in range(length - len(text)))
+    return text + supplement
 
 
 def name():
     """Generate a random Chinese name"""
-    return chinese_word(2) + chinese_word(1)
+    return _faker_zh.name()
 
 
 def chinese_name():
@@ -51,168 +70,79 @@ def chinese_name():
 
 def sentence():
     """Generate a random sentence"""
-    val_array = []
-    count = random.randint(5, 13)
-    index = 0
-    while index < count:
-        val_array.append(word())
-        index = index + 1
-
-    ret = " "
-    return ret.join(val_array) + ". "
+    return _faker_en.sentence()
 
 
 def chinese_sentence():
     """Generate a random Chinese sentence"""
-    val_array = []
-    count = random.randint(5, 13)
-    index = 0
-    while index < count:
-        val_array.append(chinese_word(random.randint(2, 4)))
-        index = index + 1
-
-    ret = " "
-    return ret.join(val_array) + "。"
+    return _faker_zh.sentence()
 
 
 def title():
     """Generate a random title"""
-    val_array = []
-    count = random.randint(5, 10)
-    index = 0
-    while index < count:
-        val_array.append(word())
-        index = index + 1
-
-    ret = " "
-    return ret.join(val_array)
+    return _faker_en.sentence(nb_words=random.randint(3, 8))[:-1]  # Remove period
 
 
 def chinese_title():
     """Generate a random Chinese title"""
-    val_array = []
-    count = random.randint(5, 10)
-    index = 0
-    while index < count:
-        val_array.append(chinese_word(random.randint(2, 4)))
-        index = index + 1
-
-    ret = " "
-    return ret.join(val_array)
+    return _faker_zh.sentence(nb_words=random.randint(3, 8))[:-1]  # Remove period
 
 
 def paragraph():
     """Generate a random paragraph"""
-    val_array = []
-    count = random.randint(5, 10)
-    index = 0
-    while index < count:
-        val_array.append(sentence())
-        index = index + 1
-
-    ret = ""
-    return ret.join(val_array)
+    return _faker_en.paragraph()
 
 
 def chinese_paragraph():
     """Generate a random Chinese paragraph"""
-    val_array = []
-    count = random.randint(5, 10)
-    index = 0
-    while index < count:
-        val_array.append(chinese_sentence())
-        index = index + 1
-
-    ret = ""
-    return ret.join(val_array)
+    return _faker_zh.paragraph()
 
 
 def content():
     """Generate random content"""
-    val_array = []
-    count = random.randint(3, 60)
-    index = 0
-    while index < count:
-        val_array.append(paragraph())
-        index = index + 1
-
-    ret = "\n"
-    return ret.join(val_array)
+    return '\n\n'.join(_faker_en.paragraphs(nb=random.randint(3, 6)))
 
 
 def chinese_content():
     """Generate random Chinese content"""
-    val_array = []
-    count = random.randint(3, 60)
-    index = 0
-    while index < count:
-        val_array.append(chinese_paragraph())
-        index = index + 1
-
-    ret = "\n"
-    return ret.join(val_array)
+    return '\n\n'.join(_faker_zh.paragraphs(nb=random.randint(3, 6)))
 
 
 def email():
     """Generate a random email"""
-    url_array = []
-    index = 0
-    while index < 2:
-        url_array.append(word())
-        index = index + 1
-    domain = '.'
-    return '%s@%s' % (word(), domain.join(url_array))
+    return _faker_en.email()
 
 
 def url():
     """Generate a random URL"""
-    url_array = []
-    index = 0
-    while index < 2:
-        url_array.append(word())
-        index = index + 1
-    domain = '.'
-    return domain.join(url_array)
+    return _faker_en.url()
 
 
 def picker_list(data_list, num):
     """Randomly pick elements from a list"""
-    ret = []
+    if not isinstance(num, int) or num < 0:
+        raise ValueError("num must be a non-negative integer")
+    
     data_len = len(data_list)
     if data_len <= num:
         return data_list.copy()
-
-    tmp_list = data_list[:]
-    while True:
-        if len(ret) >= num:
-            break
-        offset = random.randint(0, len(tmp_list) - 1)
-        ret.append(tmp_list[offset])
-        del tmp_list[offset]
-    return ret.copy()
+    
+    return random.sample(data_list, num)
 
 
 def picker_dict(data_dict, num):
     """Randomly pick elements from a dictionary"""
-    ret = {}
+    if not isinstance(num, int) or num < 0:
+        raise ValueError("num must be a non-negative integer")
+    
     data_len = len(data_dict)
     if data_len <= num:
         return data_dict.copy()
-
-    tmp_dict = data_dict.copy()
-    while True:
-        if len(ret) >= num:
-            break
-        offset = random.randint(0, len(tmp_dict) - 1)
-        for key in tmp_dict.keys():
-            if offset == 0:
-                ret[key] = tmp_dict[key]
-                tmp_dict.pop(key)
-                break
-            else:
-                offset = offset - 1
-
-    return ret
+    
+    # Convert dict items to list and sample
+    items = list(data_dict.items())
+    sampled_items = random.sample(items, num)
+    return dict(sampled_items)
 
 
 def date(start_date="2020-01-01", end_date="2023-12-31"):
@@ -226,32 +156,22 @@ def date(start_date="2020-01-01", end_date="2023-12-31"):
 
 def phone_number():
     """Generate a random phone number"""
-    return "%03d-%03d-%04d" % (random.randint(100, 999), random.randint(100, 999), random.randint(1000, 9999))
+    return _faker_en.phone_number()
 
 
 def chinese_phone_number():
     """Generate a random Chinese phone number"""
-    return "1%d%04d%04d" % (random.randint(30, 99), random.randint(1000, 9999), random.randint(1000, 9999))
+    return _faker_zh.phone_number()
 
 
 def address():
     """Generate a random address"""
-    street_number = random.randint(100, 9999)
-    street_name = word().capitalize()
-    city = word().capitalize()
-    state = random.choice(["北京", "上海", "广州", "深圳", "杭州", "成都", "重庆", "武汉", "南京", "西安"])
-    zip_code = random.randint(10000, 99999)
-    return "%d %s St, %s, %s %d" % (street_number, street_name, city, state, zip_code)
+    return _faker_en.address().replace('\n', ', ')
 
 
 def chinese_address():
     """Generate a random Chinese address"""
-    province = random.choice(["北京", "上海", "广东", "浙江", "四川", "重庆", "湖北", "江苏", "陕西"])
-    city = random.choice(["北京市", "上海市", "广州市", "深圳市", "杭州市", "成都市", "重庆市", "武汉市", "南京市", "西安市"])
-    district = random.choice(["朝阳区", "浦东新区", "天河区", "南山区", "西湖区", "武侯区", "渝中区", "江汉区", "玄武区", "雁塔区"])
-    street = random.choice(["长安街", "南京路", "珠江新城", "科技园路", "西湖大道", "天府大道", "解放碑", "江汉路", "中山路", "雁塔路"])
-    number = random.randint(1, 999)
-    return "%s%s%s%s%d号" % (province, city, district, street, number)
+    return _faker_zh.address().replace('\n', '')
 
 
 def boolean():
@@ -261,18 +181,27 @@ def boolean():
 
 def color():
     """Generate a random color in hex format"""
-    return "#%02x%02x%02x" % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+    return _faker_en.hex_color()
 
 
 def ip_address():
     """Generate a random IP address"""
-    return "%d.%d.%d.%d" % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+    return _faker_en.ipv4()
+
+
+# Aliases for backward compatibility
+uuid = generate_uuid
+int = random_int
+float = random_float
+time = current_time
+number = random_int
+ip = ip_address
 
 
 if __name__ == '__main__':
-    print(uuid())
-    print(int())
-    print(float())
+    print(generate_uuid())
+    print(random_int())
+    print(random_float())
     print(word())
     print(name())
     print(sentence())
