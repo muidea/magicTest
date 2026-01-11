@@ -16,7 +16,7 @@ class Role:
         self.session = work_session
 
     def filter_role(self, param):
-        val = self.session.get('/cas/roles', param)
+        val = self.session.get('/cas/roles/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤角色错误')
@@ -38,7 +38,7 @@ class Role:
         return val.get('value')
 
     def create_role(self, param):
-        val = self.session.post('/cas/roles', param)
+        val = self.session.post('/cas/roles/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建角色错误, 角色: %s', param.get('name', '未知'))
