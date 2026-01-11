@@ -29,7 +29,7 @@ class NamespaceTestCase(unittest.TestCase):
             logger.error('CAS登录失败')
             raise Exception('CAS登录失败')
         cls.work_session.bind_token(cls.cas_session.get_session_token())
-        cls.namespace_app = Namespace(cls.work_session, "super")
+        cls.namespace_app = Namespace(cls.work_session, "panel")
     
     def setUp(self):
         """每个测试用例前的准备"""

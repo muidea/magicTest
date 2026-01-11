@@ -16,7 +16,7 @@ class Endpoint:
         self.session = work_session
 
     def filter_endpoint(self, param):
-        val = self.session.get('/cas/endpoints', param)
+        val = self.session.get('/cas/endpoints/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤端点错误')
@@ -38,7 +38,7 @@ class Endpoint:
         return val.get('value')
 
     def create_endpoint(self, param):
-        val = self.session.post('/cas/endpoints', param)
+        val = self.session.post('/cas/endpoints/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建端点错误, 端点: %s', param.get('endpoint', '未知'))

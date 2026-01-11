@@ -25,7 +25,7 @@ class Account:
         Returns:
             账户列表或None（失败时）
         """
-        val = self.session.get('/cas/accounts', param)
+        val = self.session.get('/cas/accounts/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤账户错误')
@@ -63,7 +63,7 @@ class Account:
         Returns:
             创建的账户信息或None（失败时）
         """
-        val = self.session.post('/cas/accounts', param)
+        val = self.session.post('/cas/accounts/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建账户错误, 账户: %s', param.get('account', '未知'))
