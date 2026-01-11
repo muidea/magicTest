@@ -1,19 +1,36 @@
 """File"""
 
 import os
-
+from typing import Optional, Dict, Any, List
 from session import session
+
 
 class File:
     """File"""
 
-    def __init__(self, scope, source, path, work_session):
+    def __init__(self, scope: str, source: str, path: Optional[str], work_session: session.MagicSession) -> None:
+        """初始化File类
+        
+        Args:
+            scope: 文件范围
+            source: 文件来源
+            path: 文件路径（可选）
+            work_session: 工作会话
+        """
         self.scope = scope
         self.source = source
         self.path = path
         self.session = work_session
 
-    def filter_file(self, params=None):
+    def filter_file(self, params: Optional[Dict[str, Any]] = None) -> Optional[List[Dict[str, Any]]]:
+        """过滤文件
+        
+        Args:
+            params: 过滤参数（可选）
+            
+        Returns:
+            文件列表或None（失败时）
+        """
         if self.source:
             if not params:
                 params = {'fileSource': self.source}
@@ -144,8 +161,16 @@ class File:
         return None
 
 
-def main(server_url, namespace):
-    """main"""
+def main(server_url: str, namespace: str) -> bool:
+    """主函数
+    
+    Args:
+        server_url: 服务器URL
+        namespace: 命名空间
+        
+    Returns:
+        成功返回True，失败返回False
+    """
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
     app = File("abc","xyz", None, work_session)
     file_path = "./file/file.py"
@@ -155,7 +180,7 @@ def main(server_url, namespace):
         return False
 
     file_list = app.filter_file()
-    if not file_list or len(file_list) < 0:
+    if not file_list or len(file_list) <= 0:
         print('filter file failed')
         return False
 

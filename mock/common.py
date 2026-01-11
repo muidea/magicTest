@@ -24,7 +24,8 @@ def float(b=12, e=200):
 
 
 def time():
-    return dt.strftime("%Y-%m-%d %H:%M:%S", dt.localtime())
+    import time as time_module
+    return time_module.strftime("%Y-%m-%d %H:%M:%S", time_module.localtime())
 
 
 def word():
@@ -43,8 +44,9 @@ def name():
     return chinese_word(2) + chinese_word(1)
 
 
-def title(val):
-    return val.title()
+def chinese_name():
+    """Generate a random Chinese name (alias for name)"""
+    return name()
 
 
 def sentence():

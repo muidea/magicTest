@@ -9,3 +9,6 @@ sys.path.append(dir_path)
 
 dir_path = os.path.dirname(dir_path)
 sys.path.append(dir_path)
+
+# 导入 Role 类
+from .role import Role

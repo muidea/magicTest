@@ -144,18 +144,20 @@ def smoke_test(server_url, namespace):
     new_app10 = app_instance.create_application(app001)
     if not new_app10:
         print('create new application failed')
-        return
+        return False
 
     # Update the application
     new_app10['description'] = mock.sentence()
     new_app11 = app_instance.update_application(new_app10['id'], new_app10)
-    if new_app11['description'] != new_app10['description']:
+    if not new_app11 or new_app11['description'] != new_app10['description']:
         print('update application failed')
+        return False
 
     # Query the application
     queried_app = app_instance.query_application(new_app10['id'])
     if not queried_app:
         print('query application failed')
+        return False
 
     # Delete the application
     app_instance.delete_application(new_app10['id'])
@@ -205,30 +207,31 @@ def stress_test(server_url, namespace, count, concurrency):
     created_apps = batch_create_applications(app_instance, count, concurrency)
     if not all(created_apps):
         print('Batch create applications failed')
-        return
+        return False
 
     # Batch update applications
     print("Updating %d applications with concurrency %d..." % (count, concurrency))
     updated_apps = batch_update_applications(app_instance, created_apps, concurrency)
     if not all(updated_apps):
         print('Batch update applications failed')
-        return
+        return False
 
     # Batch delete applications
     print("Deleting %d applications with concurrency %d..." % (count, concurrency))
     deleted_apps = batch_delete_applications(app_instance, created_apps, concurrency)
     if not all(deleted_apps):
         print('Batch delete applications failed')
-        return
+        return False
 
     print("Stress test completed successfully.")
+    return True
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run smoke or stress tests on applications.")
     parser.add_argument("--server_url", type=str, required=True, help="The server URL.")
     parser.add_argument("--namespace", type=str, required=True, help="The namespace.")
     parser.add_argument("--test_type", type=str, choices=["smoke", "stress"], required=True, help="The type of test to run (smoke or stress).")
-    parser.add_argument("--count", type=int, default=10, help="The number of applications to createss (for stress test).")
+    parser.add_argument("--count", type=int, default=10, help="The number of applications to create (for stress test).")
     parser.add_argument("--concurrency", type=int, default=5, help="The number of concurrent operations (for stress test).")
 
     args = parser.parse_args()

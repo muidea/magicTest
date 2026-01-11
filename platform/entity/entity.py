@@ -161,7 +161,7 @@ def setup_data(session):
     new_app10 = app_instance.create_application(app001)
     if not new_app10:
         print('create new application failed')
-        return
+        return None, None
 
     block_instance = block.Block(session)
     block001 = block.mock_block_param()
@@ -169,7 +169,7 @@ def setup_data(session):
     if not new_block10:
         print('create new block failed')
         app_instance.delete_application(new_app10['id'])
-        return
+        return None, None
 
     return new_app10, new_block10
 
@@ -244,7 +244,7 @@ def main(server_url, namespace):
     app, block = setup_data(work_session)
     if not app or not block:
         print('setup_data failed')
-        return
+        return False
 
     work_session.bind_application(app['uuid'])
 
@@ -254,19 +254,22 @@ def main(server_url, namespace):
     new_entity10 = entity_instance.create_entity(entity001)
     if not new_entity10:
         print('create new entity failed')
-        return
+        teardown_data(work_session, app, block)
+        return False
 
     new_entity10['version'] = '0.0.2'
     new_entity11 = entity_instance.update_entity(new_entity10['id'], new_entity10)
-    if new_entity11['version'] != new_entity10['version']:
+    if not new_entity11 or new_entity11['version'] != new_entity10['version']:
         print('update entity failed')
+        teardown_data(work_session, app, block)
+        return False
 
     entity002 = mock_entity_param([block])
     new_entity20 = entity_instance.create_entity(entity002)
     if not new_entity20:
         teardown_data(work_session, app, block)
         print('create new entity failed')
-        return
+        return False
 
     entity_filter = {
         'params': {
@@ -279,14 +282,37 @@ def main(server_url, namespace):
     entity_list = entity_instance.filter_entity(entity_filter)
     if not entity_list:
         print('filter entity failed')
+        teardown_data(work_session, app, block)
+        return False
     elif len(entity_list) != 1:
         print('filter entity failed, illegal list size')
+        teardown_data(work_session, app, block)
+        return False
 
-    entity_instance.enable_entity(new_entity10['id'])
-    entity_instance.disable_entity(new_entity10['id'])
+    enabled_entity = entity_instance.enable_entity(new_entity10['id'])
+    if not enabled_entity:
+        print('enable entity failed')
+        teardown_data(work_session, app, block)
+        return False
 
-    entity_instance.delete_entity(new_entity10['id'])
-    entity_instance.delete_entity(new_entity20['id'])
+    disabled_entity = entity_instance.disable_entity(new_entity10['id'])
+    if not disabled_entity:
+        print('disable entity failed')
+        teardown_data(work_session, app, block)
+        return False
+
+    deleted_entity1 = entity_instance.delete_entity(new_entity10['id'])
+    if not deleted_entity1:
+        print('delete entity failed')
+        teardown_data(work_session, app, block)
+        return False
+
+    deleted_entity2 = entity_instance.delete_entity(new_entity20['id'])
+    if not deleted_entity2:
+        print('delete entity failed')
+        teardown_data(work_session, app, block)
+        return False
 
     teardown_data(work_session, app, block)
+    return True
 

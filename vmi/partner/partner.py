@@ -45,15 +45,22 @@ def main(server_url, namespace):
     new_partner001 = partner_instance.insert(partner_param)
     if not new_partner001:
         print('insert new partner failed')
-        return
+        return False
 
     cur_partner001 = partner_instance.query(new_partner001['id'])
     if not cur_partner001:
         print('query new partner failed')
+        return False
 
     cur_partner001['description'] = mock.sentence()
-    cur_partner001 = partner_instance.update(new_partner001['id'], new_partner001)
-    if not cur_partner001:
+    updated_partner = partner_instance.update(new_partner001['id'], cur_partner001)
+    if not updated_partner:
         print('update new partner failed')
+        return False
 
-    partner_instance.delete(new_partner001['id'])
+    deleted_partner = partner_instance.delete(new_partner001['id'])
+    if not deleted_partner:
+        print('delete partner failed')
+        return False
+
+    return True

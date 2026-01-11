@@ -63,18 +63,19 @@ def main(server_url, namespace):
     new_block10 = block_instance.create_block(block001)
     if not new_block10:
         print('create new block failed')
-        return
+        return False
 
     new_block10['scope'] = mock.name()
     new_block11 = block_instance.update_block(new_block10['id'], new_block10)
-    if new_block11['scope'] != new_block10['scope']:
+    if not new_block11 or new_block11['scope'] != new_block10['scope']:
         print('update block failed')
+        return False
 
     block002 = mock_block_param()
     new_block20 = block_instance.create_block(block002)
     if not new_block20:
         print('create new block failed')
-        return
+        return False
 
     block_filter = {
         'params': {
@@ -87,10 +88,21 @@ def main(server_url, namespace):
     block_list = block_instance.filter_block(block_filter)
     if not block_list:
         print('filter block failed')
+        return False
     elif len(block_list) != 1:
         print(block_list)
         print('filter block failed, illegal list size')
+        return False
 
-    block_instance.delete_block(new_block10['id'])
-    block_instance.delete_block(new_block20['id'])
+    deleted_block1 = block_instance.delete_block(new_block10['id'])
+    if not deleted_block1:
+        print('delete block failed')
+        return False
+
+    deleted_block2 = block_instance.delete_block(new_block20['id'])
+    if not deleted_block2:
+        print('delete block failed')
+        return False
+
+    return True
 

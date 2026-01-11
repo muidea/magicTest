@@ -159,7 +159,7 @@ def setup_data(session):
     new_app10 = app_instance.create_application(app001)
     if not new_app10:
         print('create new application failed')
-        return
+        return None, None, None
 
     block_instance = block.Block(session)
     block001 = block.mock_block_param()
@@ -167,7 +167,7 @@ def setup_data(session):
     if not new_block10:
         print('create new block failed')
         app_instance.delete_application(new_app10['id'])
-        return
+        return None, None, None
 
     session.bind_application(new_app10['uuid'])
     entity_instance = entity.Entity(session)
@@ -177,7 +177,7 @@ def setup_data(session):
         print('create new entity failed')
         block_instance.delete_block(new_block10['id'])
         app_instance.delete_application(new_app10['id'])
-        return
+        return None, None, None
 
     entity_instance.enable_entity(new_entity10['id'])
 
@@ -202,9 +202,9 @@ def main(server_url, namespace):
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
 
     app, block, entity = setup_data(work_session)
-    if not app or not block:
+    if not app or not block or not entity:
         print('setup_data failed')
-        return
+        return False
 
     work_session.bind_application(app['uuid'])
 
@@ -215,24 +215,43 @@ def main(server_url, namespace):
     if not new_value10:
         teardown_data(work_session, app, block, entity)
         print('create new value failed')
-        return
+        return False
 
     print(new_value10)
     new_value10 = update_value(entity, new_value10)
-    value_instance.update_value(new_value10)
-    print(new_value10)
+    updated_value = value_instance.update_value(new_value10)
+    if not updated_value:
+        teardown_data(work_session, app, block, entity)
+        print('update value failed')
+        return False
+    print(updated_value)
 
     query_value = value_instance.query_value(mock_entity_query(entity, new_value10))
+    if not query_value:
+        teardown_data(work_session, app, block, entity)
+        print('query value failed')
+        return False
     print(query_value)
 
-    value_instance.insert_value(new_value10)
+    inserted_value = value_instance.insert_value(new_value10)
+    if not inserted_value:
+        teardown_data(work_session, app, block, entity)
+        print('insert value failed')
+        return False
 
     value_list = value_instance.filter_value(mock_entity_filter(entity, new_value10))
     if not value_list or len(value_list['values']) != 2:
+        teardown_data(work_session, app, block, entity)
         print('filter value failed')
+        return False
     print(value_list)
 
-    value_instance.delete_value(new_value10)
+    deleted_value = value_instance.delete_value(new_value10)
+    if not deleted_value:
+        teardown_data(work_session, app, block, entity)
+        print('delete value failed')
+        return False
 
     teardown_data(work_session, app, block, entity)
+    return True
 
