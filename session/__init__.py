@@ -1,8 +1,2 @@
-import os
-import sys
-
-dir_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(dir_path)
-
-# 导入 session 模块
+# Session module for HTTP client and entity operations
 from .session import MagicSession

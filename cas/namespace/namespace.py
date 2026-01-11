@@ -18,7 +18,7 @@ class Namespace:
         self.superNamespace = superNamespace
 
     def filter_namespace(self, param):
-        val = self.session.get('/cas/namespaces', param)
+        val = self.session.get('/cas/namespaces/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤命名空间错误')
@@ -40,7 +40,7 @@ class Namespace:
         return val.get('value')
 
     def create_namespace(self, param):
-        val = self.session.post('/cas/namespaces?X-Mp-Namespace={0}'.format(self.superNamespace), param)
+        val = self.session.post('/cas/namespaces/?X-Mp-Namespace={0}'.format(self.superNamespace), param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建命名空间错误, 名称: %s', param.get('name', '未知'))
