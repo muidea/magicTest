@@ -10,7 +10,7 @@
 
 ## 2. 详细依赖说明
 
-### A. Role (角色) - 基础实体
+### A. Role (角色)
 
 * **结构体**: `Role`
 * 可以通过 `role` 模块进行CURD 操作，参照文档[`magicTest/cas/role/role.md`](magicTest/cas/role/role.md)
@@ -19,7 +19,7 @@
 * 可以通过 `role`包进行 CURD 操作。
 * 在新建 `Role` 对象时可以通过 `cas/get_privileges()` 查询系统所有权限清单，并选取其中部分权限列表作为 `Role` 对应的权限列表。
 
-### B. Account (账户) - 二级实体
+### B. Account (账户)
 
 * **结构体**: `Account`
 * 可以通过 `account` 模块进行CURD 操作，参照文档[`magicTest/cas/account/account.md`](magicTest/cas/account/account.md)
@@ -28,7 +28,7 @@
 * 在创建账户时，应确保引用的 `Role` ID, 在系统中已存在, 可以通过 `role/filter_role()` 查询系统当前定义的所有角色
 * `Status` 字段通常作为过滤条件（2: 启用, 1: 禁用）。
 
-### C. Endpoint (端点) - 高级关联实体
+### C. Endpoint (端点)
 * **结构体**: `Endpoint`
 * 可以通过 `endpoint` 模块进行CURD 操作，参照文档[`magicTest/cas/endpoint/endpoint.md`](magicTest/cas/endpoint/endpoint.md)
 * **核心依赖**:
@@ -38,7 +38,7 @@
 * **时效性约束**:
 * 单位为 **UTC 毫秒**。
 
-### D. Namespace (命名空间) - 权限范围实体
+### D. Namespace (命名空间)
 
 * **结构体**: `Namespace`
 * 可以通过 `namespace` 模块进行CURD 操作，，参照文档[`magicTest/cas/namespace/namespace.md`](magicTest/cas/namespace/namespace.md)
