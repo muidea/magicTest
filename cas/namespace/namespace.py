@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 class Namespace:
     """Namespace"""
 
-    def __init__(self, work_session, superNamespace):
+    def __init__(self, work_session, defaultNamespace):
         self.session = work_session
-        self.superNamespace = superNamespace
+        self.defaultNamespace = defaultNamespace
 
     def filter_namespace(self, param):
         val = self.session.get('/cas/namespaces/', param)
@@ -40,7 +40,7 @@ class Namespace:
         return val.get('value')
 
     def create_namespace(self, param):
-        val = self.session.post('/cas/namespaces/?X-Mp-Namespace={0}'.format(self.superNamespace), param)
+        val = self.session.post('/cas/namespaces/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建命名空间错误, 名称: %s', param.get('name', '未知'))
@@ -51,7 +51,7 @@ class Namespace:
         return val.get('value')
 
     def update_namespace(self, param):
-        val = self.session.put('/cas/namespaces/{0}?X-Mp-Namespace={1}'.format(param['id'], self.superNamespace), param)
+        val = self.session.put('/cas/namespaces/{0}'.format(param['id']), param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('更新命名空间错误, ID: %s', param['id'])
@@ -62,7 +62,7 @@ class Namespace:
         return val.get('value')
 
     def delete_namespace(self, param):
-        val = self.session.delete('/cas/namespaces/{0}?X-Mp-Namespace={1}'.format(param, self.superNamespace))
+        val = self.session.delete('/cas/namespaces/{0}'.format(param))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('删除命名空间错误, ID: %s', param)

@@ -76,8 +76,8 @@ class Cas:
         logger.info('会话刷新成功, 实体: %s', self.current_entity)
         return self.session_token
 
-    def get_privileges(self):
-        """get_privileges"""
+    def get_system_all_privileges(self):
+        """get_system_all_privileges"""
         val = self.session.get('/cas/privileges/')
         if val is None or val.get('error') is not None:
             if val:

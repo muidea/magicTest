@@ -86,8 +86,8 @@ class Cas:
 
 **API 端点**: `GET /cas/session/refresh/`
 
-### 6. `get_privileges()`
-**功能**: 获取当前用户的权限列表
+### 6. `get_system_all_privileges()`
+**功能**: 获取当前系统所有的权限列表
 
 **返回**: `list` 或 `None` - 权限列表，失败返回 `None`
 
