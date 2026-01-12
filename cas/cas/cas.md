@@ -23,7 +23,7 @@ class Cas:
 
 ### 属性
 - `session`: 绑定的 `MagicSession` 实例
-- `session_token`: 当前会话令牌（登录后获取）
+- `session_token`: 当前会话令牌（登录后获取），有效期10分钟，10分钟内必须要调用 `refresh()` 方法刷新会话令牌
 - `current_entity`: 当前登录的实体信息
 
 ## 方法详细说明
