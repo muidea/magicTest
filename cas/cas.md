@@ -2,13 +2,19 @@
 
 ## 1. 核心实体关系图
 
-为了准确生成测试数据（Mock Data），需遵循以下引用顺序：
 **Role (基础)** → **Account (依赖 Role)** → **Endpoint (依赖 Account & Role)**
-*Namespace 为独立管理实体，但在权限校验逻辑中常与 Scope 字段关联。*
+
+**Namespace** 为独立管理实体，但在权限校验逻辑中常与 Scope 字段关联
+
+**Cas** 提供用户认证、会话管理、权限获取功能
 
 ---
 
-## 2. 详细依赖说明
+## 2. 详细说明
+
+### Cas (CAS)
+
+参照文档[`magicTest/cas/cas/cas.md`](magicTest/cas/cas/cas.md)
 
 ### A. Role (角色)
 
