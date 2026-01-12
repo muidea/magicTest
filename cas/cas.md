@@ -13,17 +13,16 @@
 ### A. Role (角色) - 基础实体
 
 * **结构体**: `Role`
-* 可以通过 `role` 模块进行CURD 操作
+* 可以通过 `role` 模块进行CURD 操作，参照文档[`magicTest/cas/role/role.md`](magicTest/cas/role/role.md)
 * **依赖项**: 引用了外部包 `bc.Privilege`，可以通过 `cas/get_privileges()` 查询系统所有权限清单
 * `Status` 字段通常作为过滤条件（2: 启用, 1: 禁用）。
 * 可以通过 `role`包进行 CURD 操作。
 * 在新建 `Role` 对象时可以通过 `cas/get_privileges()` 查询系统所有权限清单，并选取其中部分权限列表作为 `Role` 对应的权限列表。
 
-
 ### B. Account (账户) - 二级实体
 
 * **结构体**: `Account`
-* 可以通过 `account` 模块进行CURD 操作
+* 可以通过 `account` 模块进行CURD 操作，参照文档[`magicTest/cas/account/account.md`](magicTest/cas/account/account.md)
 * **依赖项**: 关联 `RoleLite` 指针。
 * **关联约束**:
 * 在创建账户时，应确保引用的 `Role` ID, 在系统中已存在, 可以通过 `role/filter_role()` 查询系统当前定义的所有角色
@@ -31,7 +30,7 @@
 
 ### C. Endpoint (端点) - 高级关联实体
 * **结构体**: `Endpoint`
-* 可以通过 `endpoint` 模块进行CURD 操作
+* 可以通过 `endpoint` 模块进行CURD 操作，参照文档[`magicTest/cas/endpoint/endpoint.md`](magicTest/cas/endpoint/endpoint.md)
 * **核心依赖**:
 1. `AccountLite`: 关联账户信息，可以通过 `account/filter_account()` 获取系统当前所有账户信息。
 2. `RoleLite`: 关联角色信息，可以通过 `role/filter_role()` 获取系统当前所有角色信息。
@@ -42,7 +41,7 @@
 ### D. Namespace (命名空间) - 权限范围实体
 
 * **结构体**: `Namespace`
-* 可以通过 `namespace` 模块进行CURD 操作
+* 可以通过 `namespace` 模块进行CURD 操作，，参照文档[`magicTest/cas/namespace/namespace.md`](magicTest/cas/namespace/namespace.md)
 * **Scope 逻辑约束**:
 * `"*"`: 全局访问。
 * `"n1,n2"`: 跨空间访问。
