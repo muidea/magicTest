@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Namespace:
     """Namespace"""
 
-    def __init__(self, work_session, defaultNamespace):
+    def __init__(self, work_session, defaultNamespace = None):
         self.session = work_session
         self.defaultNamespace = defaultNamespace
 

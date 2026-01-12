@@ -9,3 +9,6 @@ sys.path.append(dir_path)
 
 dir_path = os.path.dirname(dir_path)
 sys.path.append(dir_path)
+
+# 导出 Namespace 类
+from .namespace import Namespace
