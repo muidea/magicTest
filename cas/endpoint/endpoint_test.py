@@ -121,7 +121,7 @@ class EndpointTestCase(unittest.TestCase):
             return None
         
         param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': account['id'],
@@ -166,7 +166,7 @@ class EndpointTestCase(unittest.TestCase):
         
         # 2. 创建已过期的端点 (ExpireTime < 当前时间)
         expired_endpoint_param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -190,7 +190,7 @@ class EndpointTestCase(unittest.TestCase):
         
         # 3. 创建未开始的端点 (StartTime > 当前时间)
         future_endpoint_param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -263,7 +263,7 @@ class EndpointTestCase(unittest.TestCase):
         
         # 1. 创建全局作用域 ("*") 端点
         global_scope_param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -288,7 +288,7 @@ class EndpointTestCase(unittest.TestCase):
         
         # 2. 创建多命名空间作用域 ("n1,n2") 端点
         multi_scope_param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -313,7 +313,7 @@ class EndpointTestCase(unittest.TestCase):
         
         # 3. 创建空作用域 ("") 端点
         empty_scope_param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -349,7 +349,7 @@ class EndpointTestCase(unittest.TestCase):
         self.assertIsNotNone(endpoint, "创建端点失败")
         
         # 验证端点包含必要字段
-        required_fields = ['id', 'endpoint', 'description', 'account', 'role', 'scope', 'status', 'startTime', 'expireTime']
+        required_fields = ['id', 'name', 'description', 'account', 'role', 'scope', 'status', 'startTime', 'expireTime']
         for field in required_fields:
             self.assertIn(field, endpoint, f"端点缺少字段: {field}")
     
@@ -388,7 +388,7 @@ class EndpointTestCase(unittest.TestCase):
         queried_endpoint = self.endpoint_app.query_endpoint(endpoint['id'])
         self.assertIsNotNone(queried_endpoint, "查询端点失败")
         self.assertEqual(queried_endpoint['id'], endpoint['id'], "端点ID不匹配")
-        self.assertEqual(queried_endpoint['endpoint'], endpoint['endpoint'], "端点路径不匹配")
+        self.assertEqual(queried_endpoint['name'], endpoint['name'], "端点路径不匹配")
     
     def test_filter_endpoint(self):
         """E-TC-013: 过滤端点(按路径)"""
@@ -399,10 +399,10 @@ class EndpointTestCase(unittest.TestCase):
         self.assertIsNotNone(test_account, "创建测试账户失败")
         
         current_time_ms = int(dt.time() * 1000)
-        unique_path = f'/api/v1/{common.word()}'
+        unique_path = common.word()
         
         param = {
-            'endpoint': unique_path,
+            'name': unique_path,
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -425,13 +425,13 @@ class EndpointTestCase(unittest.TestCase):
         if endpoint and 'id' in endpoint:
             self.created_endpoint_ids.append(endpoint['id'])
         
-        filter_param = {'endpoint': unique_path}
+        filter_param = {'name': unique_path}
         filtered_endpoints = self.endpoint_app.filter_endpoint(filter_param)
         self.assertIsNotNone(filtered_endpoints, "过滤端点失败")
         
         found = False
         for ep in filtered_endpoints:
-            if ep['endpoint'] == unique_path:
+            if ep['name'] == unique_path:
                 found = True
                 break
         self.assertTrue(found, "未找到匹配的端点")
@@ -493,7 +493,7 @@ class EndpointTestCase(unittest.TestCase):
         current_time_ms = int(dt.time() * 1000)
         # 创建 startTime = expireTime 的端点
         param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -524,10 +524,10 @@ class EndpointTestCase(unittest.TestCase):
         self.assertIsNotNone(test_account, "创建测试账户失败")
         
         # 生成超长路径
-        long_path = '/api/v1/' + 'a' * 500
+        long_path = 'a' * 500
         
         param = {
-            'endpoint': long_path,
+            'name': long_path,
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -560,7 +560,7 @@ class EndpointTestCase(unittest.TestCase):
         current_time_ms = int(dt.time() * 1000)
         # 创建 startTime > expireTime 的端点
         param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -591,7 +591,7 @@ class EndpointTestCase(unittest.TestCase):
         nonexistent_account_id = 999999
         
         param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': nonexistent_account_id,
@@ -622,7 +622,7 @@ class EndpointTestCase(unittest.TestCase):
         nonexistent_role_id = 999999
         
         param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],
@@ -707,7 +707,7 @@ class EndpointTestCase(unittest.TestCase):
         
         # 创建在当前时间范围内的端点
         param = {
-            'endpoint': f'/api/v1/{common.word()}',
+            'name': common.word(),
             'description': common.sentence(),
             'account': {
                 'id': test_account['id'],

@@ -73,7 +73,7 @@ endpoint_info = endpoint_app.query_endpoint(endpoint_id)
 
 **参数**:
 - `param`: `dict` - 端点创建参数，包含以下字段：
-  - `endpoint`: `str` - 端点名称（必填）
+  - `name`: `str` - 端点名称（必填）
   - `description`: `str` - 端点描述
   - `account`: `dict` - 关联的账户信息（AccountLite 对象）
   - `role`: `dict` - 关联的角色信息（RoleLite 对象）
@@ -95,7 +95,7 @@ endpoint_info = endpoint_app.query_endpoint(endpoint_id)
 **示例**:
 ```python
 param = {
-    'endpoint': 'users',
+    'name': 'users',
     'description': '用户管理端点',
     'account': {'id': 1, 'account': 'admin', 'status': 2},
     'role': {'id': 1, 'name': 'administrator', 'status': 2},
@@ -127,7 +127,7 @@ new_endpoint = endpoint_app.create_endpoint(param)
 ```python
 update_param = {
     'id': '1234567890abcdef',
-    'endpoint': 'users',
+    'name': 'users',
     'description': '更新后的用户管理端点',
     'scope': 'n1,n2',
     'status': 1,
@@ -215,7 +215,7 @@ param = mock_endpoint_param()
 | 字段名 | 类型 | 描述 | 示例 |
 |--------|------|------|------|
 | `id` | `int` | 端点唯一标识符 | `12345` |
-| `endpoint` | `str` | 端点名称 | `"users"` |
+| `name` | `str` | 端点名称 | `"users"` |
 | `description` | `str` | 端点描述 | `"用户管理端点"` |
 | `account` | `dict` | 关联账户信息（AccountLite） | `{'id': 1, 'account': 'admin', 'status': 2}` |
 | `role` | `dict` | 关联角色信息（RoleLite） | `{'id': 1, 'name': 'administrator', 'status': 2}` |
@@ -326,7 +326,7 @@ def test_endpoint_timeliness():
     
     # 创建已过期的端点 (ExpireTime < 当前时间)
     expired_endpoint_param = {
-        'endpoint': 'test',
+        'name': 'test',
         'description': '已过期端点',
         'account': account_lite,
         'role': role_lite,
@@ -338,7 +338,7 @@ def test_endpoint_timeliness():
     
     # 创建未开始的端点 (StartTime > 当前时间)
     future_endpoint_param = {
-        'endpoint': 'test',
+        'name': 'test',
         'description': '未开始端点',
         'account': account_lite,
         'role': role_lite,

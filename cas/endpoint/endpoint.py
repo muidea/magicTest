@@ -41,10 +41,10 @@ class Endpoint:
         val = self.session.post('/cas/endpoints/', param)
         if val is None or val.get('error') is not None:
             if val:
-                logger.error('创建端点错误, 端点: %s', param.get('endpoint', '未知'))
+                logger.error('创建端点错误, 端点: %s', param.get('name', '未知'))
                 logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
             else:
-                logger.error('创建端点请求失败: 无响应, 端点: %s', param.get('endpoint', '未知'))
+                logger.error('创建端点请求失败: 无响应, 端点: %s', param.get('name', '未知'))
             return None
         return val.get('value')
 
@@ -93,7 +93,7 @@ def mock_endpoint_param():
     }
     
     return {
-        'endpoint': f'/api/v1/{common.word()}',
+        'name': common.word(),
         'description': common.sentence(),
         'account': account_lite,
         'role': role_lite,
@@ -125,14 +125,14 @@ def main(server_url, namespace):
         return False
 
     # 验证创建返回的端点包含所有必要字段
-    required_fields = ['id', 'endpoint', 'description', 'account', 'role', 'scope', 'status', 'startTime', 'expireTime']
+    required_fields = ['id', 'name', 'description', 'account', 'role', 'scope', 'status', 'startTime', 'expireTime']
     for field in required_fields:
         if field not in new_endpoint:
             logger.error('创建端点失败, 缺少字段: %s', field)
             return False
 
     # 验证字段值匹配（除了id和可能由服务器生成的时间字段）
-    if new_endpoint['endpoint'] != original_param['endpoint']:
+    if new_endpoint['name'] != original_param['name']:
         logger.error('创建端点失败, 端点地址不匹配')
         return False
     if new_endpoint['description'] != original_param['description']:
@@ -168,7 +168,7 @@ def main(server_url, namespace):
         return False
 
     filter_value = {
-        'endpoint': new_endpoint['endpoint'],
+        'name': new_endpoint['name'],
     }
 
     endpoint_list = app.filter_endpoint(filter_value)
@@ -178,7 +178,7 @@ def main(server_url, namespace):
     
     # 验证过滤结果中的字段
     filtered_endpoint = endpoint_list[0]
-    if filtered_endpoint['endpoint'] != new_endpoint['endpoint']:
+    if filtered_endpoint['name'] != new_endpoint['name']:
         logger.error('过滤端点失败, 端点地址不匹配')
         return False
     if filtered_endpoint['description'] != new_endpoint['description']:
@@ -255,7 +255,7 @@ def main(server_url, namespace):
         return False
     
     # 验证删除的端点包含必要字段
-    if 'id' not in old_endpoint or 'endpoint' not in old_endpoint:
+    if 'id' not in old_endpoint or 'name' not in old_endpoint:
         logger.error('删除端点失败, 返回数据不完整')
         return False
         
