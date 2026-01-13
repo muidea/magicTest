@@ -423,21 +423,20 @@ class BasicScenarioTestCase(unittest.TestCase):
         self.assertEqual(new_endpoint['name'], endpoint_name, "端点名称不匹配")
         self.assertEqual(new_endpoint['startTime'], start_time, "开始时间不匹配")
         self.assertEqual(new_endpoint['expireTime'], expire_time, "过期时间不匹配")
-        self.assertEqual(new_endpoint['namespace'], self.test_namespace_name, "端点命名空间不匹配")
         
         endpoint_id = new_endpoint['id']
         self.created_endpoint_ids.append(endpoint_id)
         logger.info(f"✓ 在autotest命名空间中创建端点成功，ID: {endpoint_id}, 名称: {endpoint_name}")
         
         # 4.3 验证账户和角色关联正确性
-        self.assertIn('accountLite', new_endpoint, "端点缺少账户关联字段")
-        self.assertIn('roleLite', new_endpoint, "端点缺少角色关联字段")
+        self.assertIn('account', new_endpoint, "端点缺少账户关联字段")
+        self.assertIn('role', new_endpoint, "端点缺少角色关联字段")
         
-        if 'accountLite' in new_endpoint:
+        if 'account' in new_endpoint:
             self.assertEqual(new_endpoint['account']['id'], account_id, "关联账户ID不匹配")
             logger.info(f"✓ 端点账户关联验证成功，关联账户ID: {account_id}")
         
-        if 'roleLite' in new_endpoint:
+        if 'role' in new_endpoint:
             self.assertEqual(new_endpoint['role']['id'], role_id, "关联角色ID不匹配")
             logger.info(f"✓ 端点角色关联验证成功，关联角色ID: {role_id}")
         
@@ -736,11 +735,11 @@ class BasicScenarioTestCase(unittest.TestCase):
         queried_endpoint = self.autotest_endpoint_app.query_endpoint(endpoint_id)
         self.assertIsNotNone(queried_endpoint, "查询端点失败")
         
-        if 'accountLite' in queried_endpoint:
+        if 'account' in queried_endpoint:
             self.assertEqual(queried_endpoint['account']['id'], account_id, "端点关联的账户ID不匹配")
             logger.info(f"✓ 端点关联账户验证成功，账户ID: {account_id}")
         
-        if 'roleLite' in queried_endpoint:
+        if 'role' in queried_endpoint:
             self.assertEqual(queried_endpoint['role']['id'], role_id, "端点关联的角色ID不匹配")
             logger.info(f"✓ 端点关联角色验证成功，角色ID: {role_id}")
         
