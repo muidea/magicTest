@@ -25,7 +25,7 @@ class Account:
         Returns:
             账户列表或None（失败时）
         """
-        val = self.session.get('/cas/accounts/', param)
+        val = self.session.get('/api/v1/cas/accounts/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤账户错误')
@@ -44,7 +44,7 @@ class Account:
         Returns:
             账户信息或None（失败时）
         """
-        val = self.session.get('/cas/accounts/{0}'.format(account_id))
+        val = self.session.get('/api/v1/cas/accounts/{0}'.format(account_id))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('查询账户错误, ID: %s', account_id)
@@ -63,7 +63,7 @@ class Account:
         Returns:
             创建的账户信息或None（失败时）
         """
-        val = self.session.post('/cas/accounts/', param)
+        val = self.session.post('/api/v1/cas/accounts/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建账户错误, 账户: %s', param.get('account', '未知'))
@@ -82,7 +82,7 @@ class Account:
         Returns:
             更新的账户信息或None（失败时）
         """
-        val = self.session.put('/cas/accounts/{0}'.format(param['id']), param)
+        val = self.session.put('/api/v1/cas/accounts/{0}'.format(param['id']), param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('更新账户错误, ID: %s', param['id'])
@@ -101,7 +101,7 @@ class Account:
         Returns:
             删除的账户信息或None（失败时）
         """
-        val = self.session.delete('/cas/accounts/{0}'.format(account_id))
+        val = self.session.delete('/api/v1/cas/accounts/{0}'.format(account_id))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('删除账户错误, ID: %s', account_id)

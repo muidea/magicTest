@@ -16,7 +16,7 @@ class Role:
         self.session = work_session
 
     def filter_role(self, param):
-        val = self.session.get('/cas/roles/', param)
+        val = self.session.get('/api/v1/cas/roles/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤角色错误')
@@ -27,7 +27,7 @@ class Role:
         return val.get('values')
 
     def query_role(self, param):
-        val = self.session.get('/cas/roles/{0}'.format(param))
+        val = self.session.get('/api/v1/cas/roles/{0}'.format(param))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('查询角色错误, ID: %s', param)
@@ -38,7 +38,7 @@ class Role:
         return val.get('value')
 
     def create_role(self, param):
-        val = self.session.post('/cas/roles/', param)
+        val = self.session.post('/api/v1/cas/roles/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建角色错误, 角色: %s', param.get('name', '未知'))
@@ -49,7 +49,7 @@ class Role:
         return val.get('value')
 
     def update_role(self, param):
-        val = self.session.put('/cas/roles/{0}'.format(param['id']), param)
+        val = self.session.put('/api/v1/cas/roles/{0}'.format(param['id']), param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('更新角色错误, ID: %s', param['id'])
@@ -60,7 +60,7 @@ class Role:
         return val.get('value')
 
     def delete_role(self, param):
-        val = self.session.delete('/cas/roles/{0}'.format(param))
+        val = self.session.delete('/api/v1/cas/roles/{0}'.format(param))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('删除角色错误, ID: %s', param)

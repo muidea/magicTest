@@ -18,7 +18,7 @@ class Namespace:
         self.defaultNamespace = defaultNamespace
 
     def filter_namespace(self, param):
-        val = self.session.get('/cas/namespaces/', param)
+        val = self.session.get('/api/v1/cas/namespaces/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤命名空间错误')
@@ -29,7 +29,7 @@ class Namespace:
         return val.get('values')
 
     def query_namespace(self, param):
-        val = self.session.get('/cas/namespaces/{0}'.format(param))
+        val = self.session.get('/api/v1/cas/namespaces/{0}'.format(param))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('查询命名空间错误, ID: %s', param)
@@ -40,7 +40,7 @@ class Namespace:
         return val.get('value')
 
     def create_namespace(self, param):
-        val = self.session.post('/cas/namespaces/', param)
+        val = self.session.post('/api/v1/cas/namespaces/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建命名空间错误, 名称: %s', param.get('name', '未知'))
@@ -51,7 +51,7 @@ class Namespace:
         return val.get('value')
 
     def update_namespace(self, param):
-        val = self.session.put('/cas/namespaces/{0}'.format(param['id']), param)
+        val = self.session.put('/api/v1/cas/namespaces/{0}'.format(param['id']), param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('更新命名空间错误, ID: %s', param['id'])
@@ -62,7 +62,7 @@ class Namespace:
         return val.get('value')
 
     def delete_namespace(self, param):
-        val = self.session.delete('/cas/namespaces/{0}'.format(param))
+        val = self.session.delete('/api/v1/cas/namespaces/{0}'.format(param))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('删除命名空间错误, ID: %s', param)

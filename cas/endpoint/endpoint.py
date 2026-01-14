@@ -16,7 +16,7 @@ class Endpoint:
         self.session = work_session
 
     def filter_endpoint(self, param):
-        val = self.session.get('/cas/endpoints/', param)
+        val = self.session.get('/api/v1/cas/endpoints/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('过滤端点错误')
@@ -27,7 +27,7 @@ class Endpoint:
         return val.get('values')
 
     def query_endpoint(self, param):
-        val = self.session.get('/cas/endpoints/{0}'.format(param))
+        val = self.session.get('/api/v1/cas/endpoints/{0}'.format(param))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('查询端点错误, ID: %s', param)
@@ -38,7 +38,7 @@ class Endpoint:
         return val.get('value')
 
     def create_endpoint(self, param):
-        val = self.session.post('/cas/endpoints/', param)
+        val = self.session.post('/api/v1/cas/endpoints/', param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('创建端点错误, 端点: %s', param.get('name', '未知'))
@@ -49,7 +49,7 @@ class Endpoint:
         return val.get('value')
 
     def update_endpoint(self, param):
-        val = self.session.put('/cas/endpoints/{0}'.format(param['id']), param)
+        val = self.session.put('/api/v1/cas/endpoints/{0}'.format(param['id']), param)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('更新端点错误, ID: %s', param['id'])
@@ -60,7 +60,7 @@ class Endpoint:
         return val.get('value')
 
     def delete_endpoint(self, param):
-        val = self.session.delete('/cas/endpoints/{0}'.format(param))
+        val = self.session.delete('/api/v1/cas/endpoints/{0}'.format(param))
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('删除端点错误, ID: %s', param)

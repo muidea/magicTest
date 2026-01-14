@@ -33,7 +33,7 @@ class BasicScenarioTestCase(unittest.TestCase):
     """CAS基础场景测试用例类"""
     
     # 使用panel命名空间登录（系统内置namespace，scope为"*"）
-    panel_server_url = 'https://panel.local.vpc/api/v1'
+    panel_server_url = 'https://panel.local.vpc'
     panel_namespace = 'panel'
     
     # 测试将在autotest命名空间中执行

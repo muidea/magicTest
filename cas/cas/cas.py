@@ -25,7 +25,7 @@ class Cas:
     def login(self, account, password):
         """login"""
         params = {'account': account, 'password': password}
-        val = self.session.post('/cas/session/login/', params)
+        val = self.session.post('/api/v1/cas/session/login/', params)
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('登录失败, 账户: %s', account)
@@ -45,7 +45,7 @@ class Cas:
     def logout(self, session_token):
         """logout"""
         self.session.bind_token(session_token)
-        val = self.session.delete('/cas/session/logout/')
+        val = self.session.delete('/api/v1/cas/session/logout/')
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('注销失败')
@@ -59,7 +59,7 @@ class Cas:
     def refresh(self, session_token):
         """verify"""
         self.session.bind_token(session_token)
-        val = self.session.get('/cas/session/refresh/')
+        val = self.session.get('/api/v1/cas/session/refresh/')
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('会话刷新失败')
@@ -78,7 +78,7 @@ class Cas:
 
     def get_system_all_privileges(self):
         """get_system_all_privileges"""
-        val = self.session.get('/cas/privileges/')
+        val = self.session.get('/api/v1/cas/privileges/')
         if val is None or val.get('error') is not None:
             if val:
                 logger.error('获取权限失败')

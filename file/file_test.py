@@ -5,6 +5,7 @@ import warnings
 import logging
 import os
 from session import session
+from cas import cas
 from file import file
 
 # 配置日志
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 class FileTestCase(unittest.TestCase):
     """File 测试用例类"""
     
-    server_url = 'https://autotest.local.vpc/api/v1'
+    server_url = 'https://panel.local.vpc'
     namespace = ''
     
     @classmethod
@@ -22,6 +23,14 @@ class FileTestCase(unittest.TestCase):
         """测试类初始化"""
         warnings.simplefilter('ignore', ResourceWarning)
         cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
+        
+        # CAS 登录
+        cas_session = cas.Cas(cls.work_session)
+        if not cas_session.login('administrator', 'administrator'):
+            logger.error('CAS登录失败')
+            raise RuntimeError('CAS登录失败，无法继续测试')
+        
+        cls.work_session.bind_token(cas_session.get_session_token())
         cls.file_app = file.File("test_scope", "test_source", None, cls.work_session)
     
     def setUp(self):
@@ -141,6 +150,60 @@ class FileTestCase(unittest.TestCase):
         # 验证文件已被删除（查询应该失败）
         queried_file = self.file_app.query_file(new_file['id'])
         self.assertIsNone(queried_file, "已删除的文件查询应失败")
+    
+    def test_update_file(self):
+        """测试文件更新"""
+        # 先上传文件
+        new_file = self.file_app.upload_file(self.test_file_path)
+        self.assertIsNotNone(new_file, "文件上传失败")
+        self.created_file_ids.append(new_file['id'])
+        
+        # 更新文件描述
+        import random
+        new_description = f"更新后的描述_{random.randint(1, 1000)}"
+        update_param = {
+            'description': new_description
+        }
+        updated_file = self.file_app.update_file(new_file['id'], update_param)
+        self.assertIsNotNone(updated_file, "文件更新失败")
+        self.assertEqual(updated_file['id'], new_file['id'], "更新后文件ID不匹配")
+        
+        # 查询验证更新
+        queried_file = self.file_app.query_file(new_file['id'])
+        self.assertIsNotNone(queried_file, "文件查询失败")
+        self.assertEqual(queried_file['description'], new_description, "文件描述未更新")
+    
+    def test_commit_file(self):
+        """测试文件提交（设置有效期）"""
+        # 先上传文件
+        new_file = self.file_app.upload_file(self.test_file_path)
+        self.assertIsNotNone(new_file, "文件上传失败")
+        self.created_file_ids.append(new_file['id'])
+        
+        # 提交文件，设置TTL为1天
+        ttl = 1
+        committed_file = self.file_app.commit_file(new_file['id'], ttl)
+        self.assertIsNotNone(committed_file, "文件提交失败")
+        self.assertEqual(committed_file['id'], new_file['id'], "提交后文件ID不匹配")
+        # 可以验证有效期字段（如果有）
+    
+    def test_upload_stream(self):
+        """测试文件流上传"""
+        # 准备字节数据
+        content = b"This is file content uploaded via stream"
+        dst_path = "test/path"
+        dst_name = "stream_uploaded.txt"
+        
+        token = self.file_app.upload_stream(dst_path, dst_name, content)
+        self.assertIsNotNone(token, "文件流上传失败")
+        self.assertIsInstance(token, str, "返回的token应为字符串")
+        
+        # 记录token以便清理（通过view_file获取ID）
+        viewed_file = self.file_app.view_file(token)
+        if viewed_file and 'id' in viewed_file:
+            self.created_file_ids.append(viewed_file['id'])
+        if token:
+            self.created_file_tokens.append(token)
     
     def test_upload_large_file(self):
         """测试大文件上传（边界测试）"""
