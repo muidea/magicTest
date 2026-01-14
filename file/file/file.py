@@ -20,8 +20,8 @@ FILE_NAME_TAG = "fileName"
 FILE_SCOPE_TAG = "fileScope"
 
 # API 端点 (从 magicFile/pkg/common/file.go 提取)
-UPLOAD_FILE_URL = "/static/"
-DOWNLOAD_FILE_URL = "/static/"
+UPLOAD_FILE_URL = "/static/files/"
+DOWNLOAD_FILE_URL = "/static/files/"
 UPLOAD_FILE_STREAM_URL = "/files/stream/"
 VIEW_FILE_URL = "/files/view/"
 UPDATE_FILE_URL = "/files/:id"
@@ -37,13 +37,18 @@ FILE_ITEM = "fileItem"
 class Client:
     """File client matching Go client interface"""
     
-    def __init__(self, server_url: str):
+    def __init__(self, server_url: str, work_session: Optional[session.MagicSession] = None):
         """初始化客户端
         
         Args:
             server_url: 服务器基础URL
+            work_session: 可选的工作会话，如果提供则复用其认证状态
         """
-        self.base_client = session.MagicSession(server_url)
+        if work_session is not None:
+            # 复用现有会话的认证状态
+            self.base_client = work_session
+        else:
+            self.base_client = session.MagicSession(server_url)
         self.file_source = ""
         self.file_scope = ""
         self._assign_namespace = ""
@@ -121,10 +126,30 @@ class Client:
                 files = {FILE_ITEM: f}
                 result = self.base_client.upload(url, files=files, params=params)
                 
-                if result and 'error' not in result and result.get('errorCode', 0) == 0:
-                    return result.get('value')
+                # 处理响应：可能是 response 对象或解析后的 JSON
+                if hasattr(result, 'json'):
+                    # 如果是 response 对象，解析 JSON
+                    try:
+                        json_result = result.json()
+                        if json_result and json_result.get('error') is None:
+                            return json_result.get('value')
+                        else:
+                            error_msg = json_result.get('reason', '未知错误') if json_result else '未知错误'
+                            logger.error('上传文件失败: %s', error_msg)
+                            return None
+                    except Exception as e:
+                        logger.error('解析上传响应失败: %s', str(e))
+                        return None
+                elif isinstance(result, dict):
+                    # 已经是解析后的 JSON
+                    if result and result.get('error') is None:
+                        return result.get('value')
+                    else:
+                        error_msg = result.get('reason', '未知错误') if result else '未知错误'
+                        logger.error('上传文件失败: %s', error_msg)
+                        return None
                 else:
-                    logger.error('上传文件失败: %s', result.get('reason', '未知错误'))
+                    logger.error('上传文件返回未知类型: %s', type(result))
                     return None
         except Exception as e:
             logger.error('上传文件异常: %s', str(e))
@@ -172,13 +197,57 @@ class Client:
                     files = {FILE_ITEM: f}
                     result = self.base_client.upload(url, files=files, params=params)
                     
-                    if result and 'error' not in result and result.get('errorCode', 0) == 0:
-                        token = result.get('value', {}).get('token')
-                        if not token:
-                            token = result.get('value')  # 可能是直接返回的token字符串
-                        return token
+                    # 处理响应：可能是 response 对象或解析后的 JSON
+                    if hasattr(result, 'json'):
+                        # 如果是 response 对象，解析 JSON
+                        try:
+                            json_result = result.json()
+                            # 检查是否是字符串（直接返回的token）
+                            if isinstance(json_result, str):
+                                return json_result
+                            # 检查是否是字典
+                            elif isinstance(json_result, dict):
+                                if json_result.get('error') is None:
+                                    value = json_result.get('value')
+                                    # value 可能是字符串（直接是token）或字典（包含token字段）
+                                    if isinstance(value, dict):
+                                        token = value.get('token')
+                                        if not token:
+                                            token = value  # 如果value不是字典，可能是其他类型
+                                    else:
+                                        token = value  # 直接是token字符串
+                                    return token
+                                else:
+                                    error_msg = json_result.get('reason', '未知错误') if json_result else '未知错误'
+                                    logger.error('上传文件流失败: %s', error_msg)
+                                    return None
+                            else:
+                                logger.error('上传文件流返回未知JSON类型: %s', type(json_result))
+                                return None
+                        except Exception as e:
+                            logger.error('解析上传流响应失败: %s', str(e))
+                            return None
+                    elif isinstance(result, dict):
+                        # 已经是解析后的 JSON
+                        if result and result.get('error') is None:
+                            value = result.get('value')
+                            # value 可能是字符串（直接是token）或字典（包含token字段）
+                            if isinstance(value, dict):
+                                token = value.get('token')
+                                if not token:
+                                    token = value  # 如果value不是字典，可能是其他类型
+                            else:
+                                token = value  # 直接是token字符串
+                            return token
+                        else:
+                            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+                            logger.error('上传文件流失败: %s', error_msg)
+                            return None
+                    elif isinstance(result, str):
+                        # 直接返回的token字符串
+                        return result
                     else:
-                        logger.error('上传文件流失败: %s', result.get('reason', '未知错误'))
+                        logger.error('上传文件流返回未知类型: %s', type(result))
                         return None
             finally:
                 os.unlink(tmp_path)
@@ -241,10 +310,11 @@ class Client:
         url = self._build_url(VIEW_FILE_URL)
         
         result = self.base_client.get(url, params)
-        if result and 'error' not in result and result.get('errorCode', 0) == 0:
+        if result and result.get('error') is None:
             return result.get('value')
         else:
-            logger.error('查看文件失败: %s', result.get('reason', '未知错误'))
+            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            logger.error('查看文件失败: %s', error_msg)
             return None
     
     def update_file(self, file_id: int, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -264,17 +334,24 @@ class Client:
         Returns:
             更新后的文件信息，失败返回 None
         """
-        params = {}
+        query_params = {}
         if self.file_source:
-            params[FILE_SOURCE_TAG] = self.file_source
+            query_params[FILE_SOURCE_TAG] = self.file_source
         
         url = self._build_url(UPDATE_FILE_URL.replace(":id", str(file_id)))
         
+        # 将查询参数添加到 URL
+        if query_params:
+            import urllib.parse
+            query_string = urllib.parse.urlencode(query_params)
+            url = f"{url}?{query_string}"
+        
         result = self.base_client.put(url, param)
-        if result and 'error' not in result and result.get('errorCode', 0) == 0:
+        if result and result.get('error') is None:
             return result.get('value')
         else:
-            logger.error('更新文件失败: %s', result.get('reason', '未知错误'))
+            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            logger.error('更新文件失败: %s', error_msg)
             return None
     
     def delete_file(self, file_id: int) -> Optional[Dict[str, Any]]:
@@ -292,17 +369,24 @@ class Client:
         Returns:
             删除的文件信息，失败返回 None
         """
-        params = {}
+        query_params = {}
         if self.file_source:
-            params[FILE_SOURCE_TAG] = self.file_source
+            query_params[FILE_SOURCE_TAG] = self.file_source
         
         url = self._build_url(DELETE_FILE_URL.replace(":id", str(file_id)))
         
-        result = self.base_client.delete(url, params)
-        if result and 'error' not in result and result.get('errorCode', 0) == 0:
+        # 将查询参数添加到 URL
+        if query_params:
+            import urllib.parse
+            query_string = urllib.parse.urlencode(query_params)
+            url = f"{url}?{query_string}"
+        
+        result = self.base_client.delete(url, query_params)
+        if result and result.get('error') is None:
             return result.get('value')
         else:
-            logger.error('删除文件失败: %s', result.get('reason', '未知错误'))
+            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            logger.error('删除文件失败: %s', error_msg)
             return None
     
     def query_file(self, file_id: int) -> Optional[Dict[str, Any]]:
@@ -320,20 +404,27 @@ class Client:
         Returns:
             文件信息，失败返回 None
         """
-        params = {}
+        query_params = {}
         if self.file_source:
-            params[FILE_SOURCE_TAG] = self.file_source
+            query_params[FILE_SOURCE_TAG] = self.file_source
         
         url = self._build_url(QUERY_FILE_URL.replace(":id", str(file_id)))
         
-        result = self.base_client.get(url, params)
-        if result and 'error' not in result and result.get('errorCode', 0) == 0:
+        # 将查询参数添加到 URL
+        if query_params:
+            import urllib.parse
+            query_string = urllib.parse.urlencode(query_params)
+            url = f"{url}?{query_string}"
+        
+        result = self.base_client.get(url, query_params)
+        if result and result.get('error') is None:
             return result.get('value')
         else:
-            logger.error('查询文件失败: %s', result.get('reason', '未知错误'))
+            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            logger.error('查询文件失败: %s', error_msg)
             return None
     
-    def commit_file(self, file_id: int, ttl: int) -> Optional[Dict[str, Any]]:
+    def commit_file(self, file_id: int, ttl: int = 0) -> Optional[Dict[str, Any]]:
         """提交文件（对应 CommitFile）
         
         确认文件上传完成，以便将临时文件转为正式文件。
@@ -343,27 +434,35 @@ class Client:
         参数说明：
         - id: 必选，文件 ID（通过 URL 路径传递）
         - source (fileSource): 必选，文件源，需通过 bind_source() 提前设置
-        - ttl: 可选，有效期（单位：天），通过 JSON Body 传递
+        - ttl: 可选，有效期（单位：秒），通过 JSON Body 传递
         
         Args:
             file_id: 文件ID
-            ttl: 有效期（单位：天）
+            ttl: 有效期（单位：秒），0 表示永久
             
         Returns:
-            提交后的文件信息，失败返回 None
+             提交后的文件信息，失败返回 None
         """
-        params = {}
+        query_params = {}
         if self.file_source:
-            params[FILE_SOURCE_TAG] = self.file_source
+            query_params[FILE_SOURCE_TAG] = self.file_source
         
         url = self._build_url(COMMIT_FILE_URL.replace(":id", str(file_id)))
         
-        param = {"ttl": ttl}
+        # 将查询参数添加到 URL
+        if query_params:
+            import urllib.parse
+            query_string = urllib.parse.urlencode(query_params)
+            url = f"{url}?{query_string}"
+        
+        # 根据 Go 客户端，参数名是 TTL（大写）
+        param = {"TTL": ttl}
         result = self.base_client.put(url, param)
-        if result and 'error' not in result and result.get('errorCode', 0) == 0:
+        if result and result.get('error') is None:
             return result.get('value')
         else:
-            logger.error('提交文件失败: %s', result.get('reason', '未知错误'))
+            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            logger.error('提交文件失败: %s', error_msg)
             return None
     
     def filter_file(self, params: Optional[Dict[str, Any]] = None) -> Optional[List[Dict[str, Any]]]:
@@ -390,10 +489,15 @@ class Client:
         url = self._build_url(EXPLORER_FILE_URL)
         
         result = self.base_client.get(url, params)
-        if result and 'error' not in result and result.get('errorCode', 0) == 0:
-            return result.get('values')
+        if result and result.get('error') is None:
+            # 服务器返回的是 {"error": null, "value": {"files": [...], "dirs": [...]}}
+            value = result.get('value', {})
+            if isinstance(value, dict):
+                return value.get('files', [])
+            return []
         else:
-            logger.error('过滤文件失败: %s', result.get('reason', '未知错误'))
+            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            logger.error('过滤文件失败: %s', error_msg)
             return None
 
 
@@ -414,8 +518,8 @@ class File:
         self.source = source
         self.path = path
         self.session = work_session
-        # 创建内部客户端
-        self.client = Client(work_session.base_url)
+        # 创建内部客户端，复用工作会话的认证状态
+        self.client = Client(work_session.base_url, work_session)
         self.client.bind_scope(scope)
         self.client.bind_source(source)
         # 设置命名空间

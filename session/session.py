@@ -217,13 +217,13 @@ class MagicSession:
         Args:
             url: Relative URL path
             files: Files to upload (dict compatible with requests files parameter)
-            params: Additional parameters
+            params: Additional parameters (will be sent as query string)
             
         Returns:
             Response data as dictionary
         """
         logger.debug('Uploading files to %s', url)
-        return self._request('post', url, files=files, data=params)
+        return self._request('post', url, files=files, params=params)
 
     def download(self, url: str, dst_file: str, params: Optional[Dict[str, Any]] = None) -> Union[str, Dict[str, Any]]:
         """Download file to local path.
