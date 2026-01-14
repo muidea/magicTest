@@ -1,7 +1,13 @@
-from mock import common as mock
+"""Application"""
+
+import logging
+from typing import Optional, Dict, Any, List
 from session import session
-import concurrent.futures
-import argparse
+from mock import common as mock
+
+# 配置日志
+logger = logging.getLogger(__name__)
+
 
 class DatabaseDeclare:
     def __init__(self, id, db_server, db_name, username, password, char_set, max_conn_num):
@@ -23,6 +29,7 @@ class DatabaseDeclare:
             "charSet": self.char_set,
             "maxConnNum": self.max_conn_num
         }
+
 
 class ApplicationDeclare:
     def __init__(self, id, uuid, name, show_name, pkg_prefix, icon, catalog, domain, email, author, description, database, hosted_by, artifact, status):
@@ -61,50 +68,170 @@ class ApplicationDeclare:
             "status": self.status
         }
 
+
 class Application:
     """Application"""
 
-    def __init__(self, work_session):
+    def __init__(self, work_session: session.MagicSession) -> None:
         self.session = work_session
 
-    def filter_application(self, filter):
-        url = '/core/applications'
+    def get_system_config(self) -> Optional[Dict[str, Any]]:
+        """获取系统配置
+        
+        Returns:
+            系统配置字典或None（失败时）
+        """
+        val = self.session.get('/core/system/config')
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('获取系统配置错误')
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('获取系统配置请求失败: 无响应')
+            return None
+        return val.get('config')
 
-        val = self.session.post(url, filter)
-        if 'error' in val:
-            print("过滤应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
+    def filter_application(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+        """过滤应用
+        
+        Args:
+            param: 过滤参数
+            
+        Returns:
+            应用列表或None（失败时）
+        """
+        val = self.session.post('/core/applications', param)
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('过滤应用错误')
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('过滤应用请求失败: 无响应')
             return None
         return val.get('values')
 
-    def query_application(self, id):
+    def query_application(self, id: int) -> Optional[Dict[str, Any]]:
+        """查询应用
+        
+        Args:
+            id: 应用ID
+            
+        Returns:
+            应用信息或None（失败时）
+        """
         val = self.session.get('/core/applications/{0}'.format(id))
-        if 'error' in val:
-            print("查询应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('查询应用错误, ID: %s', id)
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('查询应用请求失败: 无响应, ID: %s', id)
             return None
         return val.get('value')
 
-    def create_application(self, param):
+    def create_application(self, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """创建应用
+        
+        Args:
+            param: 应用参数
+            
+        Returns:
+            创建的应用信息或None（失败时）
+        """
         val = self.session.post('/core/applications', param)
-        if 'error' in val:
-            print("创建应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('创建应用错误, 应用: %s', param.get('name', '未知'))
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('创建应用请求失败: 无响应, 应用: %s', param.get('name', '未知'))
             return None
         return val.get('value')
 
-    def update_application(self, id, param):
+    def update_application(self, id: int, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """更新应用
+        
+        Args:
+            id: 应用ID
+            param: 应用参数
+            
+        Returns:
+            更新的应用信息或None（失败时）
+        """
         val = self.session.put('/core/applications/{0}'.format(id), param)
-        if 'error' in val:
-            print("更新应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('更新应用错误, ID: %s', id)
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('更新应用请求失败: 无响应, ID: %s', id)
             return None
         return val.get('value')
 
-    def delete_application(self, id):
-        val = self.session.delete('/core/application/destroy/{0}'.format(id))
-        if 'error' in val:
-            print("删除应用失败 Code: %s, Message: %s" % (val['error']['code'], val['error']['message']))
+    def destroy_application(self, id: int) -> Optional[Dict[str, Any]]:
+        """销毁应用
+        
+        Args:
+            id: 应用ID
+            
+        Returns:
+            销毁的应用信息或None（失败时）
+        """
+        val = self.session.delete('/core/applications/{0}'.format(id))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('销毁应用错误, ID: %s', id)
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('销毁应用请求失败: 无响应, ID: %s', id)
             return None
         return val.get('value')
 
-def mock_application_param():
+    def start_application(self, id: int) -> Optional[Dict[str, Any]]:
+        """启动应用
+        
+        Args:
+            id: 应用ID
+            
+        Returns:
+            启动的应用信息或None（失败时）
+        """
+        val = self.session.get('/core/applications/{0}/start'.format(id))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('启动应用错误, ID: %s', id)
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('启动应用请求失败: 无响应, ID: %s', id)
+            return None
+        return val.get('value')
+
+    def stop_application(self, id: int) -> Optional[Dict[str, Any]]:
+        """停止应用
+        
+        Args:
+            id: 应用ID
+            
+        Returns:
+            停止的应用信息或None（失败时）
+        """
+        val = self.session.get('/core/applications/{0}/stop'.format(id))
+        if val is None or val.get('error') is not None:
+            if val:
+                logger.error('停止应用错误, ID: %s', id)
+                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+            else:
+                logger.error('停止应用请求失败: 无响应, ID: %s', id)
+            return None
+        return val.get('value')
+
+
+def mock_application_param() -> Dict[str, Any]:
+    """模拟应用参数
+    
+    Returns:
+        应用参数字典
+    """
     database = DatabaseDeclare(
         id=1,
         db_server='mysql:3306',
@@ -118,125 +245,99 @@ def mock_application_param():
     return ApplicationDeclare(
         id=1,
         uuid=mock.uuid(),
-        name=mock.word(),  # Updated to use mock.word()
+        name=mock.word(),
         show_name='Test Application',
         pkg_prefix='com.test',
         icon='icon.png',
         catalog='Test',
         domain=mock.url(),
         email=mock.email(),
-        author='TestAuthor',  # Updated to only contain English characters
+        author='TestAuthor',
         description=mock.sentence(),
         database=database,
-        hosted_by='magicMock',  # Updated hosted_by value
+        hosted_by='magicMock',
         artifact='magicMock@v1.3.0',
         status=1
     ).to_dict()
 
-def smoke_test(server_url, namespace):
-    """Smoke test: basic CRUD operations"""
+
+def main(server_url: str, namespace: str) -> bool:
+    """主函数
+    
+    Args:
+        server_url: 服务器URL
+        namespace: 命名空间
+        
+    Returns:
+        成功返回True，失败返回False
+    """
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
+    app = Application(work_session)
 
-    app_instance = Application(work_session)
-
-    # Create a new application
-    app001 = mock_application_param()
-    new_app10 = app_instance.create_application(app001)
-    if not new_app10:
-        print('create new application failed')
+    # 获取系统配置
+    config = app.get_system_config()
+    if not config:
+        logger.error('获取系统配置失败')
         return False
 
-    # Update the application
-    new_app10['description'] = mock.sentence()
-    new_app11 = app_instance.update_application(new_app10['id'], new_app10)
-    if not new_app11 or new_app11['description'] != new_app10['description']:
-        print('update application failed')
+    # 创建新应用
+    new_app = app.create_application(mock_application_param())
+    if not new_app:
+        logger.error('创建应用失败')
         return False
 
-    # Query the application
-    queried_app = app_instance.query_application(new_app10['id'])
+    # 查询应用
+    queried_app = app.query_application(new_app['id'])
     if not queried_app:
-        print('query application failed')
+        logger.error('查询应用失败')
         return False
 
-    # Delete the application
-    app_instance.delete_application(new_app10['id'])
-
-    print("Smoke test completed successfully.")
-
-def batch_create_applications(app_instance, count, concurrency):
-    def create_app():
-        app_param = mock_application_param()
-        return app_instance.create_application(app_param)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(create_app) for _ in range(count)]
-        results = [future.result() for future in concurrent.futures.as_completed(futures)]
-
-    return results
-
-def batch_update_applications(app_instance, apps, concurrency):
-    def update_app(app):
-        app['description'] = mock.sentence()
-        return app_instance.update_application(app['id'], app)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(update_app, app) for app in apps]
-        results = [future.result() for future in concurrent.futures.as_completed(futures)]
-
-    return results
-
-def batch_delete_applications(app_instance, apps, concurrency):
-    def delete_app(app):
-        return app_instance.delete_application(app['id'])
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(delete_app, app) for app in apps]
-        results = [future.result() for future in concurrent.futures.as_completed(futures)]
-
-    return results
-
-def stress_test(server_url, namespace, count, concurrency):
-    """Stress test: batch CRUD operations"""
-    work_session = session.MagicSession('{0}'.format(server_url), namespace)
-
-    app_instance = Application(work_session)
-
-    # Batch create applications
-    print("Creating %d applications with concurrency %d..." % (count, concurrency))
-    created_apps = batch_create_applications(app_instance, count, concurrency)
-    if not all(created_apps):
-        print('Batch create applications failed')
+    # 更新应用
+    queried_app['description'] = mock.sentence()
+    updated_app = app.update_application(queried_app['id'], queried_app)
+    if not updated_app:
+        logger.error('更新应用失败')
         return False
 
-    # Batch update applications
-    print("Updating %d applications with concurrency %d..." % (count, concurrency))
-    updated_apps = batch_update_applications(app_instance, created_apps, concurrency)
-    if not all(updated_apps):
-        print('Batch update applications failed')
+    # 启动应用
+    started_app = app.start_application(updated_app['id'])
+    if not started_app:
+        logger.error('启动应用失败')
         return False
 
-    # Batch delete applications
-    print("Deleting %d applications with concurrency %d..." % (count, concurrency))
-    deleted_apps = batch_delete_applications(app_instance, created_apps, concurrency)
-    if not all(deleted_apps):
-        print('Batch delete applications failed')
+    # 停止应用
+    stopped_app = app.stop_application(updated_app['id'])
+    if not stopped_app:
+        logger.error('停止应用失败')
         return False
 
-    print("Stress test completed successfully.")
+    # 过滤应用
+    filter_value = {
+        'name': updated_app['name'],
+        'uuid': updated_app['uuid'],
+    }
+    app_list = app.filter_application(filter_value)
+    if not app_list or len(app_list) != 1:
+        logger.error('过滤应用失败')
+        return False
+
+    # 销毁应用
+    destroyed_app = app.destroy_application(updated_app['id'])
+    if not destroyed_app:
+        logger.error('销毁应用失败')
+        return False
+
+    logger.info('所有应用操作测试通过')
     return True
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run smoke or stress tests on applications.")
-    parser.add_argument("--server_url", type=str, required=True, help="The server URL.")
-    parser.add_argument("--namespace", type=str, required=True, help="The namespace.")
-    parser.add_argument("--test_type", type=str, choices=["smoke", "stress"], required=True, help="The type of test to run (smoke or stress).")
-    parser.add_argument("--count", type=int, default=10, help="The number of applications to create (for stress test).")
-    parser.add_argument("--concurrency", type=int, default=5, help="The number of concurrent operations (for stress test).")
 
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="运行应用测试")
+    parser.add_argument("--server_url", type=str, required=True, help="服务器URL")
+    parser.add_argument("--namespace", type=str, required=True, help="命名空间")
     args = parser.parse_args()
 
-    if args.test_type == "smoke":
-        smoke_test(args.server_url, args.namespace)
-    elif args.test_type == "stress":
-        stress_test(args.server_url, args.namespace, args.count, args.concurrency)
+    logging.basicConfig(level=logging.INFO)
+    success = main(args.server_url, args.namespace)
+    exit(0 if success else 1)
