@@ -20,8 +20,8 @@ FILE_NAME_TAG = "fileName"
 FILE_SCOPE_TAG = "fileScope"
 
 # API 端点 (从 magicFile/pkg/common/file.go 提取)
-UPLOAD_FILE_URL = "/static/files/"
-DOWNLOAD_FILE_URL = "/static/files/"
+UPLOAD_FILE_URL = "/static/"
+DOWNLOAD_FILE_URL = "/static/"
 UPLOAD_FILE_STREAM_URL = "/files/stream/"
 VIEW_FILE_URL = "/files/view/"
 UPDATE_FILE_URL = "/files/:id"

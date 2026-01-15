@@ -128,7 +128,9 @@ class MagicSession:
             response.raise_for_status()
             
             # Handle download case (non-JSON response)
-            if 'files' in kwargs or 'data' in kwargs:
+            # If stream=True is set, return the response object directly
+            # Also return response for file upload/download cases
+            if 'files' in kwargs or 'data' in kwargs or kwargs.get('stream', False):
                 return response
             
             # Parse JSON response
