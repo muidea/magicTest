@@ -42,7 +42,7 @@ class MagicEntity:
             Response data on success, None on error
         """
         if response and response.get('error') is None:
-            return response.get('value') or response.get('values')
+            return response.get('value') or response.get('values') or response.get('total')
         
         if response:
             error = response['error']
@@ -121,6 +121,19 @@ class MagicEntity:
         url = f'{self.base_url}s/{id_val}'
         response = self.session.delete(url)
         return self._handle_response(response, '删除', url, id_val=id_val)
+
+    def count(self, filter_val: Dict[str, Any] = None) -> Optional[Any]:
+        """Count entities based on criteria.
+        
+        Args:
+            filter_val: Count criteria dictionary
+            
+        Returns:
+            Count of entities on success, None on error
+        """
+        url = f'{self.base_url}/count/'
+        response = self.session.get(url, filter_val)
+        return self._handle_response(response, 'Count', url, filter_val=filter_val)
 
     def create(self, param_val: Dict[str, Any]) -> Optional[Any]:
         """Create entity using special create endpoint.

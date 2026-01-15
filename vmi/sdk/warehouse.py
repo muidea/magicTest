@@ -79,10 +79,10 @@ class WarehouseSDK(VMISDKBase):
         """
         return self.delete(warehouse_id)
     
-    def count_warehouse(self) -> Optional[int]:
+    def count_warehouse(self, param: Dict[str, Any] = None) -> Optional[int]:
         """统计仓库数量
         
         Returns:
             仓库数量或 None（失败时）
         """
-        return self.count()
+        return self.count(param)

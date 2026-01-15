@@ -57,7 +57,7 @@ def mock_product(idx):
 
 
 def create_warehouse(work_session, idx):
-    warehouse_instance = common.MagicEntity("/vmi/warehouse", work_session)
+    warehouse_instance = common.MagicEntity("/api/v1/vmi/warehouse", work_session)
     warehouse_val = warehouse_instance.insert(mock_warehouse(idx))
     if not warehouse_val:
         logging.warning("create new warehouse {0} failed".format(idx))
@@ -66,7 +66,7 @@ def create_warehouse(work_session, idx):
 
 
 def destroy_warehouse(work_session, warehouse_val):
-    warehouse_instance = common.MagicEntity("/vmi/warehouse", work_session)
+    warehouse_instance = common.MagicEntity("/api/v1/vmi/warehouse", work_session)
     warehouse_val = warehouse_instance.delete(warehouse_val['id'])
     if not warehouse_val:
         logging.warning("delete warehouse {0} failed".format(warehouse_val['name']))
@@ -75,7 +75,7 @@ def destroy_warehouse(work_session, warehouse_val):
 
 
 def count_warehouse(work_session):
-    warehouse_instance = common.MagicEntity("/vmi/warehouse", work_session)
+    warehouse_instance = common.MagicEntity("/api/v1/vmi/warehouse", work_session)
     warehouse_val = warehouse_instance.count()
     if not warehouse_val:
         logging.warning("count warehouse failed")
@@ -84,7 +84,7 @@ def count_warehouse(work_session):
 
 
 def create_shelf(work_session, idx, warehouse_val):
-    shelf_instance = common.MagicEntity("/vmi/warehouse/shelf", work_session)
+    shelf_instance = common.MagicEntity("/api/v1/vmi/warehouse/shelf", work_session)
     shelf_val = shelf_instance.insert(mock_shelf(idx, warehouse_val))
     if not shelf_val:
         logging.warning("create new shelf {0} failed".format(idx))
@@ -93,7 +93,7 @@ def create_shelf(work_session, idx, warehouse_val):
 
 
 def destroy_shelf(work_session, shelf_val):
-    shelf_instance = common.MagicEntity("/vmi/warehouse/shelf", work_session)
+    shelf_instance = common.MagicEntity("/api/v1/vmi/warehouse/shelf", work_session)
     shelf_val = shelf_instance.delete(shelf_val)
     if not shelf_val:
         logging.warning("create new shelf {0} failed".format(shelf_val['code']))
@@ -102,7 +102,7 @@ def destroy_shelf(work_session, shelf_val):
 
 
 def count_shelf(work_session):
-    shelf_instance = common.MagicEntity("/vmi/warehouse/shelf", work_session)
+    shelf_instance = common.MagicEntity("/api/v1/vmi/warehouse/shelf", work_session)
     shelf_val = shelf_instance.count()
     if not shelf_val:
         logging.warning("count shelf failed")
@@ -111,7 +111,7 @@ def count_shelf(work_session):
 
 
 def create_store(work_session, idx, shelf_val):
-    store_instance = common.MagicEntity("/vmi/store", work_session)
+    store_instance = common.MagicEntity("/api/v1/vmi/store", work_session)
     store_val = store_instance.insert(mock_store(idx, shelf_val))
     if not store_val:
         logging.warning("create new store {0} failed".format(idx))
@@ -120,7 +120,7 @@ def create_store(work_session, idx, shelf_val):
 
 
 def destroy_store(work_session, store_val):
-    store_instance = common.MagicEntity("/vmi/store", work_session)
+    store_instance = common.MagicEntity("/api/v1/vmi/store", work_session)
     store_val = store_instance.delete(store_val['id'])
     if not store_val:
         logging.warning("delete store {0} failed".format(store_val['name']))
@@ -129,7 +129,7 @@ def destroy_store(work_session, store_val):
 
 
 def count_store(work_session):
-    store_instance = common.MagicEntity("/vmi/store", work_session)
+    store_instance = common.MagicEntity("/api/v1/vmi/store", work_session)
     store_val = store_instance.count()
     if not store_val:
         logging.warning("count store failed")
@@ -138,7 +138,7 @@ def count_store(work_session):
 
 
 def create_product(work_session, idx):
-    product_instance = common.MagicEntity("/vmi/product", work_session)
+    product_instance = common.MagicEntity("/api/v1/vmi/product", work_session)
     product_val = product_instance.insert(mock_product(idx))
     if not product_val:
         logging.warning("create new product {0} failed".format(idx))
@@ -147,7 +147,7 @@ def create_product(work_session, idx):
 
 
 def destroy_product(work_session, product_val):
-    product_instance = common.MagicEntity("/vmi/product", work_session)
+    product_instance = common.MagicEntity("/api/v1/vmi/product", work_session)
     product_val = product_instance.delete(product_val['id'])
     if not product_val:
         logging.warning("delete product {0} failed".format(product_val['name']))
@@ -156,7 +156,7 @@ def destroy_product(work_session, product_val):
 
 
 def count_product(work_session):
-    product_instance = common.MagicEntity("/vmi/product", work_session)
+    product_instance = common.MagicEntity("/api/v1/vmi/product", work_session)
     product_val = product_instance.count()
     if not product_val:
         logging.warning("count product failed")
@@ -165,7 +165,7 @@ def count_product(work_session):
 
 
 def filter_product_sku(work_session, page_idx, page_size):
-    product_sku_instance = common.MagicEntity("/vmi/product/skuInfo", work_session)
+    product_sku_instance = common.MagicEntity("/api/v1/vmi/product/skuInfo", work_session)
     sku_list = product_sku_instance.filter({
         'pageIndex': page_idx,
         'pageSize': page_size
@@ -177,7 +177,7 @@ def filter_product_sku(work_session, page_idx, page_size):
 
 
 def destroy_product_sku(work_session, product_sku_val):
-    product_sku_instance = common.MagicEntity("/vmi/product/skuInfo", work_session)
+    product_sku_instance = common.MagicEntity("/api/v1/vmi/product/skuInfo", work_session)
     sku_val = product_sku_instance.delete(product_sku_val['sku'])
     if not sku_val:
         logging.warning("delete product skuInfo {0} failed".format(sku_val['sku']))
@@ -186,7 +186,7 @@ def destroy_product_sku(work_session, product_sku_val):
 
 
 def count_product_sku(work_session):
-    product_sku_instance = common.MagicEntity("/vmi/product/skuInfo", work_session)
+    product_sku_instance = common.MagicEntity("/api/v1/vmi/product/skuInfo", work_session)
     sku_val = product_sku_instance.count()
     if not sku_val:
         logging.warning("count product skuInfo failed")
@@ -194,19 +194,19 @@ def count_product_sku(work_session):
     return sku_val
 
 
-def verify_session(cas_session, work_session):
-    new_token = cas_session.verify(cas_session.get_session_token())
+def refresh_session(cas_session, work_session):
+    new_token = cas_session.refresh(cas_session.get_session_token())
     work_session.bind_token(new_token)
 
 
 class BaseTestCase(unittest.TestCase):
-    _server_url = 'https://autotest.local.vpc/api/v1'
+    _server_url = 'https://autotest.local.vpc'
     _user = 'administrator'
     _password = 'administrator'
     _warehouse_count = 1
-    _shelf_count = 20
-    _store_count = 10
-    _product_count = 50000
+    _shelf_count = 1
+    _store_count = 1
+    _product_count = 1
     _warehouse_list = []
     _shelf_list = []
     _store_list = []
@@ -222,7 +222,6 @@ class BaseTestCase(unittest.TestCase):
         work_session.bind_token(cas_session.get_session_token())
         self._work_session = work_session
 
-        return
         ii = 0
         while ii < self._warehouse_count:
             warehouse_val = create_warehouse(self._work_session, ii)
@@ -230,7 +229,7 @@ class BaseTestCase(unittest.TestCase):
                 self._warehouse_list.append(warehouse_val)
             time.sleep(self._interval_val)
 
-            verify_session(cas_session, work_session)
+            refresh_session(cas_session, work_session)
             ii += 1
         if len(self._warehouse_list) != self._warehouse_count:
             logging.error("initialize warehouse failed")
@@ -243,7 +242,7 @@ class BaseTestCase(unittest.TestCase):
                 self._shelf_list.append(shelf_val)
             time.sleep(self._interval_val)
 
-            verify_session(cas_session, work_session)
+            refresh_session(cas_session, work_session)
             ii += 1
         if len(self._shelf_list) != self._shelf_count:
             logging.error("initialize shelf failed")
@@ -256,7 +255,7 @@ class BaseTestCase(unittest.TestCase):
                 self._store_list.append(store_val)
             time.sleep(self._interval_val)
 
-            verify_session(cas_session, work_session)
+            refresh_session(cas_session, work_session)
             ii += 1
         if len(self._store_list) != self._store_count:
             logging.error("initialize store failed")
@@ -269,7 +268,7 @@ class BaseTestCase(unittest.TestCase):
                 self._product_list.append(product_val)
             time.sleep(self._interval_val)
 
-            verify_session(cas_session, work_session)
+            refresh_session(cas_session, work_session)
             ii += 1
         if len(self._product_list) != self._product_count:
             logging.error("initialize product failed")

@@ -26,7 +26,12 @@ class VMISDKBase:
         """
         self.session = work_session
         self.entity_path = entity_path
-        self.entity = common.MagicEntity(entity_path, work_session)
+        # 确保 entity_path 以 /api/v1 开头，除非它已经以 /api/v1 开头
+        if not entity_path.startswith('/api/v1'):
+            entity_path_with_api = f'/api/v1{entity_path}'
+        else:
+            entity_path_with_api = entity_path
+        self.entity = common.MagicEntity(entity_path_with_api, work_session)
     
     def filter(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """过滤实体
@@ -122,14 +127,14 @@ class VMISDKBase:
             logger.error('删除%s异常, ID: %s: %s', self.entity_path, entity_id, str(e))
             return None
     
-    def count(self) -> Optional[int]:
+    def count(self, param: Dict[str, Any]) -> Optional[int]:
         """统计实体数量
         
         Returns:
             实体数量或 None（失败时）
         """
         try:
-            result = self.entity.count()
+            result = self.entity.count(param)
             if result is None:
                 logger.error('统计%s数量失败', self.entity_path)
             return result
