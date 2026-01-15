@@ -79,10 +79,10 @@ class ProductSDK(VMISDKBase):
         """
         return self.delete(product_id)
     
-    def count_product(self) -> Optional[int]:
+    def count_product(self, param: Dict[str, Any] = None) -> Optional[int]:
         """统计产品数量
         
         Returns:
             产品数量或 None（失败时）
         """
-        return self.count()
+        return self.count(param)

@@ -23,7 +23,7 @@ class ShelfSDK(VMISDKBase):
         """
         super().__init__(work_session, '/vmi/warehouse/shelf')
     
-    def filter_shelf(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    def filter_shelf(self, param: Dict[str, Any] = None) -> Optional[List[Dict[str, Any]]]:
         """过滤货架
         
         Args:
@@ -79,10 +79,10 @@ class ShelfSDK(VMISDKBase):
         """
         return self.delete(shelf_id)
     
-    def count_shelf(self) -> Optional[int]:
+    def count_shelf(self, param: Dict[str, Any] = None) -> Optional[int]:
         """统计货架数量
         
         Returns:
             货架数量或 None（失败时）
         """
-        return self.count()
+        return self.count(param)

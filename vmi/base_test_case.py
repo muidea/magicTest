@@ -4,6 +4,7 @@ import unittest
 
 from cas.cas import cas
 from session import session, common
+from .sdk import WarehouseSDK, ShelfSDK, StoreSDK, ProductSDK
 
 
 def mock_warehouse(idx):
@@ -52,13 +53,19 @@ def mock_product(idx):
         'image': [
             'https://xijian.mulife.vip/api/v1/static/file/?fileSource=magicvmi_xijian&fileToken=rw17dxt6exricyfhjtwtfnwnillpljhg'],
         'expire': 100,
+        'status': 17,
         'tags': ['a', 'b', 'c'],
+        # 以下字段有默认值，可省略
+        # 'creater': 0,
+        # 'createTime': 0,
+        # 'namespace': '',
     }
 
 
 def create_warehouse(work_session, idx):
-    warehouse_instance = common.MagicEntity("/api/v1/vmi/warehouse", work_session)
-    warehouse_val = warehouse_instance.insert(mock_warehouse(idx))
+    """使用 WarehouseSDK 创建仓库"""
+    warehouse_sdk = WarehouseSDK(work_session)
+    warehouse_val = warehouse_sdk.create_warehouse(mock_warehouse(idx))
     if not warehouse_val:
         logging.warning("create new warehouse {0} failed".format(idx))
         return None
@@ -66,26 +73,29 @@ def create_warehouse(work_session, idx):
 
 
 def destroy_warehouse(work_session, warehouse_val):
-    warehouse_instance = common.MagicEntity("/api/v1/vmi/warehouse", work_session)
-    warehouse_val = warehouse_instance.delete(warehouse_val['id'])
-    if not warehouse_val:
+    """使用 WarehouseSDK 删除仓库"""
+    warehouse_sdk = WarehouseSDK(work_session)
+    result = warehouse_sdk.delete_warehouse(warehouse_val['id'])
+    if not result:
         logging.warning("delete warehouse {0} failed".format(warehouse_val['name']))
         return None
-    return warehouse_val
+    return result
 
 
 def count_warehouse(work_session):
-    warehouse_instance = common.MagicEntity("/api/v1/vmi/warehouse", work_session)
-    warehouse_val = warehouse_instance.count()
-    if not warehouse_val:
+    """使用 WarehouseSDK 统计仓库数量"""
+    warehouse_sdk = WarehouseSDK(work_session)
+    count = warehouse_sdk.count_warehouse({})
+    if count is None:
         logging.warning("count warehouse failed")
         return None
-    return warehouse_val
+    return count
 
 
 def create_shelf(work_session, idx, warehouse_val):
-    shelf_instance = common.MagicEntity("/api/v1/vmi/warehouse/shelf", work_session)
-    shelf_val = shelf_instance.insert(mock_shelf(idx, warehouse_val))
+    """使用 ShelfSDK 创建货架"""
+    shelf_sdk = ShelfSDK(work_session)
+    shelf_val = shelf_sdk.create_shelf(mock_shelf(idx, warehouse_val))
     if not shelf_val:
         logging.warning("create new shelf {0} failed".format(idx))
         return None
@@ -93,26 +103,29 @@ def create_shelf(work_session, idx, warehouse_val):
 
 
 def destroy_shelf(work_session, shelf_val):
-    shelf_instance = common.MagicEntity("/api/v1/vmi/warehouse/shelf", work_session)
-    shelf_val = shelf_instance.delete(shelf_val)
-    if not shelf_val:
-        logging.warning("create new shelf {0} failed".format(shelf_val['code']))
+    """使用 ShelfSDK 删除货架"""
+    shelf_sdk = ShelfSDK(work_session)
+    result = shelf_sdk.delete_shelf(shelf_val['id'])
+    if not result:
+        logging.warning("delete shelf {0} failed".format(shelf_val.get('code', 'unknown')))
         return None
-    return shelf_val
+    return result
 
 
 def count_shelf(work_session):
-    shelf_instance = common.MagicEntity("/api/v1/vmi/warehouse/shelf", work_session)
-    shelf_val = shelf_instance.count()
-    if not shelf_val:
+    """使用 ShelfSDK 统计货架数量"""
+    shelf_sdk = ShelfSDK(work_session)
+    count = shelf_sdk.count_shelf()
+    if count is None:
         logging.warning("count shelf failed")
         return None
-    return shelf_val
+    return count
 
 
 def create_store(work_session, idx, shelf_val):
-    store_instance = common.MagicEntity("/api/v1/vmi/store", work_session)
-    store_val = store_instance.insert(mock_store(idx, shelf_val))
+    """使用 StoreSDK 创建店铺"""
+    store_sdk = StoreSDK(work_session)
+    store_val = store_sdk.create_store(mock_store(idx, shelf_val))
     if not store_val:
         logging.warning("create new store {0} failed".format(idx))
         return None
@@ -120,26 +133,29 @@ def create_store(work_session, idx, shelf_val):
 
 
 def destroy_store(work_session, store_val):
-    store_instance = common.MagicEntity("/api/v1/vmi/store", work_session)
-    store_val = store_instance.delete(store_val['id'])
-    if not store_val:
+    """使用 StoreSDK 删除店铺"""
+    store_sdk = StoreSDK(work_session)
+    result = store_sdk.delete_store(store_val['id'])
+    if not result:
         logging.warning("delete store {0} failed".format(store_val['name']))
         return None
-    return store_val
+    return result
 
 
 def count_store(work_session):
-    store_instance = common.MagicEntity("/api/v1/vmi/store", work_session)
-    store_val = store_instance.count()
-    if not store_val:
+    """使用 StoreSDK 统计店铺数量"""
+    store_sdk = StoreSDK(work_session)
+    count = store_sdk.count_store()
+    if count is None:
         logging.warning("count store failed")
         return None
-    return store_val
+    return count
 
 
 def create_product(work_session, idx):
-    product_instance = common.MagicEntity("/api/v1/vmi/product", work_session)
-    product_val = product_instance.insert(mock_product(idx))
+    """使用 ProductSDK 创建产品"""
+    product_sdk = ProductSDK(work_session)
+    product_val = product_sdk.create_product(mock_product(idx))
     if not product_val:
         logging.warning("create new product {0} failed".format(idx))
         return None
@@ -147,24 +163,27 @@ def create_product(work_session, idx):
 
 
 def destroy_product(work_session, product_val):
-    product_instance = common.MagicEntity("/api/v1/vmi/product", work_session)
-    product_val = product_instance.delete(product_val['id'])
-    if not product_val:
+    """使用 ProductSDK 删除产品"""
+    product_sdk = ProductSDK(work_session)
+    result = product_sdk.delete_product(product_val['id'])
+    if not result:
         logging.warning("delete product {0} failed".format(product_val['name']))
         return None
-    return product_val
+    return result
 
 
 def count_product(work_session):
-    product_instance = common.MagicEntity("/api/v1/vmi/product", work_session)
-    product_val = product_instance.count()
-    if not product_val:
+    """使用 ProductSDK 统计产品数量"""
+    product_sdk = ProductSDK(work_session)
+    count = product_sdk.count_product()
+    if count is None:
         logging.warning("count product failed")
         return None
-    return product_val
+    return count
 
 
 def filter_product_sku(work_session, page_idx, page_size):
+    """过滤产品 SKU（暂未提供 SDK，保留原有实现）"""
     product_sku_instance = common.MagicEntity("/api/v1/vmi/product/skuInfo", work_session)
     sku_list = product_sku_instance.filter({
         'pageIndex': page_idx,
@@ -177,6 +196,7 @@ def filter_product_sku(work_session, page_idx, page_size):
 
 
 def destroy_product_sku(work_session, product_sku_val):
+    """删除产品 SKU（暂未提供 SDK，保留原有实现）"""
     product_sku_instance = common.MagicEntity("/api/v1/vmi/product/skuInfo", work_session)
     sku_val = product_sku_instance.delete(product_sku_val['sku'])
     if not sku_val:
@@ -186,6 +206,7 @@ def destroy_product_sku(work_session, product_sku_val):
 
 
 def count_product_sku(work_session):
+    """统计产品 SKU 数量（暂未提供 SDK，保留原有实现）"""
     product_sku_instance = common.MagicEntity("/api/v1/vmi/product/skuInfo", work_session)
     sku_val = product_sku_instance.count()
     if not sku_val:

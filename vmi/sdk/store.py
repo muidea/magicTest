@@ -79,10 +79,10 @@ class StoreSDK(VMISDKBase):
         """
         return self.delete(store_id)
     
-    def count_store(self) -> Optional[int]:
+    def count_store(self, param: Dict[str, Any] = None) -> Optional[int]:
         """统计店铺数量
         
         Returns:
             店铺数量或 None（失败时）
         """
-        return self.count()
+        return self.count(param)
