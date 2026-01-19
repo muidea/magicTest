@@ -10,12 +10,9 @@ from sdk import PartnerSDK
 logger = logging.getLogger(__name__)
 
 
-def mock_partner_param(namespace: str):
+def mock_partner_param():
     """模拟合作伙伴参数
-    
-    Args:
-        namespace: 命名空间
-        
+
     Returns:
         合作伙伴参数字典
     """
@@ -26,8 +23,7 @@ def mock_partner_param(namespace: str):
         'description': mock.sentence(),
         'status': {
             'id': 3
-        },
-        'namespace': namespace
+        }
     }
 
 
@@ -51,7 +47,7 @@ def main(server_url: str, namespace: str) -> bool:
     
     # 使用 PartnerSDK
     partner_sdk = PartnerSDK(work_session)
-    partner_param = mock_partner_param(namespace)
+    partner_param = mock_partner_param()
     
     # 创建合作伙伴
     new_partner = partner_sdk.create_partner(partner_param)

@@ -10,12 +10,9 @@ from sdk import ProductSDK
 logger = logging.getLogger(__name__)
 
 
-def mock_product_param(namespace: str):
+def mock_product_param():
     """模拟产品参数
-    
-    Args:
-        namespace: 命名空间
-        
+
     Returns:
         产品参数字典
     """
@@ -29,8 +26,7 @@ def mock_product_param(namespace: str):
         }],
         'image': [mock.url()],
         'expire': 100,
-        'tags': ['a', 'b', 'c'],
-        'namespace': namespace
+        'tags': ['a', 'b', 'c']
     }
 
 
@@ -54,7 +50,7 @@ def main(server_url: str, namespace: str) -> bool:
 
     # 使用 ProductSDK
     product_sdk = ProductSDK(work_session)
-    product_param = mock_product_param(namespace)
+    product_param = mock_product_param()
     
     # 创建产品
     new_product = product_sdk.create_product(product_param)

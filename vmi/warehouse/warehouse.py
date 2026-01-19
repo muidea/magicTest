@@ -10,19 +10,15 @@ from sdk import WarehouseSDK
 logger = logging.getLogger(__name__)
 
 
-def mock_warehouse_param(namespace: str):
+def mock_warehouse_param():
     """模拟仓库参数
-    
-    Args:
-        namespace: 命名空间
-        
+
     Returns:
         仓库参数字典
     """
     return {
         'name': 'CK' + mock.name(),
-        'description': mock.sentence(),
-        'namespace': namespace
+        'description': mock.sentence()
     }
 
 
@@ -46,7 +42,7 @@ def main(server_url: str, namespace: str) -> bool:
 
     # 使用 WarehouseSDK
     warehouse_sdk = WarehouseSDK(work_session)
-    warehouse_param = mock_warehouse_param(namespace)
+    warehouse_param = mock_warehouse_param()
     
     # 创建仓库
     new_warehouse = warehouse_sdk.create_warehouse(warehouse_param)

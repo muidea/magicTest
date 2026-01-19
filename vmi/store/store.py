@@ -10,19 +10,15 @@ from sdk import StoreSDK
 logger = logging.getLogger(__name__)
 
 
-def mock_store_param(namespace: str):
+def mock_store_param():
     """模拟店铺参数
-    
-    Args:
-        namespace: 命名空间
-        
+
     Returns:
         店铺参数字典
     """
     return {
         'name': 'STORE' + mock.name(),
-        'description': mock.sentence(),
-        'namespace': namespace
+        'description': mock.sentence()
     }
 
 
@@ -46,7 +42,7 @@ def main(server_url: str, namespace: str) -> bool:
 
     # 使用 StoreSDK
     store_sdk = StoreSDK(work_session)
-    store_param = mock_store_param(namespace)
+    store_param = mock_store_param()
     
     # 创建店铺
     new_store = store_sdk.create_store(store_param)

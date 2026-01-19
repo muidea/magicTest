@@ -87,10 +87,10 @@ class MagicSession:
         """
         header = {}
 
-        if self.namespace:
+        if self.namespace and self.namespace != '':
             header['X-Mp-Namespace'] = self.namespace
 
-        if self.application:
+        if self.application and self.application != '':
             header['X-Mp-Application'] = self.application
 
         # Priority: signature auth over bearer token
