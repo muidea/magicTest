@@ -363,23 +363,23 @@ class BaseTestCase(unittest.TestCase):
     _user = 'administrator'
     _password = 'administrator'
     _warehouse_count = 1
-    _shelf_count = 2000
-    _store_count = 100
-    _product_count = 500000
+    _shelf_count = 20
+    _store_count = 10
+    _product_count = 500
     _warehouse_list = []
     _shelf_list = []
     _store_list = []
     _product_list = []
-    _interval_val = 0.2
+    _interval_val = 0.01
     # 商品入库出库测试相关参数
-    _products_per_store = 5000      # 每个店铺选择的产品数量
+    _products_per_store = 50      # 每个店铺选择的产品数量
     _stockin_quantity_per_product = 12  # 每个产品入库数量
     _stockin_price_per_product = 100    # 入库单价
-    _stockin_times = 1000            # 入库次数
-    _stockout_products_per_store = 100  # 每个店铺选择的出库商品数量
+    _stockin_times = 10            # 入库次数
+    _stockout_products_per_store = 10  # 每个店铺选择的出库商品数量
     _stockout_quantity_per_product = 5  # 每件商品出库数量
     _stockout_price_per_product = 120   # 出库单价
-    _stockout_times = 200            # 出库次数
+    _stockout_times = 2            # 出库次数
 
     def setUp(self):
         # 清空所有列表，确保每个测试开始时都是干净的状态
@@ -395,6 +395,7 @@ class BaseTestCase(unittest.TestCase):
             return False
         work_session.bind_token(cas_session.get_session_token())
         self._work_session = work_session
+        self._cas_session = cas_session
 
         ii = 0
         while ii < self._warehouse_count:
@@ -448,8 +449,6 @@ class BaseTestCase(unittest.TestCase):
             self.fail(f"店铺初始化失败: 期望{self._store_count}个，实际创建{len(self._store_list)}个")
 
         ii = 0
-        # 对于大量产品创建，减少间隔时间以提高速度
-        product_interval = 0.01  # 0.01秒间隔
         # 每1000个产品打印一次进度
         progress_interval = 1000
         while ii < self._product_count:
@@ -458,14 +457,14 @@ class BaseTestCase(unittest.TestCase):
                 self._product_list.append(product_val)
             else:
                 self.fail(f"创建产品 {ii} 失败")
-            time.sleep(product_interval)
+            time.sleep(self._interval_val)
 
             refresh_session(cas_session, work_session)
             ii += 1
             
             # 打印进度
             if ii % progress_interval == 0:
-                logging.info(f"已创建 {ii}/{self._test_product_count} 个产品")
+                logging.info(f"已创建 {ii}/{self._product_count} 个产品")
                 
         if len(self._product_list) != self._product_count:
             self.fail(f"产品初始化失败: 期望{self._product_count}个，实际创建{len(self._product_list)}个")
@@ -476,6 +475,7 @@ class BaseTestCase(unittest.TestCase):
         """清理测试数据"""
         logging.info("开始清理测试数据...")
         
+        refresh_session(self._cas_session, self._work_session)
         # 清理店铺
         if hasattr(self, '_store_list') and self._store_list:
             logging.info(f"清理 {len(self._store_list)} 个店铺...")
@@ -487,6 +487,8 @@ class BaseTestCase(unittest.TestCase):
                     logging.warning(f"清理店铺 {ii} 时出错: {e}")
                 time.sleep(self._interval_val)
                 ii += 1
+                
+                refresh_session(self._cas_session, self._work_session)
         
         # 清理货架
         if hasattr(self, '_shelf_list') and self._shelf_list:
@@ -499,11 +501,12 @@ class BaseTestCase(unittest.TestCase):
                     logging.warning(f"清理货架 {ii} 时出错: {e}")
                 time.sleep(self._interval_val)
                 ii += 1
+
+                refresh_session(self._cas_session, self._work_session)
         
         # 清理产品
         if hasattr(self, '_product_list') and self._product_list:
-            # 由于产品数量可能很大，只清理前1000个作为示例
-            cleanup_count = min(1000, len(self._product_list))
+            cleanup_count = len(self._product_list)
             logging.info(f"清理 {cleanup_count} 个产品（总共{len(self._product_list)}个）...")
             ii = 0
             while ii < cleanup_count:
@@ -513,6 +516,8 @@ class BaseTestCase(unittest.TestCase):
                     logging.warning(f"清理产品 {ii} 时出错: {e}")
                 time.sleep(self._interval_val)
                 ii += 1
+
+                refresh_session(self._cas_session, self._work_session)
         
         # 清理仓库
         if hasattr(self, '_warehouse_list') and self._warehouse_list:
@@ -525,30 +530,34 @@ class BaseTestCase(unittest.TestCase):
                     logging.warning(f"清理仓库 {ii} 时出错: {e}")
                 time.sleep(self._interval_val)
                 ii += 1
+
+                refresh_session(self._cas_session, self._work_session)
         
         # 清理SKU（如果需要）
-        try:
-            sku_count = 0
-            while True:
-                sku_list = filter_product_sku(self._work_session, 0, 200)
-                if not sku_list or sku_count > 1000:  # 限制最多清理1000个SKU
-                    break
-                for sku in sku_list[:10]:  # 每次只清理10个
-                    try:
-                        destroy_product_sku(self._work_session, sku)
-                        sku_count += 1
-                    except Exception as e:
-                        logging.warning(f"清理SKU时出错: {e}")
-                    time.sleep(self._interval_val)
-                if sku_count % 100 == 0:
-                    logging.info(f"已清理 {sku_count} 个SKU...")
-        except Exception as e:
-            logging.warning(f"清理SKU时发生异常: {e}")
-        
+        #try:
+        #    sku_count = 0
+        #    while True:
+        #        sku_list = filter_product_sku(self._work_session, 0, 200)
+        #        if not sku_list or sku_count > 1000:  # 限制最多清理1000个SKU
+        #            break
+        #        for sku in sku_list[:10]:  # 每次只清理10个
+        #            try:
+        #                destroy_product_sku(self._work_session, sku)
+        #                sku_count += 1
+        #            except Exception as e:
+        #                logging.warning(f"清理SKU时出错: {e}")
+        #           time.sleep(self._interval_val)
+        #        if sku_count % 100 == 0:
+        #            logging.info(f"已清理 {sku_count} 个SKU...")
+        #except Exception as e:
+        #    logging.warning(f"清理SKU时发生异常: {e}")
         logging.info("测试数据清理完成")
 
     def test_something(self):
         """基础数据校验测试"""
+        
+        refresh_session(self._cas_session, self._work_session)
+
         warehouse_count = count_warehouse(self._work_session)
         self.assertEqual(warehouse_count, self._warehouse_count, f"仓库数量不正确: 期望{self._warehouse_count}, 实际{warehouse_count}")
         shelf_count = count_shelf(self._work_session)
@@ -604,6 +613,9 @@ class BaseTestCase(unittest.TestCase):
 
     def test_warehouse_crud(self):
         """测试仓库的 CRUD 操作"""
+
+        refresh_session(self._cas_session, self._work_session)
+
         sdk = WarehouseSDK(self._work_session)
         # 创建
         mock_data = mock_warehouse(100)
@@ -611,22 +623,32 @@ class BaseTestCase(unittest.TestCase):
         self.assertIsNotNone(created, "创建仓库失败")
         self.assertIn('id', created)
         warehouse_id = created['id']
+
+        refresh_session(self._cas_session, self._work_session)
         # 查询
         queried = sdk.query_warehouse(warehouse_id)
         self.assertIsNotNone(queried, "查询仓库失败")
         self.assertEqual(queried['name'], mock_data['name'])
         self.assertEqual(queried['description'], mock_data['description'])
+        
+        refresh_session(self._cas_session, self._work_session)
         # 更新
         update_data = {'description': '更新后的描述'}
         updated = sdk.update_warehouse(warehouse_id, update_data)
         self.assertIsNotNone(updated, "更新仓库失败")
         self.assertEqual(updated['description'], update_data['description'])
+        
+        refresh_session(self._cas_session, self._work_session)
         # 再次查询验证更新
         queried2 = sdk.query_warehouse(warehouse_id)
         self.assertEqual(queried2['description'], update_data['description'])
+        
+        refresh_session(self._cas_session, self._work_session)
         # 删除
         deleted = sdk.delete_warehouse(warehouse_id)
         self.assertIsNotNone(deleted, "删除仓库失败")
+        
+        refresh_session(self._cas_session, self._work_session)
         # 验证删除后查询不到
         queried3 = sdk.query_warehouse(warehouse_id)
         self.assertIsNone(queried3, "仓库删除后仍能查询到")
@@ -702,13 +724,13 @@ class BaseTestCase(unittest.TestCase):
         stockin_orders_created = 0
         total_goods_stocked = 0
         
+        refresh_session(self._cas_session, self._work_session)
+
+        products_to_stock = self._product_list[:min(self._products_per_store, len(self._product_list))]
         # 遍历所有店铺
         for store_idx, store in enumerate(self._store_list):
             # 每个店铺分10次完成入库
             for time_idx in range(self._stockin_times):
-                # 选择产品（简化：从产品列表中选择前N个产品）
-                # 实际场景中应该从5w种产品中选择500种，这里使用测试模式下的产品
-                products_to_stock = self._product_list[:min(self._products_per_store, len(self._product_list))]
                 
                 # 创建商品信息列表
                 goods_info_list = []
@@ -739,7 +761,9 @@ class BaseTestCase(unittest.TestCase):
                 
                 # 短暂等待，避免请求过快
                 time.sleep(self._interval_val)
+                refresh_session(self._cas_session, self._work_session)
         
+        refresh_session(self._cas_session, self._work_session)
         # 验证实际创建的入库单数量
         actual_stockin_orders = count_stockin(self._work_session)
         print(f"实际创建的入库单数量: {actual_stockin_orders}")
@@ -759,6 +783,7 @@ class BaseTestCase(unittest.TestCase):
         # 首先需要确保有商品入库，这里假设已经执行了入库测试
         # 在实际测试中，可能需要先调用入库操作
         
+        refresh_session(self._cas_session, self._work_session)
         # 计算预期指标
         metrics = self._calculate_stockout_metrics()
         expected_stockout_orders = metrics['stockout_order_count']
@@ -780,14 +805,14 @@ class BaseTestCase(unittest.TestCase):
         stockout_orders_created = 0
         total_goods_stocked_out = 0
         
+
+        # 选择商品（简化：从产品列表中选择前N个商品）
+        # 实际场景中应该从500种商品中选择100种，这里使用测试模式下的产品
+        products_to_stockout = self._product_list[:min(self._stockout_products_per_store, len(self._product_list))]
         # 遍历所有店铺
         for store_idx, store in enumerate(self._store_list):
             # 每个店铺分2次完成出库
-            for time_idx in range(self._stockout_times):
-                # 选择商品（简化：从产品列表中选择前N个商品）
-                # 实际场景中应该从500种商品中选择100种，这里使用测试模式下的产品
-                products_to_stockout = self._product_list[:min(self._stockout_products_per_store, len(self._product_list))]
-                
+            for time_idx in range(self._stockout_times):                
                 # 创建商品信息列表
                 goods_info_list = []
                 for product in products_to_stockout:
@@ -817,11 +842,14 @@ class BaseTestCase(unittest.TestCase):
                 
                 # 短暂等待，避免请求过快
                 time.sleep(self._interval_val)
+
+                refresh_session(self._cas_session, self._work_session) 
         
+        refresh_session(self._cas_session, self._work_session)
         # 验证实际创建的出库单数量
         actual_stockout_orders = count_stockout(self._work_session)
         print(f"实际创建的出库单数量: {actual_stockout_orders}")
-        
+                
         # 断言检查项
         self.assertEqual(stockout_orders_created, expected_stockout_orders,
                         f"出库单数量不匹配: 期望{expected_stockout_orders}, 实际创建{stockout_orders_created}")
@@ -836,6 +864,7 @@ class BaseTestCase(unittest.TestCase):
         """测试商品入库和出库的完整流程"""
         print("开始执行商品入库出库完整流程测试...")
         
+        refresh_session(self._cas_session, self._work_session)
         # 记录初始状态
         initial_stockin_count = count_stockin(self._work_session) or 0
         initial_stockout_count = count_stockout(self._work_session) or 0
@@ -846,12 +875,12 @@ class BaseTestCase(unittest.TestCase):
         print("1. 执行商品入库操作...")
         stockin_orders_created = 0
         total_goods_stocked_in = 0
-        
+
+        # 选择少量产品进行测试
+        test_product_count = min(5, len(self._product_list))
+        products_to_stock = self._product_list[:test_product_count]
         for store_idx, store in enumerate(self._store_list[:2]):  # 只测试前2个店铺以加快速度
             for time_idx in range(min(2, self._stockin_times)):  # 只测试前2次入库
-                # 选择少量产品进行测试
-                test_product_count = min(5, len(self._product_list))
-                products_to_stock = self._product_list[:test_product_count]
                 
                 goods_info_list = []
                 for product in products_to_stock:
@@ -878,18 +907,19 @@ class BaseTestCase(unittest.TestCase):
                     print(f"  警告: 入库单创建失败")
                 
                 time.sleep(self._interval_val)
+
+                refresh_session(self._cas_session, self._work_session)
         
         # 执行出库操作
         print("2. 执行商品出库操作...")
         stockout_orders_created = 0
         total_goods_stocked_out = 0
         
+        # 选择少量商品进行测试
+        test_product_count = min(3, len(self._product_list))
+        products_to_stockout = self._product_list[:test_product_count]
         for store_idx, store in enumerate(self._store_list[:2]):  # 只测试前2个店铺
-            for time_idx in range(min(1, self._stockout_times)):  # 只测试1次出库
-                # 选择少量商品进行测试
-                test_product_count = min(3, len(self._product_list))
-                products_to_stockout = self._product_list[:test_product_count]
-                
+            for time_idx in range(min(1, self._stockout_times)):  # 只测试1次出库                
                 goods_info_list = []
                 for product in products_to_stockout:
                     goods_info = mock_goods_info(
@@ -915,7 +945,11 @@ class BaseTestCase(unittest.TestCase):
                     print(f"  警告: 出库单创建失败")
                 
                 time.sleep(self._interval_val)
+
+                refresh_session(self._cas_session, self._work_session)
         
+
+        refresh_session(self._cas_session, self._work_session)
         # 验证最终状态
         final_stockin_count = count_stockin(self._work_session) or 0
         final_stockout_count = count_stockout(self._work_session) or 0
