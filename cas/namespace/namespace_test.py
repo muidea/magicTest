@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class NamespaceTestCase(unittest.TestCase):
     """Namespace 测试用例类"""
     
-    server_url = 'https://panel.local.vpc'
+    server_url = 'https://panel.remote.vpc'
     namespace = ''
     
     @classmethod

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class AccountTestCase(unittest.TestCase):
     """Account 测试用例类"""
     
-    server_url = 'https://autotest.local.vpc'
+    server_url = 'https://autotest.remote.vpc'
     namespace = ''
     
     @classmethod

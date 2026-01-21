@@ -1,3 +1,3 @@
 from file import file
 
-file.main('https://autotest.local.vpc', '')
+file.main('https://autotest.remote.vpc', '')

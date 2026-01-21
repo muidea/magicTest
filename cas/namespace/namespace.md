@@ -11,31 +11,36 @@
 ```python
 class Namespace:
     """Namespace"""
-    
+
     def __init__(self, work_session, defaultNamespace):
         self.session = work_session
         self.defaultNamespace = defaultNamespace
 ```
 
 ### 构造函数参数
+
 - `work_session`: 一个 `MagicSession` 实例，用于处理 HTTP 请求和认证。
 - `defaultNamespace`: 父命名空间标识符，用于 API 请求中的权限控制。
 
 ### 属性
+
 - `session`: 绑定的 `MagicSession` 实例
 - `defaultNamespace`: 父命名空间标识符
 
 ## 方法详细说明
 
 ### 1. `filter_namespace(param)`
+
 **功能**: 过滤查询命名空间列表
 
 **参数**:
+
 - `param`: `dict` - 过滤条件参数，支持按名称、状态、作用域等字段过滤
 
 **返回**: `list` 或 `None` - 匹配的命名空间列表，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 GET 请求到 `/cas/namespaces/` 并传递过滤参数
 2. 检查响应中的错误信息
 3. 成功时返回 `values` 字段中的命名空间列表
@@ -44,20 +49,24 @@ class Namespace:
 **API 端点**: `GET /cas/namespaces/`
 
 **示例**:
+
 ```python
 filter_param = {'name': 'test', 'status': 2}
 namespaces = namespace_app.filter_namespace(filter_param)
 ```
 
 ### 2. `query_namespace(param)`
+
 **功能**: 查询单个命名空间的详细信息
 
 **参数**:
+
 - `param`: `str` - 命名空间的唯一标识符（ID）
 
 **返回**: `dict` 或 `None` - 命名空间的详细信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 GET 请求到 `/cas/namespaces/{id}`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的命名空间数据
@@ -66,26 +75,30 @@ namespaces = namespace_app.filter_namespace(filter_param)
 **API 端点**: `GET /cas/namespaces/{id}`
 
 **示例**:
+
 ```python
 namespace_id = "1234567890abcdef"
 namespace_info = namespace_app.query_namespace(namespace_id)
 ```
 
 ### 3. `create_namespace(param)`
+
 **功能**: 创建新的命名空间
 
 **参数**:
+
 - `param`: `dict` - 命名空间创建参数，包含以下字段：
   - `name`: `str` - 命名空间名称（必填）
   - `description`: `str` - 命名空间描述
   - `status`: `int` - 状态（1=禁用，2=启用）
   - `startTime`: `int` - 开始时间（UTC 毫秒时间戳）
   - `expireTime`: `int` - 过期时间（UTC 毫秒时间戳）
-  - `scope`: `str` - 作用域（如 "*" 表示全局，"n1,n2" 表示多作用域）
+  - `scope`: `str` - 作用域（如 "\*" 表示全局，"n1,n2" 表示多作用域）
 
 **返回**: `dict` 或 `None` - 创建的命名空间信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 POST 请求到 `/cas/namespaces/`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的命名空间数据
@@ -94,6 +107,7 @@ namespace_info = namespace_app.query_namespace(namespace_id)
 **API 端点**: `POST /cas/namespaces/`
 
 **示例**:
+
 ```python
 param = {
     'name': 'test-namespace',
@@ -107,14 +121,17 @@ new_namespace = namespace_app.create_namespace(param)
 ```
 
 ### 4. `update_namespace(param)`
+
 **功能**: 更新现有命名空间
 
 **参数**:
+
 - `param`: `dict` - 命名空间更新参数，必须包含 `id` 字段
 
 **返回**: `dict` 或 `None` - 更新后的命名空间信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 PUT 请求到 `/cas/namespaces/{id}`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的命名空间数据
@@ -123,6 +140,7 @@ new_namespace = namespace_app.create_namespace(param)
 **API 端点**: `PUT /cas/namespaces/{id}`
 
 **示例**:
+
 ```python
 update_param = {
     'id': '1234567890abcdef',
@@ -135,14 +153,17 @@ updated_namespace = namespace_app.update_namespace(update_param)
 ```
 
 ### 5. `delete_namespace(param)`
+
 **功能**: 删除命名空间
 
 **参数**:
+
 - `param`: `str` - 要删除的命名空间 ID
 
 **返回**: `dict` 或 `None` - 被删除的命名空间信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 DELETE 请求到 `/cas/namespaces/{id}`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的命名空间数据
@@ -151,6 +172,7 @@ updated_namespace = namespace_app.update_namespace(update_param)
 **API 端点**: `DELETE /cas/namespaces/{id}`
 
 **示例**:
+
 ```python
 namespace_id = "1234567890abcdef"
 deleted_namespace = namespace_app.delete_namespace(namespace_id)
@@ -159,30 +181,36 @@ deleted_namespace = namespace_app.delete_namespace(namespace_id)
 ## 辅助函数
 
 ### `mock_namespace_param()`
+
 **功能**: 生成模拟的命名空间参数，用于测试
 
 **返回**: `dict` - 包含随机生成的命名空间参数
 
 **参数说明**:
+
 - 自动生成当前时间戳和未来30天的时间戳
 - 使用 `mock.common` 模块生成随机名称和描述
 - 默认状态为启用（2）
-- 默认作用域为全局（"*"）
+- 默认作用域为全局（"\*"）
 
 **示例**:
+
 ```python
 from namespace.namespace import mock_namespace_param
 param = mock_namespace_param()
 ```
 
 ### `main(server_url, namespace)`
+
 **功能**: 主函数，演示完整的命名空间操作流程
 
 **参数**:
+
 - `server_url`: `str` - CAS 服务器 URL
 - `namespace`: `str` - 命名空间标识符
 
 **流程**:
+
 1. 创建会话并登录 CAS
 2. 生成模拟参数并创建命名空间
 3. 验证创建结果
@@ -206,17 +234,19 @@ param = mock_namespace_param()
 ## 命名空间数据结构
 
 ### 核心字段
-| 字段名 | 类型 | 描述 | 示例 |
-|--------|------|------|------|
-| `id` | `int` | 命名空间唯一标识符 | `1234567890` |
-| `name` | `str` | 命名空间名称 | `"test-namespace"` |
-| `description` | `str` | 命名空间描述 | `"测试命名空间"` |
-| `status` | `int` | 状态（1=禁用，2=启用） | `2` |
-| `startTime` | `int` | 开始时间（UTC 毫秒时间戳） | `1672531200000` |
-| `expireTime` | `int` | 过期时间（UTC 毫秒时间戳） | `1675123200000` |
-| `scope` | `str` | 作用域定义 | `"*"`, `"n1,n2"`, `""` |
+
+| 字段名        | 类型  | 描述                       | 示例                   |
+| ------------- | ----- | -------------------------- | ---------------------- |
+| `id`          | `int` | 命名空间唯一标识符         | `1234567890`           |
+| `name`        | `str` | 命名空间名称               | `"test-namespace"`     |
+| `description` | `str` | 命名空间描述               | `"测试命名空间"`       |
+| `status`      | `int` | 状态（1=禁用，2=启用）     | `2`                    |
+| `startTime`   | `int` | 开始时间（UTC 毫秒时间戳） | `1672531200000`        |
+| `expireTime`  | `int` | 过期时间（UTC 毫秒时间戳） | `1675123200000`        |
+| `scope`       | `str` | 作用域定义                 | `"*"`, `"n1,n2"`, `""` |
 
 ### 作用域说明
+
 - `"*"`: 全局作用域，可访问所有命名空间
 - `"n1,n2,n3"`: 多作用域，可访问指定的命名空间列表
 - `""`: 空作用域，仅限自身访问
@@ -224,6 +254,7 @@ param = mock_namespace_param()
 ## 依赖关系
 
 ### 核心依赖
+
 - `session.MagicSession`: HTTP 客户端会话管理
 - `cas.Cas`: CAS 认证客户端
 - `mock.common`: 模拟数据生成
@@ -231,6 +262,7 @@ param = mock_namespace_param()
 - `time`: 时间处理模块
 
 ### 导入语句
+
 ```python
 import logging
 import time as dt
@@ -242,13 +274,14 @@ from mock import common
 ## 使用示例
 
 ### 基本用法
+
 ```python
 from session import session
 from cas import cas
 from namespace.namespace import Namespace
 
 # 创建会话并登录
-server_url = 'https://panel.local.vpc/api/v1'
+server_url = 'https://panel.remote.vpc/api/v1'
 work_session = session.MagicSession(server_url, '')
 cas_session = cas.Cas(work_session)
 if not cas_session.login('administrator', 'administrator'):
@@ -266,16 +299,16 @@ param = mock_namespace_param()
 new_ns = namespace_app.create_namespace(param)
 if new_ns:
     print(f"创建成功: {new_ns['name']} (ID: {new_ns['id']})")
-    
+
     # 查询命名空间
     queried_ns = namespace_app.query_namespace(new_ns['id'])
     print(f"查询结果: {queried_ns['description']}")
-    
+
     # 更新命名空间
     update_param = new_ns.copy()
     update_param['description'] = '更新后的描述'
     updated_ns = namespace_app.update_namespace(update_param)
-    
+
     # 删除命名空间
     deleted_ns = namespace_app.delete_namespace(new_ns['id'])
     print(f"删除成功: {deleted_ns['name']}")

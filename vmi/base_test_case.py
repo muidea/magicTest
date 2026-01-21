@@ -359,27 +359,27 @@ def refresh_session(cas_session, work_session):
 
 
 class BaseTestCase(unittest.TestCase):
-    _server_url = 'https://autotest.local.vpc'
+    _server_url = 'https://autotest.remote.vpc'
     _user = 'administrator'
     _password = 'administrator'
     _warehouse_count = 1
-    _shelf_count = 20
-    _store_count = 10
-    _product_count = 50
+    _shelf_count = 2000
+    _store_count = 100
+    _product_count = 500000
     _warehouse_list = []
     _shelf_list = []
     _store_list = []
     _product_list = []
     _interval_val = 0.2
     # 商品入库出库测试相关参数
-    _products_per_store = 500      # 每个店铺选择的产品数量
+    _products_per_store = 5000      # 每个店铺选择的产品数量
     _stockin_quantity_per_product = 12  # 每个产品入库数量
     _stockin_price_per_product = 100    # 入库单价
-    _stockin_times = 10            # 入库次数
+    _stockin_times = 1000            # 入库次数
     _stockout_products_per_store = 100  # 每个店铺选择的出库商品数量
     _stockout_quantity_per_product = 5  # 每件商品出库数量
     _stockout_price_per_product = 120   # 出库单价
-    _stockout_times = 2            # 出库次数
+    _stockout_times = 200            # 出库次数
 
     def setUp(self):
         # 清空所有列表，确保每个测试开始时都是干净的状态
@@ -630,7 +630,6 @@ class BaseTestCase(unittest.TestCase):
         # 验证删除后查询不到
         queried3 = sdk.query_warehouse(warehouse_id)
         self.assertIsNone(queried3, "仓库删除后仍能查询到")
-
 
     def _calculate_stockin_metrics(self):
         """计算入库检查项指标"""

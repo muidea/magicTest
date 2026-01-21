@@ -11,28 +11,33 @@
 ```python
 class Role:
     """Role"""
-    
+
     def __init__(self, work_session):
         self.session = work_session
 ```
 
 ### 构造函数参数
+
 - `work_session`: 一个 `MagicSession` 实例，用于处理 HTTP 请求和认证。
 
 ### 属性
+
 - `session`: 绑定的 `MagicSession` 实例
 
 ## 方法详细说明
 
 ### 1. `filter_role(param)`
+
 **功能**: 过滤查询角色列表
 
 **参数**:
+
 - `param`: `dict` - 过滤条件参数，支持按名称、状态、组别等字段过滤
 
 **返回**: `list` 或 `None` - 匹配的角色列表，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 GET 请求到 `/cas/roles/` 并传递过滤参数
 2. 检查响应中的错误信息
 3. 成功时返回 `values` 字段中的角色列表
@@ -41,20 +46,24 @@ class Role:
 **API 端点**: `GET /cas/roles/`
 
 **示例**:
+
 ```python
 filter_param = {'name': 'admin', 'status': 2}
 roles = role_app.filter_role(filter_param)
 ```
 
 ### 2. `query_role(param)`
+
 **功能**: 查询单个角色的详细信息
 
 **参数**:
+
 - `param`: `str` - 角色的唯一标识符（ID）
 
 **返回**: `dict` 或 `None` - 角色的详细信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 GET 请求到 `/cas/roles/{id}`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的角色数据
@@ -63,15 +72,18 @@ roles = role_app.filter_role(filter_param)
 **API 端点**: `GET /cas/roles/{id}`
 
 **示例**:
+
 ```python
 role_id = "1234567890abcdef"
 role_info = role_app.query_role(role_id)
 ```
 
 ### 3. `create_role(param)`
+
 **功能**: 创建新的角色
 
 **参数**:
+
 - `param`: `dict` - 角色创建参数，包含以下字段：
   - `name`: `str` - 角色名称（必填）
   - `description`: `str` - 角色描述
@@ -87,6 +99,7 @@ role_info = role_app.query_role(role_id)
 **返回**: `dict` 或 `None` - 创建的角色信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 POST 请求到 `/cas/roles/`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的角色数据
@@ -95,6 +108,7 @@ role_info = role_app.query_role(role_id)
 **API 端点**: `POST /cas/roles/`
 
 **示例**:
+
 ```python
 param = {
     'name': '管理员',
@@ -115,14 +129,17 @@ new_role = role_app.create_role(param)
 ```
 
 ### 4. `update_role(param)`
+
 **功能**: 更新现有角色
 
 **参数**:
+
 - `param`: `dict` - 角色更新参数，必须包含 `id` 字段
 
 **返回**: `dict` 或 `None` - 更新后的角色信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 PUT 请求到 `/cas/roles/{id}`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的角色数据
@@ -131,6 +148,7 @@ new_role = role_app.create_role(param)
 **API 端点**: `PUT /cas/roles/{id}`
 
 **示例**:
+
 ```python
 update_param = {
     'id': '1234567890abcdef',
@@ -143,14 +161,17 @@ updated_role = role_app.update_role(update_param)
 ```
 
 ### 5. `delete_role(param)`
+
 **功能**: 删除角色
 
 **参数**:
+
 - `param`: `str` - 要删除的角色 ID
 
 **返回**: `dict` 或 `None` - 被删除的角色信息，失败返回 `None`
 
 **内部流程**:
+
 1. 发送 DELETE 请求到 `/cas/roles/{id}`
 2. 检查响应中的错误信息
 3. 成功时返回 `value` 字段中的角色数据
@@ -159,6 +180,7 @@ updated_role = role_app.update_role(update_param)
 **API 端点**: `DELETE /cas/roles/{id}`
 
 **示例**:
+
 ```python
 role_id = "1234567890abcdef"
 deleted_role = role_app.delete_role(role_id)
@@ -167,33 +189,40 @@ deleted_role = role_app.delete_role(role_id)
 ## 辅助函数
 
 ### `mock_role_param(namespace)`
+
 **功能**: 生成模拟的角色参数，用于测试
 
 **参数**:
+
 - `namespace`: `str` - 命名空间标识符（当前未使用）
 
 **返回**: `dict` - 包含随机生成的角色参数
 
 **参数说明**:
+
 - 使用 `mock.common` 模块生成随机名称和描述
 - 默认组别为 "admin"
 - 包含一个示例权限列表
 - 默认状态为启用（2）
 
 **示例**:
+
 ```python
 from role.role import mock_role_param
 param = mock_role_param("test-namespace")
 ```
 
 ### `main(server_url, namespace)`
+
 **功能**: 主函数，演示完整的角色操作流程
 
 **参数**:
+
 - `server_url`: `str` - CAS 服务器 URL
 - `namespace`: `str` - 命名空间标识符
 
 **流程**:
+
 1. 创建会话并登录 CAS
 2. 生成模拟参数并创建角色
 3. 验证创建结果
@@ -218,37 +247,42 @@ param = mock_role_param("test-namespace")
 ## 角色数据结构
 
 ### 核心字段
-| 字段名 | 类型 | 描述 | 示例 |
-|--------|------|------|------|
-| `id` | `int` | 角色唯一标识符 | `12345` |
-| `name` | `str` | 角色名称 | `"管理员"` |
-| `description` | `str` | 角色描述 | `"系统管理员角色"` |
-| `group` | `str` | 角色所属组别 | `"admin"`, `"user"` |
-| `privilege` | `list` | 权限列表 | `[{"id": 1, "module": "magicCas", ...}]` |
-| `status` | `int` | 状态（1=禁用，2=启用） | `2` |
+
+| 字段名        | 类型   | 描述                   | 示例                                     |
+| ------------- | ------ | ---------------------- | ---------------------------------------- |
+| `id`          | `int`  | 角色唯一标识符         | `12345`                                  |
+| `name`        | `str`  | 角色名称               | `"管理员"`                               |
+| `description` | `str`  | 角色描述               | `"系统管理员角色"`                       |
+| `group`       | `str`  | 角色所属组别           | `"admin"`, `"user"`                      |
+| `privilege`   | `list` | 权限列表               | `[{"id": 1, "module": "magicCas", ...}]` |
+| `status`      | `int`  | 状态（1=禁用，2=启用） | `2`                                      |
 
 ### 权限对象结构
-| 字段名 | 类型 | 描述 | 示例 |
-|--------|------|------|------|
-| `id` | `int` | 权限ID | `1` |
-| `module` | `str` | 模块名称 | `"magicCas"` |
-| `uriPath` | `str` | URI路径 | `"/api/v1/totalizators"` |
-| `value` | `int` | 权限值（1=读，2=写，3=执行） | `2` |
-| `description` | `str` | 权限描述 | `"用户管理权限"` |
+
+| 字段名        | 类型  | 描述                         | 示例                     |
+| ------------- | ----- | ---------------------------- | ------------------------ |
+| `id`          | `int` | 权限ID                       | `1`                      |
+| `module`      | `str` | 模块名称                     | `"magicCas"`             |
+| `uriPath`     | `str` | URI路径                      | `"/api/v1/totalizators"` |
+| `value`       | `int` | 权限值（1=读，2=写，3=执行） | `2`                      |
+| `description` | `str` | 权限描述                     | `"用户管理权限"`         |
 
 ### 状态说明
+
 - `1`: 禁用状态，角色不可用
 - `2`: 启用状态，角色可用
 
 ## 依赖关系
 
 ### 核心依赖
+
 - `session.MagicSession`: HTTP 客户端会话管理
 - `cas.Cas`: CAS 认证客户端
 - `mock.common`: 模拟数据生成
 - `logging`: Python 标准日志模块
 
 ### 导入语句
+
 ```python
 import logging
 from session import session
@@ -259,13 +293,14 @@ from mock import common
 ## 使用示例
 
 ### 基本用法
+
 ```python
 from session import session
 from cas import cas
 from role.role import Role
 
 # 创建会话并登录
-server_url = 'https://autotest.local.vpc/api/v1'
+server_url = 'https://autotest.remote.vpc/api/v1'
 work_session = session.MagicSession(server_url, '')
 cas_session = cas.Cas(work_session)
 if not cas_session.login('administrator', 'administrator'):
@@ -283,17 +318,17 @@ param = mock_role_param("")
 new_role = role_app.create_role(param)
 if new_role:
     print(f"创建成功: {new_role['name']} (ID: {new_role['id']})")
-    
+
     # 查询角色
     queried_role = role_app.query_role(new_role['id'])
     print(f"查询结果: {queried_role['description']}")
-    
+
     # 更新角色
     update_param = new_role.copy()
     update_param['description'] = '更新后的描述'
     update_param['group'] = 'user'
     updated_role = role_app.update_role(update_param)
-    
+
     # 删除角色
     deleted_role = role_app.delete_role(new_role['id'])
     print(f"删除成功: {deleted_role['name']}")
@@ -301,13 +336,13 @@ if new_role:
 
 ## API 端点总结
 
-| 方法 | HTTP 方法 | 端点 | 功能 |
-|------|-----------|------|------|
-| `filter_role()` | GET | `/cas/roles/` | 过滤查询角色列表 |
-| `query_role()` | GET | `/cas/roles/{id}` | 查询单个角色 |
-| `create_role()` | POST | `/cas/roles/` | 创建角色 |
-| `update_role()` | PUT | `/cas/roles/{id}` | 更新角色 |
-| `delete_role()` | DELETE | `/cas/roles/{id}` | 删除角色 |
+| 方法            | HTTP 方法 | 端点              | 功能             |
+| --------------- | --------- | ----------------- | ---------------- |
+| `filter_role()` | GET       | `/cas/roles/`     | 过滤查询角色列表 |
+| `query_role()`  | GET       | `/cas/roles/{id}` | 查询单个角色     |
+| `create_role()` | POST      | `/cas/roles/`     | 创建角色         |
+| `update_role()` | PUT       | `/cas/roles/{id}` | 更新角色         |
+| `delete_role()` | DELETE    | `/cas/roles/{id}` | 删除角色         |
 
 ## 注意事项
 
