@@ -9,6 +9,9 @@ from .store import StoreSDK
 from .warehouse import WarehouseSDK
 from .product import ProductSDK
 from .shelf import ShelfSDK
+from .sku_info import SkuInfoSDK
+from .stockin import StockinSDK
+from .stockout import StockoutSDK
 
 # 导出所有 SDK 类
 __all__ = [
@@ -18,4 +21,7 @@ __all__ = [
     'WarehouseSDK',
     'ProductSDK',
     'ShelfSDK',
+    'SkuInfoSDK',
+    'StockinSDK',
+    'StockoutSDK',
 ]
