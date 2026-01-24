@@ -1,6 +1,7 @@
-"""Product SKU Info SDK
+"""Product Info SDK
 
 产品 SKU 信息 SDK 类，提供产品 SKU 信息实体的 CRUD 操作。
+对应实体定义中的 productInfo 实体。
 """
 
 import logging
@@ -12,7 +13,7 @@ from .base import VMISDKBase
 logger = logging.getLogger(__name__)
 
 
-class SkuInfoSDK(VMISDKBase):
+class ProductInfoSDK(VMISDKBase):
     """产品 SKU 信息 SDK 类"""
     
     def __init__(self, work_session: session.MagicSession):
@@ -23,7 +24,7 @@ class SkuInfoSDK(VMISDKBase):
         """
         super().__init__(work_session, '/vmi/product/skuInfo')
     
-    def filter_product_sku_info(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    def filter_product_info(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """过滤产品 SKU 信息
         
         Args:
@@ -34,18 +35,18 @@ class SkuInfoSDK(VMISDKBase):
         """
         return self.filter(param)
     
-    def query_product_sku_info(self, sku_info_id: int) -> Optional[Dict[str, Any]]:
+    def query_product_info(self, product_info_id: int) -> Optional[Dict[str, Any]]:
         """查询产品 SKU 信息
         
         Args:
-            sku_info_id: 产品 SKU 信息ID
+            product_info_id: 产品 SKU 信息ID
             
         Returns:
             产品 SKU 信息或 None（失败时）
         """
-        return self.query(sku_info_id)
+        return self.query(product_info_id)
     
-    def create_product_sku_info(self, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def create_product_info(self, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """创建产品 SKU 信息
         
         Args:
@@ -56,30 +57,30 @@ class SkuInfoSDK(VMISDKBase):
         """
         return self.create(param)
     
-    def update_product_sku_info(self, sku_info_id: int, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update_product_info(self, product_info_id: int, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """更新产品 SKU 信息
         
         Args:
-            sku_info_id: 产品 SKU 信息ID
+            product_info_id: 产品 SKU 信息ID
             param: 更新参数
             
         Returns:
             更新的产品 SKU 信息或 None（失败时）
         """
-        return self.update(sku_info_id, param)
+        return self.update(product_info_id, param)
     
-    def delete_product_sku_info(self, sku_info_id: int) -> Optional[Dict[str, Any]]:
+    def delete_product_info(self, product_info_id: int) -> Optional[Dict[str, Any]]:
         """删除产品 SKU 信息
         
         Args:
-            sku_info_id: 产品 SKU 信息ID
+            product_info_id: 产品 SKU 信息ID
             
         Returns:
             删除的产品 SKU 信息或 None（失败时）
         """
-        return self.delete(sku_info_id)
+        return self.delete(product_info_id)
     
-    def count_product_sku_info(self, param: Dict[str, Any] = None) -> Optional[int]:
+    def count_product_info(self, param: Dict[str, Any] = None) -> Optional[int]:
         """统计产品 SKU 信息数量
         
         Returns:
