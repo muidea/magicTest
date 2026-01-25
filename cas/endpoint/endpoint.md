@@ -309,7 +309,7 @@ from cas import cas
 from endpoint.endpoint import Endpoint
 
 # 创建会话并登录
-server_url = 'https://autotest.remote.vpc/api/v1'
+server_url = 'https://autotest.local.vpc/api/v1'
 work_session = session.MagicSession(server_url, '')
 cas_session = cas.Cas(work_session)
 if not cas_session.login('administrator', 'administrator'):

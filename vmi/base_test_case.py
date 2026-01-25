@@ -359,7 +359,7 @@ def refresh_session(cas_session, work_session):
 
 
 class BaseTestCase(unittest.TestCase):
-    _server_url = 'https://autotest.remote.vpc'
+    _server_url = 'https://autotest.local.vpc'
     _user = 'administrator'
     _password = 'administrator'
     _warehouse_count = 1

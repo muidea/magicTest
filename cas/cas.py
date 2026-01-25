@@ -14,7 +14,7 @@ class MyTestCase(unittest.TestCase):
     def setUp(self):
         warnings.simplefilter('ignore', ResourceWarning)
         self.namespace = ''
-        self.server_url = 'https://autotest.remote.vpc'
+        self.server_url = 'https://autotest.local.vpc'
 
     def test_account(self):
         self.assertEqual(True, account.main(self.server_url, self.namespace))

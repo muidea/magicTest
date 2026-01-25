@@ -99,13 +99,13 @@ from cas import cas
 from file.file.file import Client
 
 # 创建会话并登录
-work_session = session.MagicSession('https://panel.remote.vpc', 'panel')
+work_session = session.MagicSession('https://panel.local.vpc', 'panel')
 cas_session = cas.Cas(work_session)
 if cas_session.login('administrator', 'administrator'):
     work_session.bind_token(cas_session.get_session_token())
 
     # 创建文件客户端
-    client = Client('https://panel.remote.vpc', work_session)
+    client = Client('https://panel.local.vpc', work_session)
     client.bind_source('test_source')
     client.bind_scope('test_scope')
 ```

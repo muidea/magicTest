@@ -1,3 +1,3 @@
 from product import product
 
-product.main('https://autotest.remote.vpc/api/v1', '')
+product.main('https://autotest.local.vpc/api/v1', '')

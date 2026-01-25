@@ -1,5 +1,5 @@
 from warehouse import warehouse
 from warehouse import shelf
 
-warehouse.main('https://autotest.remote.vpc', '')
-shelf.main('https://autotest.remote.vpc', '')
+warehouse.main('https://autotest.local.vpc', '')
+shelf.main('https://autotest.local.vpc', '')
