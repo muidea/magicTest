@@ -1,4 +1,61 @@
-"""Partner 测试用例"""
+"""
+Partner 测试用例
+
+基于 magicProjectRepo/vmi/VMI实体定义和使用说明.md:62-77 中的 partner 实体定义编写。
+使用 PartnerSDK 进行测试，避免直接使用 MagicEntity。
+
+实体字段定义：
+- id: int64 (主键) - 唯一标识，由系统自动生成
+- code: string (会员码) - 唯一，由系统根据会员码生成规则自动生成
+- name: string (姓名) - 必选
+- telephone: string (电话) - 可选
+- wechat: string (微信) - 可选
+- description: string (描述) - 可选
+- referer: partner* (推荐人) - 可选，自引用关系
+- status: status* (状态) - 必选，由平台进行管理，允许进行更新
+- creater: int64 (创建者) - 由系统自动生成
+- createTime: int64 (创建时间) - 由系统自动生成
+- modifyTime: int64 (修改时间) - 由系统自动更新
+- namespace: string (命名空间) - 由系统自动生成
+
+包含的测试用例（共14个）：
+
+1. 基础CURD测试：
+   - test_create_partner: 测试创建合作伙伴，验证所有字段完整性
+   - test_query_partner: 测试查询合作伙伴，验证数据一致性
+   - test_update_partner: 测试更新合作伙伴，验证字段更新功能
+   - test_delete_partner: 测试删除合作伙伴，验证删除操作
+
+2. 边界测试：
+   - test_create_partner_with_long_name: 测试创建超长名称合作伙伴
+
+3. 异常测试：
+   - test_create_duplicate_partner: 测试创建重复合作伙伴名（系统可能允许重复）
+   - test_query_nonexistent_partner: 测试查询不存在的合作伙伴
+   - test_delete_nonexistent_partner: 测试删除不存在的合作伙伴
+
+4. 状态验证：
+   - test_partner_status_validation: 测试合作伙伴状态字段验证
+
+5. 推荐人关系测试：
+   - test_create_partner_with_referer: 测试创建带推荐人的合作伙伴
+   - test_update_partner_with_referer: 测试更新合作伙伴的推荐人
+   - test_query_partner_with_referer_details: 测试查询带推荐人详情的合作伙伴
+
+6. 系统字段测试：
+   - test_auto_generated_fields: 测试系统自动生成字段（id、code、creater、createTime、namespace）
+   - test_modify_time_auto_update: 测试修改时间字段的自动更新逻辑
+
+测试特性：
+- 使用 PartnerSDK 进行所有操作
+- 自动清理测试数据（tearDown 方法）
+- 支持系统实际行为（如允许重复名称、灵活的referer字段处理）
+- 验证所有实体定义字段
+- 覆盖完整的业务规则
+
+版本：1.0
+最后更新：2026-01-25
+"""
 
 import unittest
 import warnings
@@ -29,6 +86,115 @@ class PartnerTestCase(unittest.TestCase):
             raise Exception('CAS登录失败')
         cls.work_session.bind_token(cls.cas_session.get_session_token())
         cls.partner_sdk = PartnerSDK(cls.work_session)
+        
+        # 类级别的数据清理记录
+        cls._class_cleanup_ids = []
+        
+        # 记录测试开始前的初始状态（可选）
+        cls._initial_partner_count = cls._get_partner_count()
+        logger.info(f"测试开始前合作伙伴数量: {cls._initial_partner_count}")
+    
+    @classmethod
+    def _get_partner_count(cls):
+        """获取当前合作伙伴数量"""
+        try:
+            # 尝试使用count方法
+            count = cls.partner_sdk.count_partner()
+            if count is not None:
+                return count
+        except Exception as e:
+            logger.warning(f"获取合作伙伴数量失败: {e}")
+        
+        # 如果count方法不可用，尝试通过过滤空条件获取列表
+        try:
+            partners = cls.partner_sdk.filter_partner({})
+            if partners is not None:
+                return len(partners)
+        except Exception as e:
+            logger.warning(f"通过过滤获取合作伙伴数量失败: {e}")
+        
+        return 0
+    
+    @classmethod
+    def tearDownClass(cls):
+        """测试类结束后的清理"""
+        # 记录类级别清理列表的状态
+        original_count = len(cls._class_cleanup_ids)
+        logger.info(f"测试类清理开始: 需要清理 {original_count} 个合作伙伴: {cls._class_cleanup_ids}")
+        
+        # 清理类级别记录的所有数据
+        cls._cleanup_partners(cls._class_cleanup_ids)
+        
+        # 验证数据清理
+        final_partner_count = cls._get_partner_count()
+        logger.info(f"测试类清理完成: 尝试清理 {original_count} 个合作伙伴，最终合作伙伴数量: {final_partner_count}")
+        
+        # 检查是否有数据残留（可选，根据业务需求）
+        if hasattr(cls, '_initial_partner_count'):
+            expected_count = cls._initial_partner_count
+            if final_partner_count > expected_count:
+                logger.warning(f"可能存在数据残留: 期望数量 {expected_count}, 实际数量 {final_partner_count}")
+                # 尝试查找残留的合作伙伴
+                cls._find_and_log_remaining_partners(expected_count)
+            else:
+                logger.info(f"数据清理验证通过: 最终数量 {final_partner_count} <= 初始数量 {expected_count}")
+    
+    @classmethod
+    def _find_and_log_remaining_partners(cls, expected_count):
+        """查找并记录残留的合作伙伴"""
+        try:
+            # 获取所有合作伙伴
+            all_partners = cls.partner_sdk.filter_partner({})
+            if all_partners is not None:
+                current_count = len(all_partners)
+                if current_count > expected_count:
+                    logger.warning(f"发现 {current_count - expected_count} 个残留合作伙伴:")
+                    for partner in all_partners:
+                        if 'id' in partner and 'name' in partner:
+                            logger.warning(f"  ID: {partner['id']}, 名称: {partner['name']}, 电话: {partner.get('telephone', 'N/A')}")
+        except Exception as e:
+            logger.warning(f"查找残留合作伙伴失败: {e}")
+    
+    @classmethod
+    def _cleanup_partners(cls, partner_ids):
+        """清理指定的合作伙伴列表
+        
+        注意：系统支持删除操作，如果删除失败应该记录错误。
+        在测试类级别的清理中，我们尝试删除但不抛出异常，
+        因为测试方法应该已经验证了删除操作。
+        """
+        if not partner_ids:
+            logger.debug("清理合作伙伴列表为空，无需清理")
+            return
+        
+        logger.info(f"开始清理 {len(partner_ids)} 个合作伙伴: {partner_ids}")
+        deleted_count = 0
+        failed_ids = []
+        
+        for partner_id in partner_ids:
+            try:
+                # 系统应该支持删除操作
+                logger.debug(f"尝试删除合作伙伴 ID: {partner_id}")
+                result = cls.partner_sdk.delete_partner(partner_id)
+                
+                if result is not None:
+                    deleted_count += 1
+                    logger.debug(f"成功删除合作伙伴 {partner_id}")
+                else:
+                    # 删除返回None，表示删除失败
+                    error_msg = f"清理合作伙伴 {partner_id} 返回None，系统应该支持删除操作"
+                    logger.error(error_msg)
+                    failed_ids.append(partner_id)
+            except Exception as e:
+                error_msg = f"清理合作伙伴 {partner_id} 失败: {e}"
+                logger.error(error_msg)
+                failed_ids.append(partner_id)
+        
+        if deleted_count > 0:
+            logger.info(f"成功清理 {deleted_count} 个合作伙伴")
+        
+        if failed_ids:
+            logger.error(f"清理失败的合作伙伴ID: {failed_ids}")
     
     def setUp(self):
         """每个测试用例前的准备"""
@@ -37,14 +203,73 @@ class PartnerTestCase(unittest.TestCase):
     
     def tearDown(self):
         """每个测试用例后的清理"""
-        # 清理所有测试创建的合作伙伴
-        for partner_id in self.created_partner_ids:
-            try:
-                self.partner_sdk.delete_partner(partner_id)
-            except Exception as e:
-                logger.warning(f"清理合作伙伴 {partner_id} 失败: {e}")
+        # 将本测试创建的合作伙伴ID添加到类级别清理列表
+        if hasattr(self.__class__, '_class_cleanup_ids'):
+            self.__class__._class_cleanup_ids.extend(self.created_partner_ids)
+        
+        # 尝试立即清理本测试创建的数据
+        self._cleanup_test_partners()
         
         self.created_partner_ids.clear()
+    
+    def _cleanup_test_partners(self):
+        """清理本测试创建的合作伙伴
+        
+        注意：系统支持删除操作，如果删除失败应该抛出异常，
+        以便测试失败并排查server错误。
+        """
+        if not self.created_partner_ids:
+            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的合作伙伴")
+            return
+        
+        logger.info(f"测试 {self._testMethodName}: 开始清理 {len(self.created_partner_ids)} 个合作伙伴: {self.created_partner_ids}")
+        deleted_count = 0
+        failed_ids = []
+        
+        for partner_id in self.created_partner_ids:
+            try:
+                # 系统应该支持删除操作
+                logger.debug(f"测试 {self._testMethodName}: 尝试删除合作伙伴 ID: {partner_id}")
+                result = self.partner_sdk.delete_partner(partner_id)
+                
+                if result is not None:
+                    deleted_count += 1
+                    logger.debug(f"测试 {self._testMethodName}: 成功删除合作伙伴 {partner_id}")
+                    # 从类级别清理列表中移除（如果存在）
+                    if (hasattr(self.__class__, '_class_cleanup_ids') and
+                        partner_id in self.__class__._class_cleanup_ids):
+                        self.__class__._class_cleanup_ids.remove(partner_id)
+                        logger.debug(f"测试 {self._testMethodName}: 从类级别清理列表中移除合作伙伴 {partner_id}")
+                else:
+                    # 删除返回None，表示删除失败
+                    error_msg = f"测试 {self._testMethodName}: 删除合作伙伴 {partner_id} 返回None，系统应该支持删除操作"
+                    logger.error(error_msg)
+                    failed_ids.append(partner_id)
+                    # 不抛出异常，继续尝试清理其他合作伙伴
+                    # 但记录严重错误
+                    
+            except Exception as e:
+                error_msg = f"测试 {self._testMethodName}: 删除合作伙伴 {partner_id} 失败: {e}"
+                logger.error(error_msg)
+                failed_ids.append(partner_id)
+                # 不抛出异常，继续尝试清理其他合作伙伴
+        
+        if deleted_count > 0:
+            logger.info(f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个合作伙伴")
+        
+        if failed_ids:
+            # 记录错误但不抛出异常，因为这是在tearDown中
+            # 实际的测试方法应该已经验证了删除操作
+            logger.error(f"测试 {self._testMethodName}: 清理失败的合作伙伴ID: {failed_ids}")
+            # 这里可以选择抛出异常让测试失败
+            # 但考虑到这是清理阶段，可能已经过了测试验证
+            # 我们只记录错误，不中断测试
+    
+    def _record_partner_for_cleanup(self, partner_id):
+        """记录合作伙伴ID以便清理"""
+        if partner_id is not None:
+            self.created_partner_ids.append(partner_id)
+            logger.debug(f"记录合作伙伴 {partner_id} 到清理列表 (测试: {self._testMethodName})")
     
     def mock_partner_param(self):
         """模拟合作伙伴参数"""
@@ -98,7 +323,7 @@ class PartnerTestCase(unittest.TestCase):
         
         # 记录创建的合作伙伴ID以便清理
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
     
     def test_query_partner(self):
         """测试查询合作伙伴"""
@@ -108,7 +333,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 查询合作伙伴
         queried_partner = self.partner_sdk.query_partner(new_partner['id'])
@@ -124,7 +349,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 更新合作伙伴
         update_param = new_partner.copy()
@@ -135,7 +360,11 @@ class PartnerTestCase(unittest.TestCase):
         self.assertEqual(updated_partner['description'], "更新后的描述", "描述更新失败")
     
     def test_delete_partner(self):
-        """测试删除合作伙伴"""
+        """测试删除合作伙伴
+        
+        注意：系统支持删除操作，如果删除失败应该让测试失败，
+        以便排查server错误。
+        """
         # 先创建合作伙伴
         partner_param = self.mock_partner_param()
         new_partner = self.partner_sdk.create_partner(partner_param)
@@ -143,27 +372,23 @@ class PartnerTestCase(unittest.TestCase):
         
         # 记录ID以便在tearDown中清理（如果删除失败）
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
-        # 尝试删除合作伙伴
+        # 删除合作伙伴 - 系统应该支持删除操作
         deleted_partner = self.partner_sdk.delete_partner(new_partner['id'])
         
-        # 根据系统实现，删除可能返回被删除的对象或None
-        # 如果删除成功，从清理列表中移除
-        if deleted_partner is not None:
-            self.assertEqual(deleted_partner['id'], new_partner['id'], "删除的合作伙伴ID不匹配")
-            # 从清理列表中移除，因为已经删除
-            if new_partner['id'] in self.created_partner_ids:
-                self.created_partner_ids.remove(new_partner['id'])
-            
-            # 验证合作伙伴已被删除（查询应该失败）
-            queried_partner = self.partner_sdk.query_partner(new_partner['id'])
-            # 查询可能返回None或空数据，取决于系统实现
-            # 不强制要求查询失败，因为某些系统可能标记删除而不是物理删除
-        else:
-            # 删除返回None，可能是系统不支持删除或删除失败
-            # 这种情况下，合作伙伴仍然存在，会在tearDown中清理
-            logger.warning("删除合作伙伴返回None，可能系统不支持删除操作")
+        # 删除应该成功，返回被删除的对象
+        self.assertIsNotNone(deleted_partner, "删除合作伙伴失败，返回None。系统应该支持删除操作")
+        self.assertEqual(deleted_partner['id'], new_partner['id'], "删除的合作伙伴ID不匹配")
+        
+        # 从清理列表中移除，因为已经成功删除
+        if new_partner['id'] in self.created_partner_ids:
+            self.created_partner_ids.remove(new_partner['id'])
+        
+        # 验证合作伙伴已被删除（查询应该失败）
+        queried_partner = self.partner_sdk.query_partner(new_partner['id'])
+        # 查询应该返回None，因为合作伙伴已被删除
+        self.assertIsNone(queried_partner, "删除后查询合作伙伴应该返回None")
     
     def test_create_partner_with_long_name(self):
         """测试创建超长名称合作伙伴（边界测试）"""
@@ -175,7 +400,7 @@ class PartnerTestCase(unittest.TestCase):
             self.assertIsInstance(new_partner['name'], str, "合作伙伴名不是字符串")
             # 记录创建的合作伙伴ID以便清理
             if 'id' in new_partner:
-                self.created_partner_ids.append(new_partner['id'])
+                self._record_partner_for_cleanup(new_partner['id'])
     
     def test_create_duplicate_partner(self):
         """测试创建重复合作伙伴名（系统可能允许重复）"""
@@ -186,7 +411,7 @@ class PartnerTestCase(unittest.TestCase):
         
         # 记录第一次创建的合作伙伴ID以便清理
         if first_partner and 'id' in first_partner:
-            self.created_partner_ids.append(first_partner['id'])
+            self._record_partner_for_cleanup(first_partner['id'])
         
         # 第二次创建相同合作伙伴名
         second_partner = self.partner_sdk.create_partner(partner_param)
@@ -195,7 +420,7 @@ class PartnerTestCase(unittest.TestCase):
         if second_partner is not None:
             # 如果创建成功，记录ID以便清理
             if 'id' in second_partner:
-                self.created_partner_ids.append(second_partner['id'])
+                self._record_partner_for_cleanup(second_partner['id'])
             # 验证返回的数据结构
             self.assertIn('id', second_partner, "第二次创建的合作伙伴缺少ID字段")
             self.assertIn('name', second_partner, "第二次创建的合作伙伴缺少name字段")
@@ -223,7 +448,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 验证状态字段
         self.assertIn('status', new_partner, "合作伙伴缺少状态字段")
@@ -238,7 +463,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(referer, "创建推荐人失败")
         
         if referer and 'id' in referer:
-            self.created_partner_ids.append(referer['id'])
+            self._record_partner_for_cleanup(referer['id'])
         
         # 创建带推荐人的合作伙伴
         partner_param = self.mock_partner_param_with_referer(referer['id'])
@@ -246,7 +471,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建带推荐人的合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 验证推荐人字段
         # 系统可能以不同方式返回referer信息
@@ -276,7 +501,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 创建推荐人
         referer_param = self.mock_partner_param()
@@ -284,7 +509,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(referer, "创建推荐人失败")
         
         if referer and 'id' in referer:
-            self.created_partner_ids.append(referer['id'])
+            self._record_partner_for_cleanup(referer['id'])
         
         # 更新合作伙伴添加推荐人
         update_param = new_partner.copy()
@@ -320,7 +545,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(referer, "创建推荐人失败")
         
         if referer and 'id' in referer:
-            self.created_partner_ids.append(referer['id'])
+            self._record_partner_for_cleanup(referer['id'])
         
         # 创建带推荐人的合作伙伴
         partner_param = self.mock_partner_param_with_referer(referer['id'])
@@ -328,7 +553,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建带推荐人的合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 查询合作伙伴
         queried_partner = self.partner_sdk.query_partner(new_partner['id'])
@@ -365,7 +590,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 验证所有系统自动生成字段
         auto_generated_fields = ['id', 'code', 'creater', 'createTime', 'namespace']
@@ -396,7 +621,7 @@ class PartnerTestCase(unittest.TestCase):
         self.assertIsNotNone(new_partner, "创建合作伙伴失败")
         
         if new_partner and 'id' in new_partner:
-            self.created_partner_ids.append(new_partner['id'])
+            self._record_partner_for_cleanup(new_partner['id'])
         
         # 记录初始创建时间和修改时间
         initial_create_time = new_partner.get('createTime')
