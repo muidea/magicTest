@@ -906,24 +906,6 @@ class BaseTestCase(unittest.TestCase):
             logging.warning(f"清理出库单时发生异常: {e}")
         logging.info(f"出库单清理完成，共清理 {stockout_cleaned} 个出库单")
         
-        # 清理SKU（如果需要）
-        #try:
-        #    sku_count = 0
-        #    while True:
-        #        sku_list = filter_product_sku(self._work_session, 0, 200)
-        #        if not sku_list or sku_count > 1000:  # 限制最多清理1000个SKU
-        #            break
-        #        for sku in sku_list[:10]:  # 每次只清理10个
-        #            try:
-        #                destroy_product_sku(self._work_session, sku)
-        #                sku_count += 1
-        #            except Exception as e:
-        #                logging.warning(f"清理SKU时出错: {e}")
-        #           time.sleep(self._interval_val)
-        #        if sku_count % 100 == 0:
-        #            logging.info(f"已清理 {sku_count} 个SKU...")
-        #except Exception as e:
-        #    logging.warning(f"清理SKU时发生异常: {e}")
         logging.info("测试数据清理完成")
 
     def test_something(self):
