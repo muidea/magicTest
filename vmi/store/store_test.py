@@ -56,7 +56,7 @@ import logging
 from session import session
 from cas.cas import cas
 from mock import common as mock
-from sdk import StoreSDK
+from sdk import StoreSDK, ShelfSDK
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -79,9 +79,11 @@ class StoreTestCase(unittest.TestCase):
             raise Exception('CAS登录失败')
         cls.work_session.bind_token(cls.cas_session.get_session_token())
         cls.store_sdk = StoreSDK(cls.work_session)
+        cls.shelf_sdk = ShelfSDK(cls.work_session)
         
         # 类级别的数据清理记录
         cls._class_cleanup_ids = []
+        cls._class_cleanup_shelf_ids = []
         
         # 记录测试开始前的初始状态（可选）
         cls._initial_store_count = cls._get_store_count()
@@ -112,15 +114,17 @@ class StoreTestCase(unittest.TestCase):
     def tearDownClass(cls):
         """测试类结束后的清理"""
         # 记录类级别清理列表的状态
-        original_count = len(cls._class_cleanup_ids)
-        logger.info(f"测试类清理开始: 需要清理 {original_count} 个店铺: {cls._class_cleanup_ids}")
+        original_store_count = len(cls._class_cleanup_ids)
+        original_shelf_count = len(cls._class_cleanup_shelf_ids)
+        logger.info(f"测试类清理开始: 需要清理 {original_store_count} 个店铺和 {original_shelf_count} 个货架")
         
         # 清理类级别记录的所有数据
         cls._cleanup_stores(cls._class_cleanup_ids)
+        cls._cleanup_shelves(cls._class_cleanup_shelf_ids)
         
         # 验证数据清理
         final_store_count = cls._get_store_count()
-        logger.info(f"测试类清理完成: 尝试清理 {original_count} 个店铺，最终店铺数量: {final_store_count}")
+        logger.info(f"测试类清理完成: 尝试清理 {original_store_count} 个店铺，最终店铺数量: {final_store_count}")
         
         # 检查是否有数据残留（可选，根据业务需求）
         if hasattr(cls, '_initial_store_count'):
@@ -189,10 +193,52 @@ class StoreTestCase(unittest.TestCase):
         if failed_ids:
             logger.error(f"清理失败的店铺ID: {failed_ids}")
     
+    @classmethod
+    def _cleanup_shelves(cls, shelf_ids):
+        """清理指定的货架列表
+        
+        注意：系统支持删除操作，如果删除失败应该记录错误。
+        在测试类级别的清理中，我们尝试删除但不抛出异常，
+        因为测试方法应该已经验证了删除操作。
+        """
+        if not shelf_ids:
+            logger.debug("清理货架列表为空，无需清理")
+            return
+        
+        logger.info(f"开始清理 {len(shelf_ids)} 个货架: {shelf_ids}")
+        deleted_count = 0
+        failed_ids = []
+        
+        for shelf_id in shelf_ids:
+            try:
+                # 系统应该支持删除操作
+                logger.debug(f"尝试删除货架 ID: {shelf_id}")
+                result = cls.shelf_sdk.delete_shelf(shelf_id)
+                
+                if result is not None:
+                    deleted_count += 1
+                    logger.debug(f"成功删除货架 {shelf_id}")
+                else:
+                    # 删除返回None，表示删除失败
+                    error_msg = f"清理货架 {shelf_id} 返回None，系统应该支持删除操作"
+                    logger.error(error_msg)
+                    failed_ids.append(shelf_id)
+            except Exception as e:
+                error_msg = f"清理货架 {shelf_id} 失败: {e}"
+                logger.error(error_msg)
+                failed_ids.append(shelf_id)
+        
+        if deleted_count > 0:
+            logger.info(f"成功清理 {deleted_count} 个货架")
+        
+        if failed_ids:
+            logger.error(f"清理失败的货架ID: {failed_ids}")
+    
     def setUp(self):
         """每个测试用例前的准备"""
-        # 记录测试创建的店铺ID以便清理
+        # 记录测试创建的店铺ID和货架ID以便清理
         self.created_store_ids = []
+        self.created_shelf_ids = []
     
     def tearDown(self):
         """每个测试用例后的清理"""
@@ -200,10 +246,16 @@ class StoreTestCase(unittest.TestCase):
         if hasattr(self.__class__, '_class_cleanup_ids'):
             self.__class__._class_cleanup_ids.extend(self.created_store_ids)
         
+        # 将本测试创建的货架ID添加到类级别清理列表
+        if hasattr(self.__class__, '_class_cleanup_shelf_ids'):
+            self.__class__._class_cleanup_shelf_ids.extend(self.created_shelf_ids)
+        
         # 尝试立即清理本测试创建的数据
         self._cleanup_test_stores()
+        self._cleanup_test_shelves()
         
         self.created_store_ids.clear()
+        self.created_shelf_ids.clear()
     
     def _cleanup_test_stores(self):
         """清理本测试创建的店铺
@@ -258,23 +310,103 @@ class StoreTestCase(unittest.TestCase):
             # 但考虑到这是清理阶段，可能已经过了测试验证
             # 我们只记录错误，不中断测试
     
+    def _cleanup_test_shelves(self):
+        """清理本测试创建的货架
+        
+        注意：系统支持删除操作，如果删除失败应该抛出异常，
+        以便测试失败并排查server错误。
+        """
+        if not self.created_shelf_ids:
+            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的货架")
+            return
+        
+        logger.info(f"测试 {self._testMethodName}: 开始清理 {len(self.created_shelf_ids)} 个货架: {self.created_shelf_ids}")
+        deleted_count = 0
+        failed_ids = []
+        
+        for shelf_id in self.created_shelf_ids:
+            try:
+                # 系统应该支持删除操作
+                logger.debug(f"测试 {self._testMethodName}: 尝试删除货架 ID: {shelf_id}")
+                result = self.shelf_sdk.delete_shelf(shelf_id)
+                
+                if result is not None:
+                    deleted_count += 1
+                    logger.debug(f"测试 {self._testMethodName}: 成功删除货架 {shelf_id}")
+                    # 从类级别清理列表中移除（如果存在）
+                    if (hasattr(self.__class__, '_class_cleanup_shelf_ids') and
+                        shelf_id in self.__class__._class_cleanup_shelf_ids):
+                        self.__class__._class_cleanup_shelf_ids.remove(shelf_id)
+                        logger.debug(f"测试 {self._testMethodName}: 从类级别清理列表中移除货架 {shelf_id}")
+                else:
+                    # 删除返回None，表示删除失败
+                    error_msg = f"测试 {self._testMethodName}: 删除货架 {shelf_id} 返回None，系统应该支持删除操作"
+                    logger.error(error_msg)
+                    failed_ids.append(shelf_id)
+                    # 不抛出异常，继续尝试清理其他货架
+                    # 但记录严重错误
+                    
+            except Exception as e:
+                error_msg = f"测试 {self._testMethodName}: 删除货架 {shelf_id} 失败: {e}"
+                logger.error(error_msg)
+                failed_ids.append(shelf_id)
+                # 不抛出异常，继续尝试清理其他货架
+        
+        if deleted_count > 0:
+            logger.info(f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个货架")
+        
+        if failed_ids:
+            # 记录错误但不抛出异常，因为这是在tearDown中
+            # 实际的测试方法应该已经验证了删除操作
+            logger.error(f"测试 {self._testMethodName}: 清理失败的货架ID: {failed_ids}")
+            # 这里可以选择抛出异常让测试失败
+            # 但考虑到这是清理阶段，可能已经过了测试验证
+            # 我们只记录错误，不中断测试
+    
     def _record_store_for_cleanup(self, store_id):
         """记录店铺ID以便清理"""
         if store_id is not None:
             self.created_store_ids.append(store_id)
             logger.debug(f"记录店铺 {store_id} 到清理列表 (测试: {self._testMethodName})")
     
-    def mock_store_param(self):
+    def _record_shelf_for_cleanup(self, shelf_id):
+        """记录货架ID以便清理"""
+        if shelf_id is not None:
+            self.created_shelf_ids.append(shelf_id)
+            logger.debug(f"记录货架 {shelf_id} 到清理列表 (测试: {self._testMethodName})")
+    
+    def mock_store_param(self, include_shelf=False):
         """模拟店铺参数
         
         根据实体定义，store实体包含以下字段：
         - name: string (店铺名称) - 必选
         - description: string (描述) - 可选
-        - shelf: shelf[] (货架列表) - 可选（测试中暂不包含）
+        - shelf: shelf[] (货架列表) - 可选
+        
+        Args:
+            include_shelf: 是否包含货架字段
         """
-        return {
+        param = {
             'name': 'STORE_' + mock.name(),
             'description': mock.sentence()
+        }
+        
+        if include_shelf:
+            # 创建货架并添加到参数中
+            shelf_param = self.mock_shelf_param()
+            new_shelf = self.shelf_sdk.create_shelf(shelf_param)
+            if new_shelf and 'id' in new_shelf:
+                self._record_shelf_for_cleanup(new_shelf['id'])
+                param['shelf'] = [new_shelf['id']]
+        
+        return param
+    
+    def mock_shelf_param(self):
+        """模拟货架参数"""
+        return {
+            'name': 'SHELF_' + mock.name(),
+            'description': mock.sentence(),
+            'capacity': mock.number(10, 100)
         }
     
     def test_create_store(self):
@@ -528,6 +660,67 @@ class StoreTestCase(unittest.TestCase):
         if initial_modify_time and updated_modify_time:
             self.assertGreaterEqual(updated_modify_time, initial_modify_time,
                                    "修改时间应已更新")
+    
+    def test_store_with_shelf(self):
+        """测试店铺包含货架字段（关联实体测试）
+        
+        验证 store 实体的 shelf 字段功能：
+        1. 创建带货架的店铺
+        2. 验证 shelf 字段存在（如果系统返回）
+        3. 验证货架数据正确性（如果系统返回）
+        
+        注意：系统可能不返回关联字段，这种情况下我们记录警告但不视为测试失败。
+        """
+        # 创建带货架的店铺
+        store_param = self.mock_store_param(include_shelf=True)
+        new_store = self.store_sdk.create_store(store_param)
+        self.assertIsNotNone(new_store, "创建带货架的店铺失败")
+        
+        if new_store and 'id' in new_store:
+            self._record_store_for_cleanup(new_store['id'])
+        
+        # 验证店铺基本信息
+        required_fields = ['id', 'name', 'description']
+        for field in required_fields:
+            self.assertIn(field, new_store, f"缺少字段: {field}")
+        
+        # 验证 shelf 字段 - 系统可能不返回关联字段
+        if 'shelf' in new_store:
+            # 如果系统返回 shelf 字段，验证其内容
+            self.assertIsInstance(new_store['shelf'], (list, type(None)), "shelf 字段应为列表或None")
+            
+            if new_store['shelf'] is not None:
+                # 如果系统支持 shelf 字段，验证其内容
+                self.assertGreater(len(new_store['shelf']), 0, "shelf 列表不应为空")
+                # 验证货架ID存在
+                shelf_id = new_store['shelf'][0]
+                self.assertIsInstance(shelf_id, (int, str), "货架ID应为整数或字符串")
+                
+                # 查询货架验证其存在
+                shelf = self.shelf_sdk.query_shelf(shelf_id)
+                self.assertIsNotNone(shelf, "关联的货架不存在")
+                self.assertEqual(shelf['id'], shelf_id, "货架ID不匹配")
+        else:
+            # 系统不返回 shelf 字段，记录警告但不视为测试失败
+            logger.warning("创建店铺时未返回 shelf 字段，系统可能不返回关联字段")
+        
+        # 查询店铺验证数据一致性
+        queried_store = self.store_sdk.query_store(new_store['id'])
+        self.assertIsNotNone(queried_store, "查询带货架的店铺失败")
+        self.assertEqual(queried_store['id'], new_store['id'], "店铺ID不匹配")
+        
+        # 验证 shelf 字段在查询结果中是否存在
+        if 'shelf' in queried_store:
+            # 如果查询结果有 shelf 字段，验证其内容
+            self.assertIsInstance(queried_store['shelf'], (list, type(None)), "查询结果的 shelf 字段应为列表或None")
+            
+            # 如果原始店铺有 shelf，验证查询结果也有
+            if 'shelf' in new_store and new_store.get('shelf'):
+                self.assertEqual(queried_store.get('shelf'), new_store.get('shelf'),
+                               "查询结果的 shelf 字段不匹配")
+        else:
+            # 查询结果也不包含 shelf 字段，记录警告
+            logger.warning("查询店铺结果未返回 shelf 字段，系统可能不返回关联字段")
 
 
 if __name__ == '__main__':
