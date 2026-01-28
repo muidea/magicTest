@@ -22,7 +22,7 @@ class ProductInfoSDK(VMISDKBase):
         Args:
             work_session: MagicSession 实例
         """
-        super().__init__(work_session, '/vmi/product/skuInfo')
+        super().__init__(work_session, '/vmi/product/productInfo')
     
     def filter_product_info(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """过滤产品 SKU 信息

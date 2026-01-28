@@ -172,7 +172,7 @@ import threading
 import concurrent.futures
 from typing import List, Dict, Any
 
-from cas.cas import cas
+from cas.cas import Cas
 from session import session, common
 from .sdk import WarehouseSDK, ShelfSDK, StoreSDK, ProductSDK
 
@@ -385,7 +385,7 @@ def filter_product(work_session, page_idx, page_size):
 
 def filter_product_sku(work_session, page_idx, page_size):
     """过滤产品 SKU（暂未提供 SDK，保留原有实现）"""
-    product_sku_instance = common.MagicEntity("/api/v1/vmi/product/productInfo", work_session)
+    product_sku_instance = common.MagicEntity("/api/v1/vmi/product/skuInfo", work_session)
     sku_list = product_sku_instance.filter({
         'pageIndex': page_idx,
         'pageSize': page_size
@@ -647,7 +647,7 @@ class BaseTestCase(unittest.TestCase):
         self._product_list.clear()
         
         work_session = session.MagicSession('{0}'.format(self._server_url), '')
-        cas_session = cas.Cas(work_session)
+        cas_session = Cas(work_session)
         if not cas_session.login(self._user, self._password):
             print('cas failed')
             return False
@@ -1393,7 +1393,7 @@ class BaseTestCase(unittest.TestCase):
         """
         created_products = []
         work_session = session.MagicSession('{0}'.format(self._server_url), '')
-        cas_session = cas.Cas(work_session)
+        cas_session = Cas(work_session)
         if not cas_session.login(self._user, self._password):
             logging.error(f"线程{thread_id}: CAS登录失败")
             return created_products
@@ -1467,7 +1467,7 @@ class BaseTestCase(unittest.TestCase):
             return 0
             
         work_session = session.MagicSession('{0}'.format(self._server_url), '')
-        cas_session = cas.Cas(work_session)
+        cas_session = Cas(work_session)
         if not cas_session.login(self._user, self._password):
             logging.error(f"线程{thread_id}: CAS登录失败")
             return 0
@@ -1541,7 +1541,7 @@ class BaseTestCase(unittest.TestCase):
             return 0
             
         work_session = session.MagicSession('{0}'.format(self._server_url), '')
-        cas_session = cas.Cas(work_session)
+        cas_session = Cas(work_session)
         if not cas_session.login(self._user, self._password):
             logging.error(f"线程{thread_id}: CAS登录失败")
             return 0
@@ -1838,7 +1838,7 @@ class BaseTestCase(unittest.TestCase):
             try:
                 # 创建独立会话
                 work_session = session.MagicSession('{0}'.format(self._server_url), '')
-                cas_session = cas.Cas(work_session)
+                cas_session = Cas(work_session)
                 if not cas_session.login(self._user, self._password):
                     results['errors'].append("CAS登录失败")
                     return results

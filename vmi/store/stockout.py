@@ -1,6 +1,6 @@
 from mock import common as mock
 from session import session, common
-from cas.cas import cas
+from cas.cas import Cas
 
 
 """
@@ -94,7 +94,7 @@ def setup_data(session):
         print('create new shelf failed')
         return
 
-    product_sku_info_instance = common.MagicEntity("/vmi/product/skuInfo", session)
+    product_sku_info_instance = common.MagicEntity("/vmi/product/productInfo", session)
     product_sku_info_param = mock_product_sku_info_param()
     new_product_sku = product_sku_info_instance.insert(product_sku_info_param)
     if not new_product_sku:
@@ -131,7 +131,7 @@ def teardown_data(session, warehouse, shelf, product, store):
 def main(server_url, namespace):
     """main"""
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
-    cas_session = cas.Cas(work_session)
+    cas_session = Cas(work_session)
     if not cas_session.login('administrator', 'administrator'):
         print('cas failed')
         return False

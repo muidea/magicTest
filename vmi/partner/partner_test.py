@@ -61,7 +61,7 @@ import unittest
 import warnings
 import logging
 from session import session
-from cas.cas import cas
+from cas.cas import Cas
 from mock import common as mock
 from sdk import PartnerSDK
 
@@ -80,7 +80,7 @@ class PartnerTestCase(unittest.TestCase):
         """测试类初始化"""
         warnings.simplefilter('ignore', ResourceWarning)
         cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = cas.Cas(cls.work_session)
+        cls.cas_session = Cas(cls.work_session)
         if not cls.cas_session.login('administrator', 'administrator'):
             logger.error('CAS登录失败')
             raise Exception('CAS登录失败')

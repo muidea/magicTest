@@ -1,6 +1,6 @@
 from mock import common as mock
 from session import session, common
-from cas.cas import cas
+from cas.cas import Cas
 from warehouse import warehouse
 
 
@@ -42,7 +42,7 @@ def teardown_data(session, warehouse):
 def main(server_url, namespace):
     """main"""
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
-    cas_session = cas.Cas(work_session)
+    cas_session = Cas(work_session)
     if not cas_session.login('administrator', 'administrator'):
         print('cas failed')
         return

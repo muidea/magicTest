@@ -58,9 +58,9 @@ import unittest
 import warnings
 import logging
 from session import session
-from cas.cas import cas
+from cas.cas import Cas
 from mock import common as mock
-from sdk import StockinSDK, StoreSDK, GoodsInfoSDK, StatusSDK, ProductInfoSDK, ShelfSDK
+from sdk import StockinSDK, StoreSDK, GoodsInfoSDK, StatusSDK, ProductSDK, ProductInfoSDK, ShelfSDK
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class StockinTestCase(unittest.TestCase):
         """测试类初始化"""
         warnings.simplefilter('ignore', ResourceWarning)
         cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = cas.Cas(cls.work_session)
+        cls.cas_session = Cas(cls.work_session)
         if not cls.cas_session.login('administrator', 'administrator'):
             logger.error('CAS登录失败')
             raise Exception('CAS登录失败')
@@ -86,6 +86,7 @@ class StockinTestCase(unittest.TestCase):
         cls.store_sdk = StoreSDK(cls.work_session)
         cls.goods_info_sdk = GoodsInfoSDK(cls.work_session)
         cls.status_sdk = StatusSDK(cls.work_session)
+        cls.product_sdk = ProductSDK(cls.work_session)
         cls.product_info_sdk = ProductInfoSDK(cls.work_session)
         cls.shelf_sdk = ShelfSDK(cls.work_session)
         
@@ -218,32 +219,53 @@ class StockinTestCase(unittest.TestCase):
             'name': 'SHELF_' + mock.name(),
             'description': mock.sentence(),
             'capacity': 100,
-            'warehouse': {'id': 1}  # 假设仓库ID为1
+            'warehouse': {'id': 1},  # 假设仓库ID为1
+            'status': {'id': 19}  # 状态ID 19: "启用"
         }
         new_shelf = self.shelf_sdk.create_shelf(shelf_param)
         if new_shelf is not None and 'id' in new_shelf:
             self.created_ids['shelf'].append(new_shelf['id'])
             self._class_cleanup_ids['shelf'].append(new_shelf['id'])
         
-        # 创建产品SKU
-        product_info_param = {
-            'sku': 'SKU_' + mock.name(),
-            'description': mock.sentence()
+        # 创建产品
+        product_param = {
+            'name': 'PRODUCT_' + mock.name(),
+            'description': mock.sentence(),
+            'image': [],
+            'expire': 365,
+            'tags': ['test'],
+            'status': {'id': 19}  # 使用状态ID 19: "启用"
         }
-        new_product_info = self.product_info_sdk.create_product_info(product_info_param)
-        if new_product_info is not None and 'id' in new_product_info:
-            self.created_ids['product_info'].append(new_product_info['id'])
-            self._class_cleanup_ids['product_info'].append(new_product_info['id'])
+        new_product = self.product_sdk.create_product(product_param)
+        
+        # 创建产品SKU（需要引用产品）
+        if new_product and 'id' in new_product:
+            product_info_param = {
+                'sku': str(mock.int(10000, 99999)),  # 纯数字SKU
+                'description': mock.sentence(),
+                'product': {'id': new_product['id']}  # 引用创建的产品
+            }
+            new_product_info = self.product_info_sdk.create_product_info(product_info_param)
+            if new_product_info is not None and 'id' in new_product_info:
+                self.created_ids['product_info'].append(new_product_info['id'])
+                self._class_cleanup_ids['product_info'].append(new_product_info['id'])
+        else:
+            new_product_info = None
         
         # 创建商品信息（goodsInfo）
+        # 如果product_info不存在，使用一个虚拟的ID
+        product_id = new_product_info['id'] if new_product_info else 99999
+        
         goods_info_param = {
-            'sku': 'SKU_' + mock.name(),
-            'product': {'id': new_product_info['id']} if new_product_info else None,
+            'sku': str(mock.int(20000, 29999)),  # 纯数字SKU
+            'product': {'id': product_id},
             'type': 1,  # 入库类型
             'count': 100,
             'price': 99.99,
+            'capacity': 1000,  # 服务器要求capacity字段
             'shelf': [{'id': new_shelf['id']}] if new_shelf else [],
-            'status': {'id': 3}  # 假设状态ID为3
+            'store': {'id': new_store['id']} if new_store else None,  # 添加store字段
+            'status': {'id': 19}  # 使用状态ID 19: "启用"
         }
         new_goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         if new_goods_info is not None and 'id' in new_goods_info:
@@ -251,7 +273,7 @@ class StockinTestCase(unittest.TestCase):
             self._class_cleanup_ids['goods_info'].append(new_goods_info['id'])
         
         # 获取状态（假设系统已有状态）
-        self.status_id = 3  # 假设状态ID为3
+        self.status_id = 19  # 状态ID 19: "启用"
         
         # 保存依赖实体ID
         self.store_id = new_store['id'] if new_store else None
@@ -318,8 +340,45 @@ class StockinTestCase(unittest.TestCase):
     
     def mock_stockin_param(self):
         """模拟入库单参数"""
+        # 如果goods_info_id不存在，使用一个虚拟的ID
+        goods_info_id = self.goods_info_id if self.goods_info_id else 99999
+        
+        # 查询已创建的goodsInfo获取完整信息
+        goods_info = None
+        if goods_info_id != 99999:
+            goods_info = self.goods_info_sdk.query_goods_info(goods_info_id)
+        
+        if goods_info:
+            # 使用查询到的完整goodsInfo对象
+            goods_info_obj = {
+                'id': goods_info['id'],
+                'sku': goods_info.get('sku', f'TEST_SKU_{goods_info_id}'),
+                'product': goods_info.get('product', {'id': self.product_info_id} if self.product_info_id else {'id': 1}),
+                'type': goods_info.get('type', 1),
+                'count': goods_info.get('count', 100),
+                'price': goods_info.get('price', 99.99),
+                'capacity': goods_info.get('capacity', 1000),
+                'shelf': goods_info.get('shelf', []),
+                'store': goods_info.get('store', {'id': self.store_id} if self.store_id else None),
+                'status': goods_info.get('status', {'id': 19})
+            }
+        else:
+            # 创建完整的goodsInfo对象
+            goods_info_obj = {
+                'id': goods_info_id,
+                'sku': f'TEST_SKU_{goods_info_id}',
+                'product': {'id': self.product_info_id} if self.product_info_id else {'id': 1},
+                'type': 1,
+                'count': 100,
+                'price': 99.99,
+                'capacity': 1000,
+                'shelf': [],
+                'store': {'id': self.store_id} if self.store_id else None,
+                'status': {'id': 19}
+            }
+        
         return {
-            'goodsInfo': [{'id': self.goods_info_id}] if self.goods_info_id else [],
+            'goodsInfo': [goods_info_obj],
             'description': mock.sentence(),
             'store': {'id': self.store_id} if self.store_id else None,
             'status': {'id': self.status_id} if hasattr(self, 'status_id') else None
@@ -380,9 +439,10 @@ class StockinTestCase(unittest.TestCase):
         if new_stockin and 'id' in new_stockin:
             self._record_entity_for_cleanup('stockin', new_stockin['id'])
         
-        # 更新入库单
-        update_param = new_stockin.copy()
-        update_param['description'] = "更新后的描述"
+        # 更新入库单 - 只更新描述字段，不包含goodsInfo
+        update_param = {
+            'description': "更新后的描述"
+        }
         
         updated_stockin = self.stockin_sdk.update_stockin(new_stockin['id'], update_param)
         self.assertIsNotNone(updated_stockin, "更新入库单失败")
@@ -563,9 +623,10 @@ class StockinTestCase(unittest.TestCase):
         initial_create_time = new_stockin.get('createTime')
         initial_modify_time = new_stockin.get('modifyTime')
         
-        # 更新入库单
-        update_param = new_stockin.copy()
-        update_param['description'] = "更新后的描述"
+        # 更新入库单 - 只更新描述字段，不包含goodsInfo
+        update_param = {
+            'description': "更新后的描述"
+        }
         
         updated_stockin = self.stockin_sdk.update_stockin(new_stockin['id'], update_param)
         self.assertIsNotNone(updated_stockin, "更新入库单失败")

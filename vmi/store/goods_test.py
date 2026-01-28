@@ -64,9 +64,9 @@ import unittest
 import warnings
 import logging
 from session import session
-from cas.cas import cas
+from cas.cas import Cas
 from mock import common as mock
-from sdk import GoodsSDK, StoreSDK, ShelfSDK, ProductInfoSDK, StatusSDK
+from sdk import GoodsSDK, StoreSDK, ShelfSDK, ProductSDK, ProductInfoSDK, StatusSDK
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ class GoodsTestCase(unittest.TestCase):
         """测试类初始化"""
         warnings.simplefilter('ignore', ResourceWarning)
         cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = cas.Cas(cls.work_session)
+        cls.cas_session = Cas(cls.work_session)
         if not cls.cas_session.login('administrator', 'administrator'):
             logger.error('CAS登录失败')
             raise Exception('CAS登录失败')
@@ -91,6 +91,7 @@ class GoodsTestCase(unittest.TestCase):
         cls.goods_sdk = GoodsSDK(cls.work_session)
         cls.store_sdk = StoreSDK(cls.work_session)
         cls.shelf_sdk = ShelfSDK(cls.work_session)
+        cls.product_sdk = ProductSDK(cls.work_session)
         cls.product_info_sdk = ProductInfoSDK(cls.work_session)
         cls.status_sdk = StatusSDK(cls.work_session)
         
@@ -225,26 +226,62 @@ class GoodsTestCase(unittest.TestCase):
             'name': 'SHELF_' + mock.name(),
             'description': mock.sentence(),
             'capacity': 100,
-            'warehouse': {'id': 1}  # 假设仓库ID为1
+            'warehouse': {'id': 1},  # 假设仓库ID为1
+            'status': {'id': 19}  # 状态ID 19: "启用" (启用 - enabled/active)
         }
         new_shelf = self.shelf_sdk.create_shelf(shelf_param)
         if new_shelf is not None and 'id' in new_shelf:
             self.created_ids['shelf'].append(new_shelf['id'])
             self._class_cleanup_ids['shelf'].append(new_shelf['id'])
         
-        # 创建产品SKU
-        product_info_param = {
-            'sku': 'SKU_' + mock.name(),
-            'description': mock.sentence()
+        # 创建产品
+        product_param = {
+            'name': 'PRODUCT_' + mock.name(),
+            'description': mock.sentence(),
+            'image': [],
+            'expire': 365,
+            'tags': ['test'],
+            'status': {'id': 19}  # 使用状态ID 19: "启用" (enabled)
         }
-        new_product_info = self.product_info_sdk.create_product_info(product_info_param)
-        if new_product_info is not None and 'id' in new_product_info:
-            self.created_ids['product_info'].append(new_product_info['id'])
-            self._class_cleanup_ids['product_info'].append(new_product_info['id'])
+        logger.info(f"尝试创建产品，参数: {product_param}")
+        new_product = self.product_sdk.create_product(product_param)
+        logger.info(f"产品创建返回: {new_product}")
+        
+        # 检查产品创建是否成功
+        if new_product is None:
+            logger.error(f"产品创建失败，参数: {product_param}")
+            # 尝试获取错误信息
+            self.product_id = None
+        elif 'id' not in new_product:
+            logger.error(f"产品创建返回无效数据: {new_product}")
+            self.product_id = None
+        else:
+            self.product_id = new_product['id']
+            logger.info(f"产品创建成功，ID: {self.product_id}")
+        
+        # 创建产品SKU（需要引用产品）
+        if self.product_id:
+            product_info_param = {
+                'sku': str(mock.int(10000, 99999)),  # SKU应该是数字字符串，不是"SKU_"前缀
+                'description': mock.sentence(),
+                'product': {'id': self.product_id}  # 引用创建的产品
+            }
+            new_product_info = self.product_info_sdk.create_product_info(product_info_param)
+            if new_product_info is None:
+                logger.error(f"产品SKU创建失败，参数: {product_info_param}")
+            elif 'id' not in new_product_info:
+                logger.error(f"产品SKU创建返回无效数据: {new_product_info}")
+            else:
+                logger.info(f"产品SKU创建成功，ID: {new_product_info['id']}")
+                self.created_ids['product_info'].append(new_product_info['id'])
+                self._class_cleanup_ids['product_info'].append(new_product_info['id'])
+        else:
+            new_product_info = None
+            logger.error("无法创建产品SKU，因为产品创建失败")
         
         # 获取状态（假设系统已有状态）
         # 这里使用一个已知的状态ID
-        self.status_id = 3  # 假设状态ID为3
+        self.status_id = 19  # 状态ID 19: "启用" (enabled)
         
         # 保存依赖实体ID
         self.store_id = new_store['id'] if new_store else None
@@ -307,13 +344,17 @@ class GoodsTestCase(unittest.TestCase):
     
     def mock_goods_param(self):
         """模拟商品参数"""
+        # 如果product_info_id不存在，使用一个虚拟的ID
+        # 注意：这可能会导致创建失败，但至少我们可以测试其他验证
+        product_id = self.product_info_id if self.product_info_id else 99999
+        
         return {
-            'sku': 'SKU_' + mock.name(),
-            'name': '商品_' + mock.name(),
+            'sku': str(mock.int(10000, 99999)),  # SKU应该是数字字符串
+            'name': '商品_' + str(mock.int(1000, 9999)),  # 简化名称
             'description': mock.sentence(),
-            'parameter': '参数_' + mock.name(),
+            'parameter': '参数_' + str(mock.int(100, 999)),
             'serviceInfo': '服务信息_' + mock.sentence(),
-            'product': {'id': self.product_info_id} if self.product_info_id else None,
+            'product': {'id': product_id},
             'count': 100,
             'price': 99.99,
             'shelf': [{'id': self.shelf_id}] if self.shelf_id else [],

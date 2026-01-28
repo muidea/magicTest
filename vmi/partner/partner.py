@@ -38,7 +38,7 @@ def main(server_url: str, namespace: str) -> bool:
         成功返回True，失败返回False
     """
     work_session = session.MagicSession('{0}'.format(server_url), namespace)
-    cas_session = cas.Cas(work_session)
+    cas_session = Cas(work_session)
     if not cas_session.login('administrator', 'administrator'):
         logger.error('CAS登录失败')
         return False

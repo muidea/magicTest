@@ -53,9 +53,9 @@ import unittest
 import warnings
 import logging
 from session import session
-from cas.cas import cas
+from cas.cas import Cas
 from mock import common as mock
-from sdk import StockoutSDK, StoreSDK, GoodsInfoSDK, StatusSDK
+from sdk import StockoutSDK, StoreSDK, GoodsInfoSDK, StatusSDK, ShelfSDK, WarehouseSDK
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ class StockoutTestCase(unittest.TestCase):
         """测试类初始化"""
         warnings.simplefilter('ignore', ResourceWarning)
         cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = cas.Cas(cls.work_session)
+        cls.cas_session = Cas(cls.work_session)
         if not cls.cas_session.login('administrator', 'administrator'):
             logger.error('CAS登录失败')
             raise Exception('CAS登录失败')
@@ -81,13 +81,17 @@ class StockoutTestCase(unittest.TestCase):
         cls.store_sdk = StoreSDK(cls.work_session)
         cls.goods_info_sdk = GoodsInfoSDK(cls.work_session)
         cls.status_sdk = StatusSDK(cls.work_session)
+        cls.shelf_sdk = ShelfSDK(cls.work_session)
+        cls.warehouse_sdk = WarehouseSDK(cls.work_session)
         
         # 类级别的数据清理记录
         cls._class_cleanup_ids = {
             'stockout': [],
             'store': [],
             'goods_info': [],
-            'status': []
+            'status': [],
+            'shelf': [],
+            'warehouse': []
         }
         
         # 记录测试开始前的初始状态（可选）
@@ -177,7 +181,9 @@ class StockoutTestCase(unittest.TestCase):
             'stockout': [],
             'store': [],
             'goods_info': [],
-            'status': []
+            'status': [],
+            'shelf': [],
+            'warehouse': []
         }
         
         # 创建必要的依赖实体
@@ -196,15 +202,46 @@ class StockoutTestCase(unittest.TestCase):
             self.created_ids['store'].append(new_store['id'])
             self._class_cleanup_ids['store'].append(new_store['id'])
         
-        # 创建商品信息（简化处理，使用虚拟数据）
+        # 创建仓库
+        warehouse_param = {
+            'name': 'WAREHOUSE_' + mock.name(),
+            'description': mock.sentence(),
+            'code': 'WH_' + str(mock.int(1000, 9999))
+        }
+        new_warehouse = self.warehouse_sdk.create_warehouse(warehouse_param)
+        if new_warehouse is not None and 'id' in new_warehouse:
+            self.created_ids['warehouse'].append(new_warehouse['id'])
+            self._class_cleanup_ids['warehouse'].append(new_warehouse['id'])
+            logger.info(f"仓库创建成功，ID: {new_warehouse['id']}")
+        
+        # 创建货架
+        warehouse_id = new_warehouse['id'] if new_warehouse else 1
+        shelf_param = {
+            'name': 'SHELF_' + mock.name(),
+            'description': mock.sentence(),
+            'capacity': 100,  # 整数类型
+            'warehouse': {'id': warehouse_id},
+            'status': {'id': 19}  # 状态ID 19: "启用"
+        }
+        new_shelf = self.shelf_sdk.create_shelf(shelf_param)
+        if new_shelf is not None and 'id' in new_shelf:
+            self.created_ids['shelf'].append(new_shelf['id'])
+            self._class_cleanup_ids['shelf'].append(new_shelf['id'])
+            logger.info(f"货架创建成功，ID: {new_shelf['id']}")
+        else:
+            logger.error(f"货架创建失败，参数: {shelf_param}")
+            new_shelf = None
+        
+        # 创建商品信息
         goods_info_param = {
-            'sku': 'SKU_' + mock.name(),
+            'sku': str(mock.int(40000, 49999)),  # 纯数字SKU
             'product': {'id': 1},  # 假设产品ID为1
             'type': 2,  # 出库类型
             'count': 50,
             'price': 49.99,
-            'shelf': [{'id': 1}],  # 假设货架ID为1
-            'status': {'id': 3}
+            'shelf': [{'id': new_shelf['id']}] if new_shelf else [],  # 使用货架ID引用
+            'store': {'id': new_store['id']} if new_store else None,  # 添加store字段
+            'status': {'id': 19}  # 使用状态ID 19: "启用"
         }
         new_goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         if new_goods_info is not None and 'id' in new_goods_info:
@@ -212,10 +249,12 @@ class StockoutTestCase(unittest.TestCase):
             self._class_cleanup_ids['goods_info'].append(new_goods_info['id'])
         
         # 获取状态（假设系统已有状态）
-        self.status_id = 3  # 假设状态ID为3
+        self.status_id = 19  # 状态ID 19: "启用"
         
         # 保存依赖实体ID
         self.store_id = new_store['id'] if new_store else None
+        self.warehouse_id = new_warehouse['id'] if new_warehouse else None
+        self.shelf_id = new_shelf['id'] if new_shelf else None
         self.goods_info_id = new_goods_info['id'] if new_goods_info else None
     
     def tearDown(self):
@@ -234,7 +273,7 @@ class StockoutTestCase(unittest.TestCase):
     
     def _cleanup_test_entities(self):
         """清理本测试创建的实体"""
-        for entity_type in ['stockout', 'goods_info', 'store', 'status']:
+        for entity_type in ['stockout', 'goods_info', 'store', 'status', 'shelf', 'warehouse']:
             if not self.created_ids[entity_type]:
                 continue
             
@@ -242,13 +281,16 @@ class StockoutTestCase(unittest.TestCase):
                 'stockout': self.stockout_sdk,
                 'store': self.store_sdk,
                 'goods_info': self.goods_info_sdk,
-                'status': self.status_sdk
+                'status': self.status_sdk,
+                'shelf': self.shelf_sdk,
+                'warehouse': self.warehouse_sdk
             }
             
             sdk = sdk_map[entity_type]
             entity_name = {
                 'stockout': '出库单', 'store': '店铺', 
-                'goods_info': '商品信息', 'status': '状态'
+                'goods_info': '商品信息', 'status': '状态',
+                'shelf': '货架', 'warehouse': '仓库'
             }[entity_type]
             
             for entity_id in self.created_ids[entity_type]:
@@ -273,8 +315,43 @@ class StockoutTestCase(unittest.TestCase):
     
     def mock_stockout_param(self):
         """模拟出库单参数"""
+        # 如果goods_info_id不存在，使用一个虚拟的ID
+        goods_info_id = self.goods_info_id if self.goods_info_id else 99999
+        
+        # 查询已创建的goodsInfo获取完整信息
+        goods_info = None
+        if goods_info_id != 99999:
+            goods_info = self.goods_info_sdk.query_goods_info(goods_info_id)
+        
+        if goods_info:
+            # 使用查询到的完整goodsInfo对象
+            goods_info_obj = {
+                'id': goods_info['id'],
+                'sku': goods_info.get('sku', f'TEST_SKU_{goods_info_id}'),
+                'product': goods_info.get('product', {'id': 1}),
+                'type': goods_info.get('type', 2),
+                'count': goods_info.get('count', 50),
+                'price': goods_info.get('price', 49.99),
+                'shelf': goods_info.get('shelf', [{'id': self.shelf_id}] if self.shelf_id else []),
+                'store': goods_info.get('store', {'id': self.store_id} if self.store_id else None),
+                'status': goods_info.get('status', {'id': 19})
+            }
+        else:
+            # 创建完整的goodsInfo对象
+            goods_info_obj = {
+                'id': goods_info_id,
+                'sku': f'TEST_SKU_{goods_info_id}',
+                'product': {'id': 1},
+                'type': 2,
+                'count': 50,
+                'price': 49.99,
+                'shelf': [{'id': self.shelf_id}] if self.shelf_id else [],
+                'store': {'id': self.store_id} if self.store_id else None,
+                'status': {'id': 19}
+            }
+        
         return {
-            'goodsInfo': [{'id': self.goods_info_id}] if self.goods_info_id else [],
+            'goodsInfo': [goods_info_obj],
             'description': mock.sentence(),
             'store': {'id': self.store_id} if self.store_id else None,
             'status': {'id': self.status_id} if hasattr(self, 'status_id') else None
@@ -335,9 +412,10 @@ class StockoutTestCase(unittest.TestCase):
         if new_stockout and 'id' in new_stockout:
             self._record_entity_for_cleanup('stockout', new_stockout['id'])
         
-        # 更新出库单
-        update_param = new_stockout.copy()
-        update_param['description'] = "更新后的描述"
+        # 更新出库单 - 只更新描述字段，不包含goodsInfo
+        update_param = {
+            'description': "更新后的描述"
+        }
         
         updated_stockout = self.stockout_sdk.update_stockout(new_stockout['id'], update_param)
         self.assertIsNotNone(updated_stockout, "更新出库单失败")
@@ -453,9 +531,10 @@ class StockoutTestCase(unittest.TestCase):
         initial_create_time = new_stockout.get('createTime')
         initial_modify_time = new_stockout.get('modifyTime')
         
-        # 更新出库单
-        update_param = new_stockout.copy()
-        update_param['description'] = "更新后的描述"
+        # 更新出库单 - 只更新描述字段，不包含goodsInfo
+        update_param = {
+            'description': "更新后的描述"
+        }
         
         updated_stockout = self.stockout_sdk.update_stockout(new_stockout['id'], update_param)
         self.assertIsNotNone(updated_stockout, "更新出库单失败")
