@@ -5,6 +5,7 @@
 
 import os
 import json
+import time
 
 class TestConfig:
     """测试配置管理器"""
@@ -75,6 +76,9 @@ class TestConfig:
             'reports_dir': 'test_reports'
         }
         
+        # 变更日志
+        self.change_log = []
+        
         # 从环境变量加载配置
         self._load_from_env()
         
@@ -82,6 +86,9 @@ class TestConfig:
         config_file = os.path.join(os.path.dirname(__file__), 'test_config.json')
         if os.path.exists(config_file):
             self._load_from_file(config_file)
+        
+        # 加载变更日志
+        self._load_change_log()
         
         self._initialized = True
     
@@ -109,16 +116,23 @@ class TestConfig:
         for env_var, config_key in env_mappings.items():
             value = os.environ.get(env_var)
             if value is not None:
+                old_value = self.config.get(config_key)
+                
                 # 尝试转换类型
                 try:
                     if value.lower() in ('true', 'false'):
-                        self.config[config_key] = value.lower() == 'true'
+                        new_value = value.lower() == 'true'
                     elif '.' in value:
-                        self.config[config_key] = float(value)
+                        new_value = float(value)
                     else:
-                        self.config[config_key] = int(value)
+                        new_value = int(value)
                 except ValueError:
-                    self.config[config_key] = value
+                    new_value = value
+                
+                # 设置值并记录变更
+                if old_value != new_value:
+                    self.set(config_key, new_value)
+                    self.log_change(config_key, old_value, new_value, f'env_var:{env_var}')
     
     def _load_from_file(self, config_path):
         """从配置文件加载配置"""
@@ -133,17 +147,15 @@ class TestConfig:
         """获取配置值"""
         return self.config.get(key, default)
     
-    def set(self, key, value):
-        """设置配置值"""
-        self.config[key] = value
+
     
     def set_mode(self, mode):
         """设置测试模式"""
-        self.config['test_mode'] = mode
+        self.set('test_mode', mode)
     
     def set_environment(self, env):
         """设置环境"""
-        self.config['environment'] = env
+        self.set('environment', env)
     
     def get_server_config(self):
         """获取服务器配置"""
@@ -177,18 +189,7 @@ class TestConfig:
         """获取性能阈值"""
         return self.get('performance_thresholds', {})
     
-    def save_to_file(self, config_path=None):
-        """保存配置到文件"""
-        if config_path is None:
-            config_path = os.path.join(os.path.dirname(__file__), 'test_config.json')
-        
-        try:
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"保存配置文件失败: {e}")
-            return False
+
     
     def validate(self):
         """验证配置的有效性"""
@@ -365,21 +366,236 @@ class TestConfig:
         import time
         return int(time.time())
     
-    def save_to_file(self, config_path=None):
-        """保存配置到文件"""
-        if config_path is None:
-            config_path = os.path.join(os.path.dirname(__file__), 'test_config.json')
+    def backup_config(self, backup_dir=None):
+        """备份当前配置"""
+        if backup_dir is None:
+            backup_dir = os.path.join(os.path.dirname(__file__), 'config_backups')
         
-        # 确保配置是最新版本
-        self.migrate_config()
+        # 创建备份目录
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        # 生成备份文件名
+        import time
+        timestamp = time.strftime('%Y%m%d_%H%M%S')
+        backup_file = os.path.join(backup_dir, f'test_config_backup_{timestamp}.json')
         
         try:
-            with open(config_path, 'w', encoding='utf-8') as f:
+            # 保存当前配置到备份文件
+            with open(backup_file, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
+            
+            # 记录备份信息
+            backup_info = {
+                'backup_file': backup_file,
+                'timestamp': timestamp,
+                'config_version': self.config.get('config_version'),
+                'config_timestamp': self.config.get('config_timestamp')
+            }
+            
+            # 更新备份索引
+            self._update_backup_index(backup_dir, backup_info)
+            
+            return backup_file
+        except Exception as e:
+            print(f"备份配置失败: {e}")
+            return None
+    
+    def restore_config(self, backup_file=None, backup_dir=None):
+        """从备份恢复配置"""
+        if backup_file is None:
+            if backup_dir is None:
+                backup_dir = os.path.join(os.path.dirname(__file__), 'config_backups')
+            
+            # 获取最新的备份文件
+            backup_file = self._get_latest_backup(backup_dir)
+            if not backup_file:
+                print("没有找到备份文件")
+                return False
+        
+        try:
+            # 读取备份文件
+            with open(backup_file, 'r', encoding='utf-8') as f:
+                backup_config = json.load(f)
+            
+            # 应用备份配置
+            self.config.update(backup_config)
+            
+            # 确保配置是最新版本
+            self.migrate_config()
+            
+            print(f"配置已从备份恢复: {backup_file}")
             return True
         except Exception as e:
-            print(f"保存配置文件失败: {e}")
+            print(f"恢复配置失败: {e}")
             return False
+    
+    def list_backups(self, backup_dir=None):
+        """列出所有备份"""
+        if backup_dir is None:
+            backup_dir = os.path.join(os.path.dirname(__file__), 'config_backups')
+        
+        if not os.path.exists(backup_dir):
+            return []
+        
+        backups = []
+        for file in os.listdir(backup_dir):
+            if file.startswith('test_config_backup_') and file.endswith('.json'):
+                file_path = os.path.join(backup_dir, file)
+                file_time = os.path.getmtime(file_path)
+                backups.append({
+                    'file': file_path,
+                    'name': file,
+                    'timestamp': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_time))
+                })
+        
+        # 按时间排序
+        backups.sort(key=lambda x: x['timestamp'], reverse=True)
+        return backups
+    
+    def _update_backup_index(self, backup_dir, backup_info):
+        """更新备份索引"""
+        index_file = os.path.join(backup_dir, 'backup_index.json')
+        
+        try:
+            if os.path.exists(index_file):
+                with open(index_file, 'r', encoding='utf-8') as f:
+                    index = json.load(f)
+            else:
+                index = {'backups': []}
+            
+            # 添加新备份
+            index['backups'].insert(0, backup_info)
+            
+            # 限制备份数量（最多保留10个）
+            if len(index['backups']) > 10:
+                # 删除最旧的备份文件
+                for old_backup in index['backups'][10:]:
+                    if os.path.exists(old_backup['backup_file']):
+                        os.remove(old_backup['backup_file'])
+                index['backups'] = index['backups'][:10]
+            
+            # 保存索引
+            with open(index_file, 'w', encoding='utf-8') as f:
+                json.dump(index, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"更新备份索引失败: {e}")
+    
+    def _get_latest_backup(self, backup_dir):
+        """获取最新的备份文件"""
+        backups = self.list_backups(backup_dir)
+        if backups:
+            return backups[0]['file']
+        return None
+    
+    def set(self, key, value):
+        """设置配置值（带变更日志）"""
+        old_value = self.config.get(key)
+        
+        # 记录变更
+        if old_value != value:
+            change_entry = {
+                'timestamp': time.time(),
+                'key': key,
+                'old_value': old_value,
+                'new_value': value,
+                'source': 'manual_set'
+            }
+            self.change_log.append(change_entry)
+            
+            # 限制变更日志大小
+            if len(self.change_log) > 100:
+                self.change_log = self.change_log[-100:]
+        
+        self.config[key] = value
+    
+    def log_change(self, key, old_value, new_value, source='unknown'):
+        """记录配置变更"""
+        change_entry = {
+            'timestamp': time.time(),
+            'key': key,
+            'old_value': old_value,
+            'new_value': new_value,
+            'source': source
+        }
+        self.change_log.append(change_entry)
+        
+        # 限制变更日志大小
+        if len(self.change_log) > 100:
+            self.change_log = self.change_log[-100:]
+    
+    def get_change_log(self, limit=20):
+        """获取变更日志"""
+        logs = self.change_log[-limit:] if limit else self.change_log
+        return logs
+    
+    def get_recent_changes(self, hours=24):
+        """获取最近指定小时内的变更"""
+        cutoff_time = time.time() - (hours * 3600)
+        recent_changes = []
+        
+        for change in reversed(self.change_log):
+            if change['timestamp'] >= cutoff_time:
+                recent_changes.append(change)
+            else:
+                break
+        
+        return list(reversed(recent_changes))
+    
+    def _load_change_log(self):
+        """加载变更日志"""
+        log_dir = os.path.join(os.path.dirname(__file__), 'config_logs')
+        if not os.path.exists(log_dir):
+            return
+        
+        # 查找最新的变更日志文件
+        log_files = []
+        for file in os.listdir(log_dir):
+            if file.startswith('config_changes_') and file.endswith('.json'):
+                file_path = os.path.join(log_dir, file)
+                log_files.append((file_path, os.path.getmtime(file_path)))
+        
+        if not log_files:
+            return
+        
+        # 按修改时间排序，获取最新的文件
+        log_files.sort(key=lambda x: x[1], reverse=True)
+        latest_log = log_files[0][0]
+        
+        try:
+            with open(latest_log, 'r', encoding='utf-8') as f:
+                log_data = json.load(f)
+            
+            if 'changes' in log_data:
+                self.change_log = log_data['changes']
+                # 限制日志大小
+                if len(self.change_log) > 100:
+                    self.change_log = self.change_log[-100:]
+        except Exception as e:
+            print(f"加载变更日志失败: {e}")
+    
+    def save_change_log(self, log_file=None):
+        """保存变更日志到文件"""
+        if log_file is None:
+            log_dir = os.path.join(os.path.dirname(__file__), 'config_logs')
+            os.makedirs(log_dir, exist_ok=True)
+            timestamp = time.strftime('%Y%m%d')
+            log_file = os.path.join(log_dir, f'config_changes_{timestamp}.json')
+        
+        try:
+            log_data = {
+                'export_timestamp': time.time(),
+                'config_version': self.config.get('config_version'),
+                'change_count': len(self.change_log),
+                'changes': self.change_log
+            }
+            
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(log_data, f, indent=2, ensure_ascii=False)
+            
+            return log_file
+        except Exception as e:
+            print(f"保存变更日志失败: {e}")
+            return None
     
     def __str__(self):
         """字符串表示"""
