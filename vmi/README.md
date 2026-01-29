@@ -9,10 +9,12 @@
 ### 1. 环境准备
 
 ```bash
-# 激活Python虚拟环境
-source /home/rangh/codespace/venv/bin/activate
+# 1. 创建并激活Python虚拟环境（如果尚未创建）
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# 或 venv\Scripts\activate  # Windows
 
-# 安装依赖包（如果尚未安装）
+# 2. 安装依赖包
 pip install pytest coverage matplotlib numpy
 ```
 
@@ -65,8 +67,8 @@ vmi/
 **重要更新**：测试框架现在与真实的VMI服务器进行交互，不再使用模拟模块。
 
 **真实模块路径**：
-- Session模块：`/home/rangh/codespace/magicTest/session/`
-- CAS模块：`/home/rangh/codespace/magicTest/cas/cas/cas.py`
+- Session模块：`../session/`（相对于vmi目录）
+- CAS模块：`../cas/cas/cas.py`（相对于vmi目录）
 
 **服务器配置**：
 - 服务器URL：`https://autotest.local.vpc`
@@ -305,17 +307,26 @@ cat test_report_20260128_183051.json | python -m json.tool
    # 检查Python路径设置
    python setup_env.py --verify
    
-   # 验证真实模块导入
-   python -c "
-   import sys
-   sys.path.insert(0, '/home/rangh/codespace/magicTest')
-   sys.path.insert(0, '/home/rangh/codespace/magicTest/cas')
-   try:
-       from cas.cas import Cas
-       print('✅ CAS模块导入成功')
-   except Exception as e:
-       print('❌ CAS模块导入失败:', e)
-   "
+    # 验证真实模块导入
+    python -c "
+    import sys
+    import os
+    
+    # 自动计算项目路径
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    
+    sys.path.insert(0, project_root)
+    sys.path.insert(0, os.path.join(project_root, 'cas'))
+    
+    try:
+        from cas.cas import Cas
+        print('✅ CAS模块导入成功')
+        print(f'   项目根目录: {project_root}')
+    except Exception as e:
+        print('❌ CAS模块导入失败:', e)
+        print(f'   尝试的路径: {project_root}, {os.path.join(project_root, "cas")}')
+    "
    ```
 
 2. **SSL证书警告**

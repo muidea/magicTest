@@ -20,14 +20,40 @@ fi
 
 # 检查虚拟环境
 echo "2. 检查虚拟环境..."
-if [ -f "/home/rangh/codespace/venv/bin/activate" ]; then
-    echo "✅ 虚拟环境存在"
-else
+
+# 尝试多个可能的虚拟环境位置
+VENV_PATHS=(
+    "$(pwd)/../venv"                     # 项目上级目录的venv
+    "$HOME/codespace/venv"               # 用户目录下的venv
+    "$(dirname "$(pwd)")/venv"           # 项目根目录的venv
+    "/home/rangh/codespace/venv"         # 原始路径（向后兼容）
+)
+
+VENV_FOUND=false
+VENV_PATH=""
+
+for venv_path in "${VENV_PATHS[@]}"; do
+    if [ -f "$venv_path/bin/activate" ]; then
+        VENV_FOUND=true
+        VENV_PATH="$venv_path"
+        echo "✅ 虚拟环境存在: $venv_path"
+        break
+    fi
+done
+
+if [ "$VENV_FOUND" = false ]; then
     echo "⚠️  虚拟环境不存在，使用系统Python"
+    echo "   尝试的位置:"
+    for venv_path in "${VENV_PATHS[@]}"; do
+        echo "     - $venv_path"
+    done
 fi
 
-# 激活虚拟环境
-source /home/rangh/codespace/venv/bin/activate 2>/dev/null || true
+# 激活虚拟环境（如果找到）
+if [ "$VENV_FOUND" = true ]; then
+    source "$VENV_PATH/bin/activate" 2>/dev/null || true
+    echo "✅ 虚拟环境已激活"
+fi
 
 # 检查依赖包
 echo "3. 检查依赖包..."

@@ -6,9 +6,31 @@ import json
 from datetime import datetime
 from typing import List, Dict, Any
 
+def check_virtualenv():
+    """检查是否在虚拟环境中运行"""
+    in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+    if not in_venv:
+        print("❌ 错误：未在虚拟环境中运行")
+        print("")
+        print("要求：必须在激活的Python虚拟环境中运行")
+        print("")
+        print("请先激活虚拟环境:")
+        print("   source venv/bin/activate  # Linux/Mac")
+        print("   venv\\Scripts\\activate    # Windows")
+        print("")
+        sys.exit(1)
+    
+    print("✅ 虚拟环境检测通过")
+
+# 检查虚拟环境
+check_virtualenv()
+
 # 设置环境路径
-sys.path.insert(0, '/home/rangh/codespace/magicTest')
-sys.path.insert(0, '/home/rangh/codespace/magicTest/cas')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)  # magicTest目录
+
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'cas'))
 
 from test_config import TestConfig
 

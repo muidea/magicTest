@@ -10,14 +10,16 @@
 
 #### 第1步：环境准备（30秒）
 ```bash
-# 激活Python虚拟环境
-source ~/codespace/venv/bin/activate
+# 1. 创建并激活Python虚拟环境（如果尚未创建）
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# 或 venv\Scripts\activate  # Windows
 
-# 验证Python环境
+# 2. 验证Python环境
 python --version
-# 应该显示: Python 3.12.3
+# 应该显示: Python 3.x.x
 
-# 设置环境路径
+# 3. 设置环境路径
 python setup_env.py
 ```
 
@@ -62,7 +64,7 @@ python deploy_verification.py
 #### 1. 基础环境设置
 ```bash
 # 克隆或复制测试框架
-cd /home/rangh/codespace/magicTest
+cd vmi  # 进入VMI测试框架目录
 cp -r vmi /path/to/deployment/
 
 # 激活虚拟环境

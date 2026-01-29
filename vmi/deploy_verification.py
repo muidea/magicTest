@@ -11,9 +11,31 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List
 
+def check_virtualenv():
+    """检查是否在虚拟环境中运行"""
+    in_venv = hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
+    if not in_venv:
+        print("❌ 错误：未在虚拟环境中运行")
+        print("")
+        print("要求：必须在激活的Python虚拟环境中运行")
+        print("")
+        print("请先激活虚拟环境:")
+        print("   source venv/bin/activate  # Linux/Mac")
+        print("   venv\\Scripts\\activate    # Windows")
+        print("")
+        sys.exit(1)
+    
+    print("✅ 虚拟环境检测通过")
+
+# 检查虚拟环境
+check_virtualenv()
+
 # 添加路径
-sys.path.insert(0, '/home/rangh/codespace/magicTest')
-sys.path.insert(0, '/home/rangh/codespace/magicTest/cas')
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)  # magicTest目录
+
+sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, 'cas'))
 
 
 class DeploymentVerifier:
@@ -28,23 +50,51 @@ class DeploymentVerifier:
         """验证环境配置"""
         print("验证环境配置...")
         
+        # 获取项目根目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        
+        # 检查虚拟环境（尝试多个可能的位置）
+        venv_paths = [
+            os.path.join(project_root, 'venv'),
+            os.path.join(os.path.expanduser('~'), 'codespace', 'venv'),
+            os.path.join(os.path.dirname(project_root), 'venv')
+        ]
+        
+        venv_exists = False
+        venv_location = None
+        for venv_path in venv_paths:
+            if os.path.exists(venv_path):
+                venv_exists = True
+                venv_location = venv_path
+                break
+        
         checks = {
             'python_version': sys.version_info[:3],
             'working_directory': os.getcwd(),
-            'path_exists': os.path.exists('/home/rangh/codespace/magicTest'),
-            'venv_exists': os.path.exists('/home/rangh/codespace/venv'),
+            'project_root': project_root,
+            'project_root_exists': os.path.exists(project_root),
+            'venv_exists': venv_exists,
+            'venv_location': venv_location,
             'test_files_exist': os.path.exists('test_runner.py')
         }
+        
+        # 主要检查：项目根目录和测试文件必须存在
+        required_checks = ['project_root_exists', 'test_files_exist']
+        passed = all(checks.get(key, False) for key in required_checks)
         
         result = {
             'check': 'environment',
             'timestamp': datetime.now().isoformat(),
             'details': checks,
-            'passed': all(checks.values())
+            'passed': passed
         }
         
         self.results.append(result)
         print(f"✓ 环境验证: {'通过' if result['passed'] else '失败'}")
+        if not venv_exists:
+            print(f"⚠ 虚拟环境未找到，请确保已创建虚拟环境")
+            print(f"  尝试的位置: {venv_paths}")
         return result
     
     def verify_test_suite(self) -> Dict[str, Any]:
