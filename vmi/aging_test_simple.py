@@ -30,21 +30,30 @@ logger = logging.getLogger(__name__)
 
 class AgingTestConfig:
     """老化测试配置"""
-    def __init__(self):
+    def __init__(self, config=None):
+        # 导入配置助手
+        from config_helper import get_aging_params
+        
+        # 获取老化测试配置
+        aging_config = get_aging_params()
+        
         # 测试持续时间（小时）
-        self.duration_hours = 24
+        self.duration_hours = aging_config.get('duration_hours', 24)
         # 并发线程数
-        self.concurrent_threads = 10
+        self.concurrent_threads = aging_config.get('concurrent_threads', 10)
         # 操作间隔（秒）
-        self.operation_interval = 1.0
+        self.operation_interval = aging_config.get('operation_interval', 1.0)
         # 最大数据量（万条）
-        self.max_data_count = 1000  # 1000万条 = 10,000,000条
+        self.max_data_count = aging_config.get('max_data_count', 1000)  # 1000万条 = 10,000,000条
         # 性能劣化阈值（百分比）
-        self.performance_degradation_threshold = 20.0  # 20%性能下降
+        self.performance_degradation_threshold = aging_config.get('performance_degradation_threshold', 20.0)  # 20%性能下降
         # 性能监控窗口大小（操作数）
         self.performance_window_size = 100
         # 报告生成间隔（分钟）
-        self.report_interval_minutes = 30
+        self.report_interval_minutes = aging_config.get('report_interval_minutes', 30)
+        
+        # 保存原始配置引用（如果提供）
+        self.config = config
 
 
 class AgingTestWorker:
@@ -105,11 +114,16 @@ class AgingTestWorker:
             from cas.cas import Cas
             from sdk import PartnerSDK, ProductSDK, GoodsSDK, StockinSDK, StockoutSDK
             
+            # 导入配置助手
+            from config_helper import get_server_url, get_credentials
+            
             # 初始化会话
-            server_url = 'https://autotest.local.vpc'
+            server_url = get_server_url()
+            credentials = get_credentials()
+            
             work_session = session.MagicSession(server_url, '')
             cas_session = Cas(work_session)
-            if not cas_session.login('administrator', 'administrator'):
+            if not cas_session.login(credentials['username'], credentials['password']):
                 logger.error(f"工作线程 {self.worker_id}: CAS登录失败")
                 return
             

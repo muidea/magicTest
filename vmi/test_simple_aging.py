@@ -24,12 +24,17 @@ try:
     from cas.cas import Cas
     from sdk import PartnerSDK
     
+    # 导入配置助手
+    from config_helper import get_server_url, get_credentials
+    
     # 初始化会话
-    server_url = 'https://autotest.local.vpc'
+    server_url = get_server_url()
+    credentials = get_credentials()
+    
     work_session = session.MagicSession(server_url, '')
     cas_session = Cas(work_session)
     
-    if not cas_session.login('administrator', 'administrator'):
+    if not cas_session.login(credentials['username'], credentials['password']):
         logger.error("CAS登录失败")
         sys.exit(1)
     

@@ -595,9 +595,27 @@ def refresh_session(cas_session, work_session):
 
 
 class BaseTestCase(unittest.TestCase):
-    _server_url = 'https://autotest.local.vpc'
-    _user = 'administrator'
-    _password = 'administrator'
+    # 从配置获取服务器信息
+    @classmethod
+    def _get_server_config(cls):
+        from config_helper import get_server_url, get_credentials
+        return {
+            'server_url': get_server_url(),
+            'user': get_credentials()['username'],
+            'password': get_credentials()['password']
+        }
+    
+    @property
+    def _server_url(self):
+        return self._get_server_config()['server_url']
+    
+    @property
+    def _user(self):
+        return self._get_server_config()['user']
+    
+    @property
+    def _password(self):
+        return self._get_server_config()['password']
     
     # 场景要求参数（完整版）
     # 实际场景要求：

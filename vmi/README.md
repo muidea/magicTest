@@ -40,7 +40,8 @@ python -m pytest concurrent_test.py -v
 ```
 vmi/
 ├── README.md                      # 本文档
-├── test_config.py                 # 配置管理系统
+├── test_config.py                 # 统一配置管理系统（增强版）
+├── config_helper.py               # 配置助手模块
 ├── test_base.py                   # 测试基类和工具函数
 ├── concurrent_test.py             # 并发压力测试模块
 ├── scenario_test.py               # 业务场景测试
@@ -87,21 +88,37 @@ python setup_env.py
 python run_tests.py --test-file store/store_test.py
 ```
 
-### 2. 配置管理系统 (`test_config.py`)
+### 2. 统一配置管理系统 (`test_config.py`)
 
-支持4种测试模式和4种环境配置：
+**增强功能**：所有测试现在使用统一的配置管理系统，支持：
 
-**测试模式**：
-- `development` - 开发环境（默认）
-- `test` - 测试环境
-- `pressure` - 压力测试环境
-- `production` - 生产环境（只读）
+**配置特性**：
+- ✅ **单例模式**：全局统一的配置实例
+- ✅ **环境变量覆盖**：支持通过环境变量动态调整配置
+- ✅ **配置文件支持**：支持从JSON文件加载配置
+- ✅ **类型安全**：自动类型转换（字符串→整数/浮点数/布尔值）
+- ✅ **配置分组**：服务器配置、并发配置、老化测试配置等
 
-**环境配置**：
-- `dev` - 开发环境
-- `test` - 测试环境
-- `stress` - 压力测试环境
-- `prod` - 生产环境
+**配置分类**：
+- **服务器配置**：服务器URL、登录凭证、命名空间
+- **测试模式配置**：测试模式（functional, pressure, aging, scenario）、环境（dev, test, stress, prod）
+- **并发测试配置**：最大工作线程数、超时时间、重试次数
+- **老化测试配置**：持续时间、并发线程数、操作间隔、数据量限制、性能阈值
+- **性能阈值配置**：响应时间、成功率、吞吐量阈值
+- **日志配置**：日志级别、日志格式
+
+**使用方式**：
+```python
+# 方式1：直接使用配置实例
+from test_config import config
+server_url = config.get('server_url')
+
+# 方式2：使用配置助手（推荐）
+from config_helper import get_server_url, get_credentials, get_aging_params
+server_url = get_server_url()
+credentials = get_credentials()
+aging_config = get_aging_params()
+```
 
 ### 2. 统一测试基类 (`test_base.py`)
 
@@ -186,43 +203,119 @@ python test_simple_aging.py
 
 ## 🔧 配置说明
 
-### 配置文件
+### 统一配置系统
 
-测试配置通过 `test_config.py` 管理，支持以下参数：
+所有测试现在使用 `test_config.py` 统一配置管理系统：
 
+**配置文件结构**：
 ```python
-# 服务器配置
-server_url = "https://autotest.local.vpc"
-namespace = "default"
-
-# 并发测试参数
-concurrent_params = {
-    "max_workers": 10,
-    "timeout": 30,
-    "retry_count": 3
-}
-
-# 性能阈值
-performance_thresholds = {
-    "avg_response_time": 2.0,  # 秒
-    "success_rate": 95.0,      # 百分比
-    "throughput": 10.0         # 请求/秒
+# test_config.py 中的配置结构
+config = {
+    # 服务器配置
+    'server_url': 'https://autotest.local.vpc',
+    'username': 'administrator',
+    'password': 'administrator',
+    'namespace': 'autotest',
+    
+    # 测试模式配置
+    'test_mode': 'functional',  # functional, pressure, aging, scenario
+    'environment': 'test',      # dev, test, stress, prod
+    
+    # 并发测试配置
+    'max_workers': 10,
+    'concurrent_timeout': 30,
+    'retry_count': 3,
+    
+    # 老化测试配置
+    'aging_duration_hours': 24,
+    'aging_concurrent_threads': 10,
+    'aging_operation_interval': 1.0,
+    'aging_max_data_count': 1000,  # 万条
+    'aging_performance_degradation_threshold': 20.0,  # 百分比
+    'aging_report_interval_minutes': 30,
+    
+    # 性能阈值
+    'performance_thresholds': {
+        'avg_response_time': 2.0,  # 秒
+        'success_rate': 95.0,      # 百分比
+        'throughput': 10.0         # 请求/秒
+    }
 }
 ```
 
-### 环境变量
+### 环境变量覆盖
 
-可以通过环境变量覆盖配置：
+支持通过环境变量动态覆盖配置：
 
 ```bash
-# 设置测试模式
-export TEST_MODE=pressure
-
-# 设置服务器URL
+# 服务器配置
 export TEST_SERVER_URL=https://test.example.com
-
-# 设置命名空间
+export TEST_USERNAME=testuser
+export TEST_PASSWORD=testpass
 export TEST_NAMESPACE=vmi_test
+
+# 测试模式配置
+export TEST_MODE=pressure
+export TEST_ENVIRONMENT=stress
+
+# 并发测试配置
+export TEST_MAX_WORKERS=5
+export TEST_TIMEOUT=60
+export TEST_RETRY_COUNT=5
+
+# 老化测试配置
+export AGING_DURATION_HOURS=12
+export AGING_CONCURRENT_THREADS=5
+export AGING_OPERATION_INTERVAL=2.0
+export AGING_MAX_DATA_COUNT=500
+export AGING_PERFORMANCE_THRESHOLD=15.0
+export AGING_REPORT_INTERVAL=60
+
+# 日志配置
+export TEST_LOG_LEVEL=DEBUG
+```
+
+### 配置文件支持
+
+支持从JSON配置文件加载配置：
+```bash
+# 创建配置文件
+cat > test_config.json << EOF
+{
+  "server_url": "https://custom.example.com",
+  "username": "custom_user",
+  "aging_duration_hours": 48,
+  "aging_concurrent_threads": 20
+}
+EOF
+
+# 配置会自动从 test_config.json 加载
+```
+
+### 代码中使用配置
+
+```python
+# 方式1：使用配置助手（推荐）
+from config_helper import get_server_url, get_credentials, get_aging_params
+
+server_url = get_server_url()
+credentials = get_credentials()
+aging_config = get_aging_params()
+
+# 方式2：直接使用配置实例
+from test_config import config
+
+server_url = config.get('server_url')
+username = config.get('username')
+duration_hours = config.get('aging_duration_hours')
+
+# 方式3：在测试基类中自动使用
+from test_base import TestBase
+
+class MyTest(TestBase):
+    def test_example(self):
+        # 自动使用配置的服务器URL和凭证
+        result = self.perform_operation()
 ```
 
 ## 📈 测试报告
@@ -318,10 +411,12 @@ cat test_report_20260128_183051.json | python -m json.tool
 - **性能劣化监控**：检测响应时间增长超过阈值（默认20%）
 - **数据量限制**：控制测试数据总量不超过设定限制（默认1000万条）
 - **详细报告生成**：JSON和文本格式的完整测试报告
+- **统一配置管理**：使用 `test_config.py` 统一配置系统
 
 **老化测试配置**：
 ```python
-# 默认配置（可在运行时通过参数调整）
+# 配置存储在 test_config.py 中，支持环境变量覆盖
+# 默认配置：
 duration_hours = 24           # 测试持续时间（小时）
 concurrent_threads = 10       # 并发线程数
 operation_interval = 1.0      # 操作间隔（秒）
@@ -335,7 +430,7 @@ report_interval_minutes = 30  # 报告生成间隔（分钟）
 # 使用默认配置运行24小时测试
 python aging_test_simple.py
 
-# 自定义配置运行
+# 通过命令行参数自定义配置
 python aging_test_simple.py \
   --duration 12 \
   --threads 5 \
@@ -343,6 +438,12 @@ python aging_test_simple.py \
   --max-data 500 \
   --degradation-threshold 15.0 \
   --report-interval 60
+
+# 通过环境变量自定义配置
+export AGING_DURATION_HOURS=12
+export AGING_CONCURRENT_THREADS=5
+export AGING_OPERATION_INTERVAL=2.0
+python aging_test_simple.py
 ```
 
 **数据格式修复**：
@@ -405,14 +506,26 @@ python aging_test_simple.py \
    pip list | grep requests
    ```
 
-4. **SSL证书警告**
+4. **配置加载问题**
+   ```bash
+   # 验证配置加载
+   python3 -c "from test_config import config; print(config.get('server_url'))"
+   
+   # 验证配置助手
+   python3 -c "from config_helper import get_server_url; print(get_server_url())"
+   
+   # 检查环境变量
+   env | grep -E "(TEST_|AGING_)"
+   ```
+
+5. **SSL证书警告**
    ```bash
    # 测试环境使用自签名证书，警告正常
    # 如需禁用SSL验证（仅测试环境）
    export TEST_DISABLE_SSL_VERIFY=true
    ```
 
-5. **并发测试失败：服务器负载过高**
+6. **并发测试失败：服务器负载过高**
    ```bash
    # 减少并发数
    export TEST_MAX_WORKERS=5
@@ -422,7 +535,7 @@ python aging_test_simple.py \
    export TEST_TIMEOUT=60
    ```
 
-6. **测试数据清理问题**
+7. **测试数据清理问题**
    ```bash
    # 测试会在服务器上创建真实数据
    # 确保有适当的数据清理机制
@@ -430,7 +543,7 @@ python aging_test_simple.py \
    export TEST_NAMESPACE=vmi_test
    ```
 
-7. **老化测试线程停止问题**
+8. **老化测试线程停止问题**
    ```bash
    # 检查线程同步机制
    # 确保使用正确的stop_event设置
@@ -438,6 +551,22 @@ python aging_test_simple.py \
    
    # 查看线程状态
    ps aux | grep python | grep aging
+   ```
+
+9. **配置不生效问题**
+   ```bash
+   # 检查配置优先级：环境变量 > 配置文件 > 默认配置
+   # 重新导入配置模块
+   python3 -c "
+   import sys
+   if 'test_config' in sys.modules:
+       del sys.modules['test_config']
+   from test_config import config
+   print('当前服务器URL:', config.get('server_url'))
+   "
+   
+   # 检查配置助手
+   python3 -c "from config_helper import get_server_url; print('配置助手URL:', get_server_url())"
    ```
 
 ### 调试模式
@@ -622,6 +751,22 @@ python test_adapter.py --help
 
 ## 🔄 更新日志
 
+### 版本 2.2.0 (2026-01-29)
+**统一配置系统**：
+- ✅ 增强的 `test_config.py` 配置管理系统
+- ✅ 单例模式全局配置实例
+- ✅ 环境变量动态配置覆盖
+- ✅ 配置文件支持（JSON格式）
+- ✅ 配置助手模块 `config_helper.py`
+- ✅ 类型安全的配置值转换
+
+**配置整合**：
+- ✅ 所有测试文件使用统一配置
+- ✅ 老化测试配置集成到统一系统
+- ✅ 服务器URL和凭证集中管理
+- ✅ 并发测试参数统一配置
+- ✅ 性能阈值集中管理
+
 ### 版本 2.1.0 (2026-01-29)
 **新增功能**：
 - ✅ 长期老化测试框架
@@ -648,5 +793,5 @@ python test_adapter.py --help
 
 ---
 **最后更新**: 2026-01-29  
-**版本**: 2.1.0  
-**状态**: ✅ 生产就绪（包含老化测试）
+**版本**: 2.2.0  
+**状态**: ✅ 生产就绪（包含统一配置和老化测试）
