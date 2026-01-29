@@ -10,9 +10,19 @@ echo "========================================="
 
 # 检查Python环境
 echo "1. 检查Python环境..."
-python --version
+# 尝试python3，如果失败则尝试python
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    echo "❌ Python环境异常：未找到python或python3命令"
+    exit 1
+fi
+
+$PYTHON_CMD --version
 if [ $? -eq 0 ]; then
-    echo "✅ Python环境正常"
+    echo "✅ Python环境正常 ($PYTHON_CMD)"
 else
     echo "❌ Python环境异常"
     exit 1
@@ -26,7 +36,9 @@ VENV_PATHS=(
     "$(pwd)/../venv"                     # 项目上级目录的venv
     "$HOME/codespace/venv"               # 用户目录下的venv
     "$(dirname "$(pwd)")/venv"           # 项目根目录的venv
-    "/home/rangh/codespace/venv"         # 原始路径（向后兼容）
+    "$HOME/.virtualenvs/vmi"             # virtualenvwrapper风格
+    "$HOME/.venv"                        # 用户主目录下的venv
+    "./venv"                             # 当前目录下的venv
 )
 
 VENV_FOUND=false
@@ -47,6 +59,10 @@ if [ "$VENV_FOUND" = false ]; then
     for venv_path in "${VENV_PATHS[@]}"; do
         echo "     - $venv_path"
     done
+    echo "   提示: 可以使用以下命令创建虚拟环境:"
+    echo "     python -m venv venv"
+    echo "     或"
+    echo "     python -m venv ~/.virtualenvs/vmi"
 fi
 
 # 激活虚拟环境（如果找到）
@@ -57,15 +73,19 @@ fi
 
 # 检查依赖包
 echo "3. 检查依赖包..."
-python -c "import pytest; import coverage; import matplotlib; import numpy; print('✅ 所有依赖包已安装')" 2>/dev/null || {
+$PYTHON_CMD -c "import pytest; import coverage; import matplotlib; import numpy; print('✅ 所有依赖包已安装')" 2>/dev/null || {
     echo "⚠️  部分依赖包未安装，尝试安装..."
-    pip install pytest coverage matplotlib numpy --quiet
+    if [ -n "$VIRTUAL_ENV" ]; then
+        pip install pytest coverage matplotlib numpy --quiet
+    else
+        $PYTHON_CMD -m pip install pytest coverage matplotlib numpy --quiet
+    fi
     echo "✅ 依赖包安装完成"
 }
 
 # 验证框架导入
 echo "4. 验证框架导入..."
-python -c "
+$PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '.')
 try:
@@ -83,11 +103,11 @@ except Exception as e:
 
 # 运行框架验证
 echo "5. 运行框架验证..."
-python test_framework_validation.py 2>&1 | grep -E "(✅|❌|所有测试通过)" || true
+$PYTHON_CMD test_framework_validation.py 2>&1 | grep -E "(✅|❌|所有测试通过)" || true
 
 # 运行简单测试
 echo "6. 运行简单测试..."
-python -c "
+$PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '.')
 from test_base import TestBase
@@ -103,7 +123,7 @@ if __name__ == '__main__':
 
 # 检查测试报告
 echo "7. 检查测试报告生成..."
-python test_runner.py --mode concurrent --env test >/dev/null 2>&1
+$PYTHON_CMD test_runner.py --mode concurrent --env test >/dev/null 2>&1
 if ls test_report_*.json 1>/dev/null 2>&1; then
     echo "✅ 测试报告生成正常"
     echo "   最新报告: $(ls -t test_report_*.json | head -1)"

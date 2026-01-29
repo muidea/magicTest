@@ -65,7 +65,9 @@ find_virtualenv() {
         "$PROJECT_ROOT/venv"                     # 项目根目录的venv
         "$(dirname "$PROJECT_ROOT")/venv"        # 项目上级目录的venv
         "$HOME/codespace/venv"                   # 用户目录下的venv
-        "/home/rangh/codespace/venv"             # 原始路径（向后兼容）
+        "$HOME/.virtualenvs/vmi"                 # virtualenvwrapper风格
+        "$HOME/.venv"                            # 用户主目录下的venv
+        "./venv"                                 # 当前目录下的venv
     )
     
     for venv_path in "${venv_paths[@]}"; do
@@ -81,7 +83,17 @@ find_virtualenv() {
 # 1. 基础环境检查
 echo "=== 第1阶段：基础环境检查 ==="
 
-run_check "检查Python环境" "python --version"
+# 确定Python命令
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    print_status "error" "未找到python或python3命令"
+    exit 1
+fi
+
+run_check "检查Python环境" "$PYTHON_CMD --version"
 
 # 查找并激活虚拟环境
 VENV_PATH=$(find_virtualenv)
@@ -95,17 +107,19 @@ else
     echo "  - $PROJECT_ROOT/venv"
     echo "  - $(dirname "$PROJECT_ROOT")/venv"
     echo "  - $HOME/codespace/venv"
-    echo "  - /home/rangh/codespace/venv"
+    echo "  - $HOME/.virtualenvs/vmi"
+    echo "  - $HOME/.venv"
+    echo "  - ./venv"
 fi
 
-run_check "检查依赖包" "python -c \"import pytest; import coverage; import matplotlib; import numpy; print('依赖包正常')\""
+run_check "检查依赖包" "$PYTHON_CMD -c \"import pytest; import coverage; import matplotlib; import numpy; print('依赖包正常')\""
 
 # 2. 真实服务器环境检查
 echo -e "\n=== 第2阶段：真实服务器环境检查 ==="
 
-run_check "检查环境设置脚本" "cd '$CURRENT_DIR' && python setup_env.py 2>&1 | grep -q '环境设置完成'"
+run_check "检查环境设置脚本" "cd '$CURRENT_DIR' && $PYTHON_CMD setup_env.py 2>&1 | grep -q '环境设置完成'"
 
-run_check "验证项目路径设置" "python -c \"
+run_check "验证项目路径设置" "$PYTHON_CMD -c \"
 import sys
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -126,7 +140,7 @@ else:
     print('  -', os.path.join(project_root, 'cas'))
 \""
 
-run_check "检查真实模块导入" "python -c \"
+run_check "检查真实模块导入" "$PYTHON_CMD -c \"
 import sys
 import os
 
@@ -152,7 +166,7 @@ echo -e "\n=== 第3阶段：服务器连接检查 ==="
 
 run_check "检查服务器可访问性" "curl -k -s -o /dev/null -w '%{http_code}' https://autotest.local.vpc | grep -q '200\|301\|302'"
 
-run_check "测试服务器登录" "python -c \"
+run_check "测试服务器登录" "$PYTHON_CMD -c \"
 import sys
 import os
 
@@ -188,11 +202,11 @@ except Exception as e:
 # 4. 测试框架功能检查
 echo -e "\n=== 第4阶段：测试框架功能检查 ==="
 
-run_check "检查测试运行器" "cd '$CURRENT_DIR' && python test_runner.py --help 2>&1 | grep -q 'usage:'"
+run_check "检查测试运行器" "cd '$CURRENT_DIR' && $PYTHON_CMD test_runner.py --help 2>&1 | grep -q 'usage:'"
 
-run_check "运行基础测试" "cd '$CURRENT_DIR' && python -m unittest discover -p '*test.py' -v 2>&1 | tail -5 | grep -q 'OK'"
+run_check "运行基础测试" "cd '$CURRENT_DIR' && $PYTHON_CMD -m unittest discover -p '*test.py' -v 2>&1 | tail -5 | grep -q 'OK'"
 
-run_check "检查测试报告生成" "cd '$CURRENT_DIR' && python test_runner.py --mode basic --env test 2>&1 | grep -q '测试完成'"
+run_check "检查测试报告生成" "cd '$CURRENT_DIR' && $PYTHON_CMD test_runner.py --mode basic --env test 2>&1 | grep -q '测试完成'"
 
 # 5. 清理和总结
 echo -e "\n=== 第5阶段：清理和总结 ==="
@@ -213,14 +227,14 @@ echo ""
 echo -e "${BLUE}系统状态：${NC}"
 echo "- 项目目录: $PROJECT_ROOT"
 echo "- 虚拟环境: ${VENV_PATH:-未找到}"
-echo "- Python版本: $(python --version 2>&1)"
+echo "- Python版本: $($PYTHON_CMD --version 2>&1)"
 echo "- 服务器连接: 正常"
 echo ""
 echo -e "${YELLOW}下一步操作：${NC}"
 echo "1. 运行完整测试套件:"
-echo "   cd '$CURRENT_DIR' && python test_runner.py --mode all"
+echo "   cd '$CURRENT_DIR' && $PYTHON_CMD test_runner.py --mode all"
 echo "2. 验证部署:"
-echo "   cd '$CURRENT_DIR' && python deploy_verification.py"
+echo "   cd '$CURRENT_DIR' && $PYTHON_CMD deploy_verification.py"
 echo "3. 查看详细文档:"
 echo "   cat '$CURRENT_DIR/README.md' | head -50"
 echo ""
