@@ -21,7 +21,7 @@ class CreditReportSDK(VMISDKBase):
         Args:
             work_session: MagicSession 实例
         """
-        super().__init__(work_session, '/vmi/credit/report')
+        super().__init__(work_session, '/vmi/credit/creditReport')
     
     def filter_credit_report(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """过滤积分报表

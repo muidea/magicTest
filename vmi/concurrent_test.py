@@ -2,6 +2,7 @@ import concurrent.futures
 import threading
 import time
 import random
+import unittest
 from typing import List, Dict, Any, Callable, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -290,7 +291,7 @@ class DataIntegrityValidator:
         }
 
 
-class ConcurrentStoreTest(TestBase, ConcurrentTestMixin):
+class ConcurrentStoreTest(unittest.TestCase, ConcurrentTestMixin):
     def create_mock_entity(self, entity_type, data):
         """模拟创建实体"""
         entity_id = f"{entity_type}_{len(data)}"
@@ -376,7 +377,7 @@ class ConcurrentStoreTest(TestBase, ConcurrentTestMixin):
         self.assertLess(result.avg_response_time, 5.0)
 
 
-class ConcurrentWarehouseTest(TestBase, ConcurrentTestMixin):
+class ConcurrentWarehouseTest(unittest.TestCase, ConcurrentTestMixin):
     def test_concurrent_shelf_management(self):
         runner = ConcurrentTestRunner(max_workers=10)
         

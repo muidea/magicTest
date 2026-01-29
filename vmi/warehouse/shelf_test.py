@@ -659,7 +659,7 @@ class ShelfTestCase(unittest.TestCase):
         
         # 尝试更新仓库字段
         update_param = {
-            'warehouse': warehouse2['id']
+            'warehouse': {'id': warehouse2['id']}
         }
         
         # 根据实体定义，warehouse字段在新建时指定，不允许进行修改
@@ -667,8 +667,12 @@ class ShelfTestCase(unittest.TestCase):
         
         if updated_shelf is not None:
             # 如果系统允许更新，检查仓库字段是否真的被修改
-            if updated_shelf.get('warehouse') == warehouse2['id']:
+            # 注意：warehouse现在是一个对象 {'id': xxx}，不是整数
+            warehouse_value = updated_shelf.get('warehouse')
+            if isinstance(warehouse_value, dict) and warehouse_value.get('id') == warehouse2['id']:
                 logger.warning(f"系统允许更新货架的仓库字段: 从 {warehouse1['id']} 改为 {warehouse2['id']}")
+            elif warehouse_value == warehouse2['id']:
+                logger.warning(f"系统允许更新货架的仓库字段（整数格式）: 从 {warehouse1['id']} 改为 {warehouse2['id']}")
             else:
                 logger.info(f"系统忽略仓库字段更新（符合预期）")
         else:

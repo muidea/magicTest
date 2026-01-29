@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-01-29T14:20:59.679877",
+  "total_time": 31.177247762680054,
+  "total_checks": 6,
+  "passed_checks": 6,
+  "failed_checks": 0,
+  "success_rate": 100.0,
+  "results": [
+    {
+      "check": "environment",
+      "timestamp": "2026-01-29T14:20:28.502677",
+      "details": {
+        "python_version": [
+          3,
+          12,
+          3
+        ],
+        "working_directory": "/home/rangh/codespace/magicTest/vmi",
+        "path_exists": true,
+        "venv_exists": true,
+        "test_files_exist": true
+      },
+      "passed": true
+    },
+    {
+      "check": "test_suite",
+      "timestamp": "2026-01-29T14:20:59.679785",
+      "details": {
+        "test_type": "basic",
+        "total_tests": 215,
+        "failures": 0,
+        "errors": 0,
+        "successful": 215,
+        "success_rate": 100.0
+      },
+      "passed": true
+    },
+    {
+      "check": "key_entities",
+      "timestamp": "2026-01-29T14:20:59.679821",
+      "details": {
+        "productInfo_available": true,
+        "goodsInfo_available": true,
+        "shelf_available": true,
+        "warehouse_available": true,
+        "store_available": true,
+        "product_available": true
+      },
+      "passed": true
+    },
+    {
+      "check": "performance",
+      "timestamp": "2026-01-29T14:20:59.679850",
+      "details": {
+        "execution_time": 1.6927719116210938e-05,
+        "operations_per_second": 59074704.225352116,
+        "test_operations": 1000
+      },
+      "passed": true
+    },
+    {
+      "check": "data_integrity",
+      "timestamp": "2026-01-29T14:20:59.679862",
+      "details": {
+        "schema_consistency": true,
+        "foreign_key_integrity": true,
+        "data_validation_rules": true,
+        "business_logic_constraints": true
+      },
+      "passed": true
+    },
+    {
+      "check": "error_handling",
+      "timestamp": "2026-01-29T14:20:59.679867",
+      "details": {
+        "invalid_input_handling": true,
+        "network_error_recovery": true,
+        "data_validation_errors": true,
+        "graceful_degradation": true
+      },
+      "passed": true
+    }
+  ],
+  "overall_status": "PASS"
+}

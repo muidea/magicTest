@@ -21,7 +21,7 @@ class CreditRewardSDK(VMISDKBase):
         Args:
             work_session: MagicSession 实例
         """
-        super().__init__(work_session, '/vmi/credit/reward')
+        super().__init__(work_session, '/vmi/credit/creditReward')
     
     def filter_credit_reward(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """过滤积分消费记录

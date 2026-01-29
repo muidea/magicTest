@@ -21,7 +21,7 @@ class RewardPolicySDK(VMISDKBase):
         Args:
             work_session: MagicSession 实例
         """
-        super().__init__(work_session, '/vmi/credit')
+        super().__init__(work_session, '/vmi/credit/rewardPolicy')
     
     def filter_reward_policy(self, param: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """过滤积分策略
