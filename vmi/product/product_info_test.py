@@ -265,18 +265,33 @@ class ProductInfoTestCase(unittest.TestCase):
         }
         created_info = self.product_info_sdk.create_product_info(product_info_param)
         self.assertIsNotNone(created_info, "创建产品SKU失败")
+        
         if 'modifyTime' in created_info:
             original_modify_time = created_info['modifyTime']
-            update_param = {'description': '时间更新描述'}
+            
+            # 更新时必须包含所有必填字段
+            update_param = {
+                'sku': 'SKU008_UPDATED',
+                'description': '时间更新描述',
+                'product': {'id': self.test_product['id']}
+            }
+            
             updated_info = self.product_info_sdk.update_product_info(created_info['id'], update_param)
-            if updated_info and 'modifyTime' in updated_info:
+            self.assertIsNotNone(updated_info, "更新产品SKU失败")
+            
+            if 'modifyTime' in updated_info:
                 updated_modify_time = updated_info['modifyTime']
-                self.assertNotEqual(updated_modify_time, original_modify_time, "修改时间未自动更新")
+                
+                # 验证modifyTime已自动更新
+                self.assertNotEqual(updated_modify_time, original_modify_time, 
+                                  "modifyTime字段在更新后未自动刷新")
                 print(f"✓ 修改时间自动更新验证成功")
+                print(f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}")
             else:
-                print("⚠ 更新后未返回modifyTime字段")
+                self.fail("更新操作未返回modifyTime字段")
         else:
-            print("⚠ 产品SKU不包含modifyTime字段")
+            self.fail("创建的数据不包含modifyTime字段")
+        
         self.test_data.append(created_info)
     
     def test_product_info_product_validation(self):

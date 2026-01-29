@@ -308,18 +308,38 @@ class OrderTestCase(unittest.TestCase):
         }
         created_order = self.order_sdk.create_order(order_param)
         self.assertIsNotNone(created_order, "创建订单失败")
+        
         if 'modifyTime' in created_order:
             original_modify_time = created_order['modifyTime']
-            update_param = {'cost': 150.0}
+            
+            # 更新时必须包含所有必填字段
+            update_param = {
+                'type': 1,
+                'customer': {'id': self.test_partner['id']},
+                'goods': [
+                    {'sku': 'MODIFY_TIME_TEST', 'name': '修改时间测试商品', 'price': 50.0, 'count': 2}
+                ],
+                'cost': 150.0,
+                'store': {'id': self.test_store['id']},
+                'status': {'id': self.test_status['id']}
+            }
+            
             updated_order = self.order_sdk.update_order(created_order['id'], update_param)
-            if updated_order and 'modifyTime' in updated_order:
+            self.assertIsNotNone(updated_order, "更新订单失败")
+            
+            if 'modifyTime' in updated_order:
                 updated_modify_time = updated_order['modifyTime']
-                self.assertNotEqual(updated_modify_time, original_modify_time, "修改时间未自动更新")
+                
+                # 验证modifyTime已自动更新
+                self.assertNotEqual(updated_modify_time, original_modify_time, 
+                                  "modifyTime字段在更新后未自动刷新")
                 print(f"✓ 修改时间自动更新验证成功")
+                print(f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}")
             else:
-                print("⚠ 更新后未返回modifyTime字段")
+                self.fail("更新操作未返回modifyTime字段")
         else:
-            print("⚠ 订单不包含modifyTime字段")
+            self.fail("创建的数据不包含modifyTime字段")
+        
         self.test_data.append(created_order)
     
     def test_order_status_validation(self):

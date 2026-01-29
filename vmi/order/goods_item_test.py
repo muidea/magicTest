@@ -150,6 +150,7 @@ class GoodsItemTestCase(unittest.TestCase):
             'price': 100.0,
             'count': 0
         }
+        goods_item = None
         try:
             goods_item = self.goods_item_sdk.create_goods_item(goods_item_param)
             # 如果创建成功，记录ID以便清理
@@ -164,6 +165,9 @@ class GoodsItemTestCase(unittest.TestCase):
                 print("✓ 系统正确返回错误代码6拒绝创建count=0的商品条目")
             else:
                 print(f"⚠ 系统返回其他错误: {e}")
+            # 即使异常，也要尝试清理可能已创建的数据
+            if goods_item and 'id' in goods_item:
+                self.test_data.append(goods_item)
     
     def test_create_goods_item_without_sku(self):
         print("测试创建无SKU的商品条目...")
@@ -172,6 +176,7 @@ class GoodsItemTestCase(unittest.TestCase):
             'price': 100.0,
             'count': 1
         }
+        goods_item = None
         try:
             goods_item = self.goods_item_sdk.create_goods_item(goods_item_param)
             if goods_item:
@@ -186,6 +191,9 @@ class GoodsItemTestCase(unittest.TestCase):
                 print("✓ 系统正确返回错误代码4拒绝创建无SKU的商品条目")
             else:
                 print(f"⚠ 系统返回其他错误: {e}")
+            # 即使异常，也要尝试清理可能已创建的数据
+            if goods_item and 'id' in goods_item:
+                self.test_data.append(goods_item)
     
     def test_query_nonexistent_goods_item(self):
         print("测试查询不存在的商品条目...")

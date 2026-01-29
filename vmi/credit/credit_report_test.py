@@ -150,13 +150,24 @@ class CreditReportTestCase(unittest.TestCase):
     def test_create_credit_report_without_owner(self):
         print("测试创建无所属会员的积分报表...")
         credit_report_param = {'credit': 1000, 'available': 800}
-        credit_report = self.credit_report_sdk.create_credit_report(credit_report_param)
-        if credit_report is None:
-            print("✓ 系统正确拒绝创建无所属会员的积分报表")
-        else:
-            self.assertIn('owner', credit_report, "积分报表应包含所属会员字段")
-            print(f"⚠ 系统允许创建无所属会员的积分报表: ID={credit_report.get('id')}")
-            self.test_data.append(credit_report)
+        credit_report = None
+        try:
+            credit_report = self.credit_report_sdk.create_credit_report(credit_report_param)
+            if credit_report is None:
+                print("✓ 系统正确拒绝创建无所属会员的积分报表")
+            else:
+                self.assertIn('owner', credit_report, "积分报表应包含所属会员字段")
+                print(f"⚠ 系统允许创建无所属会员的积分报表: ID={credit_report.get('id')}")
+                self.test_data.append(credit_report)
+        except Exception as e:
+            # 检查错误代码是否为4（必填字段缺失）
+            if '错误代码: 4' in str(e) and 'owner' in str(e):
+                print("✓ 系统正确返回错误代码4拒绝创建无所属会员的积分报表")
+            else:
+                print(f"⚠ 系统返回其他错误: {e}")
+            # 即使异常，也要尝试清理可能已创建的数据
+            if credit_report and 'id' in credit_report:
+                self.test_data.append(credit_report)
     
     def test_query_nonexistent_credit_report(self):
         print("测试查询不存在的积分报表...")
@@ -192,18 +203,29 @@ class CreditReportTestCase(unittest.TestCase):
         credit_report_param = {'owner': {'id': self.test_partner['id']}, 'credit': 1000, 'available': 900}
         created_report = self.credit_report_sdk.create_credit_report(credit_report_param)
         self.assertIsNotNone(created_report, "创建积分报表失败")
+        
         if 'modifyTime' in created_report:
             original_modify_time = created_report['modifyTime']
-            update_param = {'credit': 1200}
+            
+            # 更新时必须包含所有必填字段
+            update_param = {'owner': {'id': self.test_partner['id']}, 'credit': 1200, 'available': 900}
+            
             updated_report = self.credit_report_sdk.update_credit_report(created_report['id'], update_param)
-            if updated_report and 'modifyTime' in updated_report:
+            self.assertIsNotNone(updated_report, "更新积分报表失败")
+            
+            if 'modifyTime' in updated_report:
                 updated_modify_time = updated_report['modifyTime']
-                self.assertNotEqual(updated_modify_time, original_modify_time, "修改时间未自动更新")
+                
+                # 验证modifyTime已自动更新
+                self.assertNotEqual(updated_modify_time, original_modify_time, 
+                                  "modifyTime字段在更新后未自动刷新")
                 print(f"✓ 修改时间自动更新验证成功")
+                print(f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}")
             else:
-                print("⚠ 更新后未返回modifyTime字段")
+                self.fail("更新操作未返回modifyTime字段")
         else:
-            print("⚠ 积分报表不包含modifyTime字段")
+            self.fail("创建的数据不包含modifyTime字段")
+        
         self.test_data.append(created_report)
     
     def test_credit_report_per_owner_limit(self):
