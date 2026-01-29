@@ -58,6 +58,9 @@ vmi/
 ├── product/                       # 产品相关测试
 ├── partner/                       # 合作伙伴测试
 └── credit/                        # 信用相关测试
+├── aging_test.py                  # 完整老化测试（原始版本）
+├── aging_test_simple.py           # 简化版老化测试（推荐使用）
+└── test_simple_aging.py           # 老化测试验证脚本
 ```
 
 ## 🛠️ 核心功能
@@ -173,6 +176,12 @@ python test_framework_validation.py
 
 # 运行测试适配器
 python test_adapter.py --migrate
+
+# 运行老化测试（简化版）
+python aging_test_simple.py --duration 1 --threads 3
+
+# 验证老化测试功能
+python test_simple_aging.py
 ```
 
 ## 🔧 配置说明
@@ -279,6 +288,8 @@ cat test_report_20260128_183051.json | python -m json.tool
 - 库存管理（入库、出库）
 - 仓库管理
 - 货架管理
+- 合作伙伴管理
+- 产品管理
 
 ### 2. 并发压力测试
 
@@ -294,6 +305,50 @@ cat test_report_20260128_183051.json | python -m json.tool
 - 单租户完整业务流程
 - 端到端测试
 - 业务规则验证
+
+### 4. 长期老化测试
+
+**新增功能**：长期稳定性测试框架，用于验证系统在持续负载下的稳定性。
+
+**核心特性**：
+- **五类实体完整测试**：partner, product, goods, stockin, stockout
+- **并发持续运行**：多线程长时间执行CRUD操作
+- **数据依赖管理**：自动处理实体间依赖关系（Product → Goods → Stockin/Stockout）
+- **智能错误恢复**：指数退避重试机制（最多3次重试）
+- **性能劣化监控**：检测响应时间增长超过阈值（默认20%）
+- **数据量限制**：控制测试数据总量不超过设定限制（默认1000万条）
+- **详细报告生成**：JSON和文本格式的完整测试报告
+
+**老化测试配置**：
+```python
+# 默认配置（可在运行时通过参数调整）
+duration_hours = 24           # 测试持续时间（小时）
+concurrent_threads = 10       # 并发线程数
+operation_interval = 1.0      # 操作间隔（秒）
+max_data_count = 1000         # 最大数据量（万条）
+performance_degradation_threshold = 20.0  # 性能劣化阈值（百分比）
+report_interval_minutes = 30  # 报告生成间隔（分钟）
+```
+
+**运行老化测试**：
+```bash
+# 使用默认配置运行24小时测试
+python aging_test_simple.py
+
+# 自定义配置运行
+python aging_test_simple.py \
+  --duration 12 \
+  --threads 5 \
+  --interval 2.0 \
+  --max-data 500 \
+  --degradation-threshold 15.0 \
+  --report-interval 60
+```
+
+**数据格式修复**：
+- **Stockin/Stockout API**：需要完整的goodsInfo对象，包含sku, product, type, count, price, shelf字段
+- **Goods API**：需要shelf数组和store字段
+- **类型字段**：type字段应为整数（入库=1，出库=2）
 
 ## 🔍 故障排除
 
@@ -329,14 +384,35 @@ cat test_report_20260128_183051.json | python -m json.tool
     "
    ```
 
-2. **SSL证书警告**
+2. **老化测试数据格式错误**
+   ```bash
+   # Stockin/Stockout API需要完整的goodsInfo对象
+   # 错误格式: goodsInfo: [{'id': goods_id}]
+   # 正确格式: goodsInfo: [{'id': goods_id, 'sku': 'SKU_001', 'product': {'id': 1}, 'type': 1, 'count': 10, 'price': 100.0, 'shelf': [{'id': 1}]}]
+   
+   # 验证数据格式
+   python test_api_validation.py
+   ```
+
+3. **Python虚拟环境问题**
+   ```bash
+   # 使用正确的虚拟环境路径
+   source ~/codespace/venv/bin/activate
+   
+   # 验证Python环境
+   which python3
+   python3 --version
+   pip list | grep requests
+   ```
+
+4. **SSL证书警告**
    ```bash
    # 测试环境使用自签名证书，警告正常
    # 如需禁用SSL验证（仅测试环境）
    export TEST_DISABLE_SSL_VERIFY=true
    ```
 
-3. **并发测试失败：服务器负载过高**
+5. **并发测试失败：服务器负载过高**
    ```bash
    # 减少并发数
    export TEST_MAX_WORKERS=5
@@ -346,12 +422,22 @@ cat test_report_20260128_183051.json | python -m json.tool
    export TEST_TIMEOUT=60
    ```
 
-4. **测试数据清理问题**
+6. **测试数据清理问题**
    ```bash
    # 测试会在服务器上创建真实数据
    # 确保有适当的数据清理机制
    # 或使用测试专用命名空间
    export TEST_NAMESPACE=vmi_test
+   ```
+
+7. **老化测试线程停止问题**
+   ```bash
+   # 检查线程同步机制
+   # 确保使用正确的stop_event设置
+   # 验证线程daemon设置
+   
+   # 查看线程状态
+   ps aux | grep python | grep aging
    ```
 
 ### 调试模式
@@ -483,8 +569,16 @@ class MyExistingTest(LegacyTestAdapter):
 ### 4. 错误处理与调试
 - **详细日志**：记录完整的请求/响应信息
 - **错误分类**：区分网络错误、服务器错误、业务错误
-- **重试策略**：对临时性错误实现自动重试
+- **重试策略**：对临时性错误实现自动重试（指数退避）
 - **调试工具**：提供专门的调试脚本和工具
+- **错误统计**：按实体类型和操作类型分类统计错误
+
+### 5. 老化测试最佳实践
+- **渐进式负载**：从低并发开始，逐步增加线程数
+- **性能基准**：建立初始性能基线，监控劣化趋势
+- **数据管理**：控制测试数据总量，避免数据库过载
+- **监控告警**：设置性能劣化阈值，自动停止测试
+- **报告分析**：定期生成测试报告，分析系统稳定性趋势
 
 ## 📞 支持与反馈
 
@@ -526,8 +620,33 @@ python test_adapter.py --help
 - 性能优化贡献者
 - 文档编写人员
 
----
+## 🔄 更新日志
 
-**最后更新**: 2026-01-28  
-**版本**: 2.0.0  
-**状态**: ✅ 生产就绪（真实服务器交互）
+### 版本 2.1.0 (2026-01-29)
+**新增功能**：
+- ✅ 长期老化测试框架
+- ✅ 五类实体完整测试支持
+- ✅ 数据依赖管理（Product → Goods → Stockin/Stockout）
+- ✅ 智能错误恢复和重试机制
+- ✅ 性能劣化监控和告警
+- ✅ 详细的测试报告生成
+
+**修复问题**：
+- ✅ Stockin/Stockout API数据格式修复
+- ✅ Goods API字段要求修复
+- ✅ 线程执行问题修复
+- ✅ Python虚拟环境路径修复
+
+**技术改进**：
+- ✅ 改进的错误分类和统计
+- ✅ 指数退避重试策略
+- ✅ 数据量限制控制
+- ✅ 更详细的性能监控
+
+### 版本 2.0.0 (2026-01-28)
+- 初始版本：真实服务器交互测试框架
+
+---
+**最后更新**: 2026-01-29  
+**版本**: 2.1.0  
+**状态**: ✅ 生产就绪（包含老化测试）

@@ -139,6 +139,32 @@ class TestRunner:
                 'error': str(e)
             }
     
+    def run_aging_tests(self):
+        print("运行长期老化测试...")
+        
+        try:
+            from aging_test_simple import AgingTestRunner, AgingTestConfig
+            
+            config = AgingTestConfig()
+            config.duration_hours = 1  # 测试1小时
+            config.concurrent_threads = 5  # 5个并发线程
+            config.max_data_count = 10  # 限制10万条数据
+            
+            runner = AgingTestRunner(config)
+            runner.run()
+            
+            return {
+                'test_type': 'aging',
+                'status': 'completed',
+                'stop_reason': runner.stop_reason
+            }
+        except Exception as e:
+            print(f"运行老化测试失败: {e}")
+            return {
+                'test_type': 'aging',
+                'error': str(e)
+            }
+    
     def run_all_tests(self):
         print("=== 开始运行所有测试 ===")
         
@@ -149,6 +175,7 @@ class TestRunner:
         results.append(self.run_basic_tests())
         results.append(self.run_concurrent_tests())
         results.append(self.run_scenario_tests())
+        results.append(self.run_aging_tests())
         
         end_time = datetime.now()
         total_duration = (end_time - start_time).total_seconds()
@@ -232,7 +259,7 @@ class TestRunner:
 
 def main():
     parser = argparse.ArgumentParser(description='VMI系统测试运行器')
-    parser.add_argument('--mode', choices=['basic', 'concurrent', 'scenario', 'all'], 
+    parser.add_argument('--mode', choices=['basic', 'concurrent', 'scenario', 'aging', 'all'], 
                        default='all', help='测试模式 (默认: all)')
     parser.add_argument('--env', choices=['dev', 'test', 'stress', 'prod'], 
                        default='test', help='测试环境 (默认: test)')
@@ -266,6 +293,9 @@ def main():
     elif args.mode == 'scenario':
         result = runner.run_scenario_tests()
         print(f"场景测试完成: {result}")
+    elif args.mode == 'aging':
+        result = runner.run_aging_tests()
+        print(f"老化测试完成: {result}")
     else:
         summary = runner.run_all_tests()
         
