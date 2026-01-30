@@ -1054,8 +1054,8 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='长期老化测试')
-    parser.add_argument('--duration', type=int, default=24,
-                       help='测试持续时间（小时），默认24小时')
+    parser.add_argument('--duration', type=float, default=24.0,
+                       help='测试持续时间（小时），默认24小时，支持小数如0.1（6分钟）')
     parser.add_argument('--threads', type=int, default=10,
                        help='并发线程数，默认10')
     parser.add_argument('--interval', type=float, default=1.0,

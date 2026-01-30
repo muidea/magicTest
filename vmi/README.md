@@ -5,10 +5,12 @@ VMI（Virtual Machine Inventory）测试系统，用于自动化测试VMI系统�
 
 ## 快速开始
 
-### 1. 激活虚拟环境
+### 1. 激活虚拟环境（必须）
 ```bash
 source ~/codespace/venv/bin/activate
 ```
+
+**重要**: 所有测试必须在虚拟环境中运行，否则会缺少依赖模块（如requests、psutil等）。
 
 ### 2. 使用统一测试运行器（推荐）
 ```bash
@@ -18,14 +20,22 @@ python3 run_all_tests.py --quick
 # 运行所有测试
 python3 run_all_tests.py --all
 
-# 运行老化测试（60分钟）
-python3 run_all_tests.py --aging 60
+# 运行老化测试（支持最短1分钟）
+python3 run_all_tests.py --aging 1    # 1分钟测试
+python3 run_all_tests.py --aging 6    # 6分钟测试
+python3 run_all_tests.py --aging 60   # 60分钟测试
 
 # 带性能监控的测试
 python3 run_all_tests.py --all --performance --report performance_report.json
 
 # 查看帮助
 python3 run_all_tests.py --help
+```
+
+### 3. 安装可选依赖（性能监控）
+```bash
+# 如果需要性能监控功能
+pip install psutil
 ```
 
 ## 核心文件
