@@ -173,7 +173,7 @@ import concurrent.futures
 from typing import List, Dict, Any
 
 from cas.cas import Cas
-from session import session, common
+import session, common
 from .sdk import WarehouseSDK, ShelfSDK, StoreSDK, ProductSDK
 
 

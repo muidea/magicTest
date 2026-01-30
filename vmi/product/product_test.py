@@ -55,7 +55,7 @@ Product 测试用例
 import unittest
 import warnings
 import logging
-from session import session
+import session
 from cas.cas import Cas
 from mock import common as mock
 from sdk import ProductSDK
@@ -67,16 +67,22 @@ logger = logging.getLogger(__name__)
 class ProductTestCase(unittest.TestCase):
     """Product 测试用例类"""
     
-    server_url = 'https://autotest.local.vpc'
     namespace = ''
     
     @classmethod
     def setUpClass(cls):
+        # 从config_helper获取配置
+
+        # 从config_helper获取配置
+        from config_helper import get_server_url, get_credentials
+        cls.server_url = get_server_url()
+        cls.credentials = get_credentials()
+        
         """测试类初始化"""
         warnings.simplefilter('ignore', ResourceWarning)
         cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
         cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login('administrator', 'administrator'):
+        if not cls.cas_session.login(cls.credentials['username'], cls.credentials['password']):
             logger.error('CAS登录失败')
             raise Exception('CAS登录失败')
         cls.work_session.bind_token(cls.cas_session.get_session_token())

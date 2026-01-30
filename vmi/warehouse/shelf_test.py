@@ -64,7 +64,7 @@ import unittest
 import warnings
 import logging
 import time
-from session import session
+import session
 from cas.cas import Cas
 from mock import common as mock
 from sdk import ShelfSDK, WarehouseSDK
@@ -76,16 +76,20 @@ logger = logging.getLogger(__name__)
 class ShelfTestCase(unittest.TestCase):
     """Shelf 测试用例类"""
     
-    server_url = 'https://autotest.local.vpc'
     namespace = ''
     
     @classmethod
     def setUpClass(cls):
         """测试类初始化"""
+        # 从config_helper获取配置
+        from config_helper import get_server_url, get_credentials
+        cls.server_url = get_server_url()
+        cls.credentials = get_credentials()
+        
         warnings.simplefilter('ignore', ResourceWarning)
         cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
         cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login('administrator', 'administrator'):
+        if not cls.cas_session.login(cls.credentials['username'], cls.credentials['password']):
             logger.error('CAS登录失败')
             raise Exception('CAS登录失败')
         cls.work_session.bind_token(cls.cas_session.get_session_token())
@@ -103,6 +107,8 @@ class ShelfTestCase(unittest.TestCase):
     @classmethod
     def _get_shelf_count(cls):
         """获取当前货架数量"""
+        # 注意：cls.server_url和cls.credentials已经在setUpClass中设置
+        # 这里不需要重新获取
         try:
             # 尝试使用count方法
             count = cls.shelf_sdk.count_shelf({})

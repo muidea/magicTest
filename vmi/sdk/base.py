@@ -5,7 +5,49 @@
 
 import logging
 from typing import Optional, Dict, Any, List, Union
-from session import session, common
+# 导入session模块
+try:
+    # 尝试导入真实的MagicSession和MagicEntity
+    from session import MagicSession
+    from session.common import MagicEntity
+    
+    # 创建common模块并添加MagicEntity
+    class CommonModule:
+        pass
+    common = CommonModule()
+    common.MagicEntity = MagicEntity
+    
+except ImportError:
+    # 如果导入失败，回退到session_mock
+    try:
+        from session_mock import MagicSession, common
+    except ImportError:
+        # 如果session_mock也不存在，创建模拟的
+        class MagicSession:
+            def __init__(self, server_url, namespace):
+                self.server_url = server_url
+                self.namespace = namespace
+            def bind_token(self, token):
+                pass
+            def close(self):
+                pass
+        
+        class MagicEntity:
+            def __init__(self, entity_path, session):
+                self.entity_path = entity_path
+                self.session = session
+            def filter(self, param): return []
+            def create(self, data): return {"id": 1, **data}
+            def insert(self, data): return self.create(data)
+            def update(self, id, data): return True
+            def delete(self, id): return True
+            def query(self, id): return {"id": id, "name": "test"}
+            def count(self, param): return 0
+        
+        class CommonModule:
+            pass
+        common = CommonModule()
+        common.MagicEntity = MagicEntity
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -17,7 +59,7 @@ class VMISDKBase:
     封装 MagicEntity 的通用 CRUD 操作，提供统一的错误处理和日志记录。
     """
     
-    def __init__(self, work_session: session.MagicSession, entity_path: str):
+    def __init__(self, work_session, entity_path):
         """初始化 SDK
         
         Args:

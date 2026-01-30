@@ -5,7 +5,7 @@
 
 import logging
 from typing import Optional, Dict, Any, List
-from session import session
+# from session import session  # 已注释，使用base.py中的导入
 from .base import VMISDKBase
 
 # 配置日志
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class OrderSDK(VMISDKBase):
     """订单信息 SDK 类"""
     
-    def __init__(self, work_session: session.MagicSession):
+    def __init__(self, work_session):
         """初始化订单信息 SDK
         
         Args:

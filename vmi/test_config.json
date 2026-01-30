@@ -1,0 +1,11 @@
+{
+  "server_url": "https://autotest.remote.vpc",
+  "username": "administrator",
+  "password": "administrator",
+  "namespace": "autotest",
+  "test_mode": "functional",
+  "environment": "remote",
+  "max_workers": 10,
+  "concurrent_timeout": 30,
+  "retry_count": 3
+}

@@ -147,6 +147,16 @@ class TestConfig:
         """获取配置值"""
         return self.config.get(key, default)
     
+    def load_config(self, config_path):
+        """从配置文件加载配置"""
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                file_config = json.load(f)
+                self.config.update(file_config)
+                print(f"✓ 从配置文件加载配置: {config_path}")
+        except Exception as e:
+            print(f"警告: 加载配置文件失败: {e}")
+    
 
     
     def set_mode(self, mode):
