@@ -176,7 +176,8 @@ def run_concurrent_test():
     print("\n⚡ 运行并发测试")
     print("这将测试系统在并发访问下的表现")
     
-    cmd = "python3 concurrent_test.py"
+    # 使用新的简化版并发测试
+    cmd = "python3 concurrent_test_simple.py"
     return run_command(cmd, "并发测试")
 
 def run_scenario_test():

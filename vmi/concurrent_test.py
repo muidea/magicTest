@@ -9,7 +9,7 @@ from datetime import datetime
 import json
 
 from test_base import TestBase, ConcurrentTestMixin, PerformanceMonitor
-from test_adapter import LegacyTestAdapter
+# from test_adapter import LegacyTestAdapter  # 暂时注释掉，未使用
 
 
 @dataclass
