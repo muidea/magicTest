@@ -1,11 +1,19 @@
 {
-  "server_url": "https://autotest.remote.vpc",
+  "server_url": "https://autotest.local.vpc",
   "username": "administrator",
   "password": "administrator",
   "namespace": "autotest",
   "test_mode": "functional",
-  "environment": "remote",
+  "environment": "local",
   "max_workers": 10,
   "concurrent_timeout": 30,
-  "retry_count": 3
+  "retry_count": 3,
+  "aging_params": {
+    "duration_hours": 24,
+    "concurrent_threads": 10,
+    "operation_interval": 1.0,
+    "max_data_count": 1000,
+    "performance_degradation_threshold": 20.0,
+    "report_interval_minutes": 30
+  }
 }

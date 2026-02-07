@@ -38,7 +38,7 @@ class AgingTestConfig:
         aging_config = get_aging_params()
         
         # 测试持续时间（小时）
-        self.duration_hours = aging_config.get('duration_hours', 24)
+        self.duration_hours = aging_config.get('duration_hours', 480)
         # 并发线程数
         self.concurrent_threads = aging_config.get('concurrent_threads', 10)
         # 操作间隔（秒）
