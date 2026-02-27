@@ -23,16 +23,24 @@ logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="session")
 def test_config() -> Dict[str, Any]:
-    """测试配置fixture - 会话级别"""
-    from config_helper import get_server_url, get_credentials, get_aging_params
+    """测试配置fixture - 从统一配置文件读取"""
+    import json
+    import os
+    
+    config_path = os.path.join(os.path.dirname(__file__), 'test_config.json')
+    
+    with open(config_path, 'r', encoding='utf-8') as f:
+        cfg = json.load(f)
     
     config = {
-        'server_url': get_server_url(),
-        'credentials': get_credentials(),
-        'aging_params': get_aging_params(),
-        'namespace': '',
-        'refresh_interval': 540,  # 9分钟刷新一次
-        'session_timeout': 1800,  # 30分钟会话超时
+        'server_url': cfg['server']['url'],
+        'namespace': cfg['server']['namespace'],
+        'credentials': cfg['credentials'],
+        'refresh_interval': cfg['session']['refresh_interval'],
+        'session_timeout': cfg['session']['timeout'],
+        'pytest': cfg.get('pytest', {}),
+        'concurrent': cfg.get('concurrent', {}),
+        'aging': cfg.get('aging', {}),
     }
     
     logger.info(f"测试配置加载完成 - 服务器: {config['server_url']}")

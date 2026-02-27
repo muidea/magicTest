@@ -12,6 +12,14 @@ import time
 import json
 from datetime import datetime
 
+def load_config():
+    """从统一配置文件加载配置"""
+    import json
+    config_path = os.path.join(os.path.dirname(__file__), 'test_config.json')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
 def run_command(cmd, description=""):
     """运行命令并显示输出"""
     print(f"\n{'='*60}")
@@ -45,47 +53,32 @@ def run_basic_tests():
     print("\n📋 运行基础测试套件")
     print("这将运行所有基础测试，验证系统基本功能")
     
-    # 测试核心模块导入和配置
-    cmd = """python3 -c "
+    config = load_config()
+    server_url = config['server']['url']
+    environment = config['server'].get('environment', 'N/A')
+    
+    cmd = f"""python3 -c "
 import json
+with open('test_config.json', 'r') as f:
+    config = json.load(f)
+print('✅ 配置文件加载成功')
+print('服务器: {server_url}')
+print('环境: {environment}')
+
+from sdk.base import MagicEntity
+print('✅ SDK基础类导入成功')
+
+from session_manager import SessionManager
+print('✅ 会话管理器导入成功')
+
 try:
-    # 测试配置加载
-    with open('test_config.json', 'r') as f:
-        config = json.load(f)
-    print('✅ 配置文件加载成功')
-    print('服务器: ' + config.get('server_url', 'N/A'))
-    print('环境: ' + config.get('environment', 'N/A'))
-    
-    # 测试SDK导入
-    from sdk.base import MagicEntity
-    print('✅ SDK基础类导入成功')
-    
-    # 测试会话管理器导入
-    from session_manager import SessionManager
-    print('✅ 会话管理器导入成功')
-    
-    # 测试性能监控导入（可选）
-    try:
-        from performance_monitor import PerformanceMonitor
-        print('✅ 性能监控器导入成功')
-    except ImportError as e:
-        print(f'⚠️  性能监控器导入警告: {e}')
-        print('ℹ️  可以运行: pip install psutil')
-    
-    print('\\n✅ 所有核心模块导入成功，基础测试通过')
-    
-except FileNotFoundError:
-    print('⚠️  配置文件不存在，测试模块导入')
-    from sdk.base import MagicEntity
-    from session_manager import SessionManager
-    try:
-        from performance_monitor import PerformanceMonitor
-        print('✅ 所有核心模块导入成功')
-    except ImportError:
-        print('✅ 核心模块导入成功（性能监控器需要psutil）')
-except Exception as e:
-    print(f'❌ 基础测试失败: {e}')
-    raise
+    from performance_monitor import PerformanceMonitor
+    print('✅ 性能监控器导入成功')
+except ImportError as e:
+    print(f'⚠️  性能监控器导入警告: {{e}}')
+    print('ℹ️  可以运行: pip install psutil')
+
+print('\\n✅ 所有核心模块导入成功，基础测试通过')
 "
 """
     return run_command(cmd, "基础测试套件")
@@ -95,23 +88,24 @@ def run_aging_test(duration=60):
     print(f"\n⏳ 运行老化测试 (持续时间: {duration}分钟)")
     print("这将测试系统在长时间运行下的稳定性")
     
-    # 支持最短1分钟测试
     if duration < 1:
-        duration = 1  # 最少1分钟
+        duration = 1
     
-    # 将分钟转换为小时（支持小数）
     duration_hours = duration / 60.0
     
-    # 设置报告间隔（根据测试时长调整）
-    if duration <= 5:  # 5分钟以内
-        report_interval = 1  # 1分钟报告一次
-    elif duration <= 30:  # 30分钟以内
-        report_interval = 2  # 2分钟报告一次
-    else:
-        report_interval = 5  # 5分钟报告一次
+    config = load_config()
+    aging_config = config.get('aging', {})
     
-    # 简化命令，直接调用
-    cmd = f"python3 aging_test_simple.py --duration {duration_hours:.2f} --report-interval {report_interval} --threads 2"
+    if duration <= 5:
+        report_interval = aging_config.get('report_interval_minutes', 1)
+    elif duration <= 30:
+        report_interval = aging_config.get('report_interval_minutes', 2)
+    else:
+        report_interval = aging_config.get('report_interval_minutes', 5)
+    
+    threads = aging_config.get('concurrent_threads', 2)
+    
+    cmd = f"python3 aging_test_simple.py --duration {duration_hours:.2f} --report-interval {report_interval} --threads {threads}"
     return run_command(cmd, f"老化测试 ({duration}分钟)")
 
 def run_session_manager_test():
@@ -119,37 +113,29 @@ def run_session_manager_test():
     print("\n🔐 运行会话管理器测试")
     print("这将验证会话管理器的自动刷新功能")
     
-    # 从配置中获取参数并测试会话管理器
-    cmd = """python3 -c "
-import json
-try:
-    with open('test_config.json', 'r') as f:
-        config = json.load(f)
+    config = load_config()
+    server_url = config['server']['url']
+    namespace = config['server']['namespace']
+    username = config['credentials']['username']
+    password = config['credentials']['password']
     
-    from session_manager import SessionManager
-    mgr = SessionManager(
-        server_url=config.get('server_url', ''),
-        namespace=config.get('namespace', ''),
-        username=config.get('username', ''),
-        password=config.get('password', '')
-    )
-    print('✅ 会话管理器创建成功')
-    print(f'服务器: {mgr.server_url}')
-    print(f'命名空间: {mgr.namespace}')
-    print(f'用户名: {mgr.username}')
-    # 清理会话管理器资源
-    if hasattr(mgr, 'close_session'):
-        mgr.close_session()
-        print('✅ 会话管理器关闭成功')
-    else:
-        print('ℹ️  会话管理器没有close_session方法')
-except FileNotFoundError:
-    print('⚠️  配置文件不存在，使用默认配置测试导入')
-    from session_manager import SessionManager
-    print('✅ 会话管理器导入成功')
-except Exception as e:
-    print(f'❌ 会话管理器测试失败: {e}')
-    raise
+    cmd = f"""python3 -c "
+from session_manager import SessionManager
+mgr = SessionManager(
+    server_url='{server_url}',
+    namespace='{namespace}',
+    username='{username}',
+    password='{password}'
+)
+print('✅ 会话管理器创建成功')
+print(f'服务器: {{mgr.server_url}}')
+print(f'命名空间: {{mgr.namespace}}')
+print(f'用户名: {{mgr.username}}')
+if hasattr(mgr, 'close_session'):
+    mgr.close_session()
+    print('✅ 会话管理器关闭成功')
+else:
+    print('ℹ️  会话管理器没有close_session方法')
 "
 """
     return run_command(cmd, "会话管理器测试")
