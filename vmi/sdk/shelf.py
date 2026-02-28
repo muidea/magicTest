@@ -4,7 +4,8 @@
 """
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
+
 # from session import session  # 已注释，使用base.py中的导入
 from .base import VMISDKBase
 
@@ -14,74 +15,78 @@ logger = logging.getLogger(__name__)
 
 class ShelfSDK(VMISDKBase):
     """货架 SDK 类"""
-    
+
     def __init__(self, work_session):
         """初始化货架 SDK
-        
+
         Args:
             work_session: MagicSession 实例
         """
-        super().__init__(work_session, '/vmi/warehouse/shelf')
-    
-    def filter_shelf(self, param: Dict[str, Any] = None) -> Optional[List[Dict[str, Any]]]:
+        super().__init__(work_session, "/vmi/warehouse/shelf")
+
+    def filter_shelf(
+        self, param: Dict[str, Any] = None
+    ) -> Optional[List[Dict[str, Any]]]:
         """过滤货架
-        
+
         Args:
             param: 过滤参数
-            
+
         Returns:
             货架列表或 None（失败时）
         """
         return self.filter(param)
-    
+
     def query_shelf(self, shelf_id: int) -> Optional[Dict[str, Any]]:
         """查询货架
-        
+
         Args:
             shelf_id: 货架ID
-            
+
         Returns:
             货架信息或 None（失败时）
         """
         return self.query(shelf_id)
-    
+
     def create_shelf(self, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """创建货架
-        
+
         Args:
             param: 货架参数
-            
+
         Returns:
             创建的货架信息或 None（失败时）
         """
         return self.create(param)
-    
-    def update_shelf(self, shelf_id: int, param: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+
+    def update_shelf(
+        self, shelf_id: int, param: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         """更新货架
-        
+
         Args:
             shelf_id: 货架ID
             param: 更新参数
-            
+
         Returns:
             更新的货架信息或 None（失败时）
         """
         return self.update(shelf_id, param)
-    
+
     def delete_shelf(self, shelf_id: int) -> Optional[Dict[str, Any]]:
         """删除货架
-        
+
         Args:
             shelf_id: 货架ID
-            
+
         Returns:
             删除的货架信息或 None（失败时）
         """
         return self.delete(shelf_id)
-    
+
     def count_shelf(self, param: Dict[str, Any] = None) -> Optional[int]:
         """统计货架数量
-        
+
         Returns:
             货架数量或 None（失败时）
         """

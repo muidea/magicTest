@@ -1,4 +1,26 @@
 """
+import os
+import sys
+
+# 添加项目根目录到Python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+project_root = os.path.dirname(parent_dir)
+
+# 确保session模块在路径中
+session_path = os.path.join(project_root, "session")
+if session_path not in sys.path:
+    sys.path.insert(0, session_path)
+
+# 确保cas模块在路径中
+cas_dir = os.path.join(project_root, "cas")
+if cas_dir not in sys.path:
+    sys.path.insert(0, cas_dir)
+
+# 确保mock模块在路径中
+mock_dir = os.path.join(project_root, "mock")
+if mock_dir not in sys.path:
+    sys.path.insert(0, mock_dir)
 Goods Info 测试用例
 
 基于 VMI实体定义和使用说明.md:207-218 中的 goodsInfo 实体定义编写。
@@ -17,34 +39,122 @@ Goods Info 测试用例
 10. test_goods_info_type_validation
 """
 
+import os
+import sys
+
+# 添加项目根目录到Python路径
+# 根据文件所在位置向上查找项目根目录
+file_dir = os.path.dirname(os.path.abspath(__file__))
+# session模块在 /home/rangh/codespace/magicTest/session
+# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
+# 需要向上找到 magicTest 目录
+project_root = file_dir
+while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
+    parent = os.path.dirname(project_root)
+    if parent == project_root:  # 到达根目录
+        break
+    project_root = parent
+
+# 如果没找到，使用默认路径
+if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
+    # 根据文件位置确定项目根目录
+    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
+        # 在子目录下，向上两级
+        project_root = os.path.dirname(os.path.dirname(file_dir))
+    else:
+        # 在vmi目录下，向上一级
+        project_root = os.path.dirname(file_dir)
+
+# 确保session模块在路径中
+session_path = os.path.join(project_root, "session")
+if session_path not in sys.path:
+    sys.path.insert(0, session_path)
+
+# 确保cas模块在路径中
+cas_dir = os.path.join(project_root, "cas")
+if cas_dir not in sys.path:
+    sys.path.insert(0, cas_dir)
+
+# 确保mock模块在路径中
+mock_dir = os.path.join(project_root, "mock")
+if mock_dir not in sys.path:
+    sys.path.insert(0, mock_dir)
+
+# 确保vmi目录在路径中（用于导入sdk模块）
+vmi_dir = os.path.join(project_root, "vmi")
+if vmi_dir not in sys.path:
+    sys.path.insert(0, vmi_dir)
+
+
+
+# 添加项目根目录到Python路径
+# 根据文件所在位置向上查找项目根目录
+file_dir = os.path.dirname(os.path.abspath(__file__))
+# session模块在 /home/rangh/codespace/magicTest/session
+# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
+# 需要向上找到 magicTest 目录
+project_root = file_dir
+while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
+    parent = os.path.dirname(project_root)
+    if parent == project_root:  # 到达根目录
+        break
+    project_root = parent
+
+# 如果没找到，使用默认路径
+if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
+    # 根据文件位置确定项目根目录
+    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
+        # 在子目录下，向上两级
+        project_root = os.path.dirname(os.path.dirname(file_dir))
+    else:
+        # 在vmi目录下，向上一级
+        project_root = os.path.dirname(file_dir)
+
+# 确保session模块在路径中
+session_path = os.path.join(project_root, "session")
+
+# 确保cas模块在路径中
+cas_dir = os.path.join(project_root, "cas")
+
+# 确保mock模块在路径中
+mock_dir = os.path.join(project_root, "mock")
+
+
+from session import MagicSession
+from cas.cas import Cas
+from mock import common as mock
+import logging
 import unittest
 import warnings
-import logging
-import session
-from cas.cas import Cas
-from sdk import GoodsInfoSDK, ProductInfoSDK, ProductSDK, StoreSDK, StatusSDK, WarehouseSDK, ShelfSDK
-from mock import common as mock
+
+
+from sdk import (GoodsInfoSDK, ProductInfoSDK, ProductSDK, ShelfSDK, StatusSDK,
+                 StoreSDK, WarehouseSDK)
 
 logger = logging.getLogger(__name__)
 
+
 class GoodsInfoTestCase(unittest.TestCase):
-    namespace = ''
-    
+    namespace = ""
+
     @classmethod
     def setUpClass(cls):
         # 从config_helper获取配置
 
         # 从config_helper获取配置
-        from config_helper import get_server_url, get_credentials
+        from config_helper import get_credentials, get_server_url
+
         cls.server_url = get_server_url()
         cls.credentials = get_credentials()
-        
-        warnings.simplefilter('ignore', ResourceWarning)
-        cls.work_session = session.MagicSession(cls.server_url, cls.namespace)
+
+        warnings.simplefilter("ignore", ResourceWarning)
+        cls.work_session = MagicSession(cls.server_url, cls.namespace)
         cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(cls.credentials['username'], cls.credentials['password']):
-            logger.error('CAS登录失败')
-            raise Exception('CAS登录失败')
+        if not cls.cas_session.login(
+            cls.credentials["username"], cls.credentials["password"]
+        ):
+            logger.error("CAS登录失败")
+            raise Exception("CAS登录失败")
         cls.work_session.bind_token(cls.cas_session.get_session_token())
         cls.goods_info_sdk = GoodsInfoSDK(cls.work_session)
         cls.product_info_sdk = ProductInfoSDK(cls.work_session)
@@ -55,18 +165,20 @@ class GoodsInfoTestCase(unittest.TestCase):
         cls.shelf_sdk = ShelfSDK(cls.work_session)
         cls.test_data = []
         print("Goods Info 测试开始...")
-    
+
     def setUp(self):
         # 创建测试产品
         product_param = {
-            'name': '测试产品-GoodsInfo',
-            'description': 'GoodsInfo测试用产品',
-            'status': {'id': 19}
+            "name": "测试产品-GoodsInfo",
+            "description": "GoodsInfo测试用产品",
+            "status": {"id": 19},
         }
         try:
             self.test_product = self.product_sdk.create_product(product_param)
             if not self.test_product:
-                products = self.product_sdk.filter_product({'name': '测试产品-GoodsInfo'})
+                products = self.product_sdk.filter_product(
+                    {"name": "测试产品-GoodsInfo"}
+                )
                 if products and len(products) > 0:
                     self.test_product = products[0]
                 else:
@@ -74,17 +186,21 @@ class GoodsInfoTestCase(unittest.TestCase):
         except Exception as e:
             logger.warning(f"创建测试产品失败: {e}")
             self.skipTest(f"创建测试产品失败: {e}")
-        
+
         # 创建测试产品SKU
         product_info_param = {
-            'sku': 'SKU-GOODSINFO',
-            'description': 'GoodsInfo测试SKU',
-            'product': {'id': self.test_product['id']}
+            "sku": "SKU-GOODSINFO",
+            "description": "GoodsInfo测试SKU",
+            "product": {"id": self.test_product["id"]},
         }
         try:
-            self.test_product_info = self.product_info_sdk.create_product_info(product_info_param)
+            self.test_product_info = self.product_info_sdk.create_product_info(
+                product_info_param
+            )
             if not self.test_product_info:
-                product_infos = self.product_info_sdk.filter_product_info({'sku': 'SKU-GOODSINFO'})
+                product_infos = self.product_info_sdk.filter_product_info(
+                    {"sku": "SKU-GOODSINFO"}
+                )
                 if product_infos and len(product_infos) > 0:
                     self.test_product_info = product_infos[0]
                 else:
@@ -92,13 +208,16 @@ class GoodsInfoTestCase(unittest.TestCase):
         except Exception as e:
             logger.warning(f"创建测试产品SKU失败: {e}")
             self.skipTest(f"创建测试产品SKU失败: {e}")
-        
+
         # 创建测试店铺
-        store_param = {'name': '测试店铺-GoodsInfo', 'description': 'GoodsInfo测试用店铺'}
+        store_param = {
+            "name": "测试店铺-GoodsInfo",
+            "description": "GoodsInfo测试用店铺",
+        }
         try:
             self.test_store = self.store_sdk.create_store(store_param)
             if not self.test_store:
-                stores = self.store_sdk.filter_store({'name': '测试店铺-GoodsInfo'})
+                stores = self.store_sdk.filter_store({"name": "测试店铺-GoodsInfo"})
                 if stores and len(stores) > 0:
                     self.test_store = stores[0]
                 else:
@@ -106,7 +225,7 @@ class GoodsInfoTestCase(unittest.TestCase):
         except Exception as e:
             logger.warning(f"创建测试店铺失败: {e}")
             self.skipTest(f"创建测试店铺失败: {e}")
-        
+
         # 获取状态
         try:
             statuses = self.status_sdk.filter_status({})
@@ -117,16 +236,18 @@ class GoodsInfoTestCase(unittest.TestCase):
         except Exception as e:
             logger.warning(f"获取状态信息失败: {e}")
             self.skipTest(f"获取状态信息失败: {e}")
-        
+
         # 创建测试仓库
         warehouse_param = {
-            'name': '测试仓库-GoodsInfo',
-            'description': 'GoodsInfo测试用仓库'
+            "name": "测试仓库-GoodsInfo",
+            "description": "GoodsInfo测试用仓库",
         }
         try:
             self.test_warehouse = self.warehouse_sdk.create_warehouse(warehouse_param)
             if not self.test_warehouse:
-                warehouses = self.warehouse_sdk.filter_warehouse({'name': '测试仓库-GoodsInfo'})
+                warehouses = self.warehouse_sdk.filter_warehouse(
+                    {"name": "测试仓库-GoodsInfo"}
+                )
                 if warehouses and len(warehouses) > 0:
                     self.test_warehouse = warehouses[0]
                 else:
@@ -134,18 +255,20 @@ class GoodsInfoTestCase(unittest.TestCase):
         except Exception as e:
             logger.warning(f"创建测试仓库失败: {e}")
             self.skipTest(f"创建测试仓库失败: {e}")
-        
+
         # 创建测试货架（shelf需要warehouse字段，capacity不能为0）
         shelf_param = {
-            'description': 'GoodsInfo测试货架',
-            'capacity': 100,  # capacity不能为0
-            'warehouse': {'id': self.test_warehouse['id']},
-            'status': {'id': 19}  # 启用状态
+            "description": "GoodsInfo测试货架",
+            "capacity": 100,  # capacity不能为0
+            "warehouse": {"id": self.test_warehouse["id"]},
+            "status": {"id": 19},  # 启用状态
         }
         try:
             self.test_shelf = self.shelf_sdk.create_shelf(shelf_param)
             if not self.test_shelf:
-                shelves = self.shelf_sdk.filter_shelf({'description': 'GoodsInfo测试货架'})
+                shelves = self.shelf_sdk.filter_shelf(
+                    {"description": "GoodsInfo测试货架"}
+                )
                 if shelves and len(shelves) > 0:
                     self.test_shelf = shelves[0]
                 else:
@@ -153,140 +276,182 @@ class GoodsInfoTestCase(unittest.TestCase):
         except Exception as e:
             logger.warning(f"创建测试货架失败: {e}")
             self.skipTest(f"创建测试货架失败: {e}")
-    
+
     def tearDown(self):
         for data in self.test_data:
-            if 'id' in data:
+            if "id" in data:
                 try:
-                    self.goods_info_sdk.delete_goods_info(data['id'])
+                    self.goods_info_sdk.delete_goods_info(data["id"])
                 except Exception as e:
                     logger.warning(f"清理商品SKU {data.get('id')} 失败: {e}")
-        if hasattr(self, 'test_store') and self.test_store and 'id' in self.test_store:
+        if hasattr(self, "test_store") and self.test_store and "id" in self.test_store:
             try:
-                self.store_sdk.delete_store(self.test_store['id'])
+                self.store_sdk.delete_store(self.test_store["id"])
             except Exception as e:
                 logger.warning(f"清理店铺 {self.test_store.get('id')} 失败: {e}")
-        if hasattr(self, 'test_product_info') and self.test_product_info and 'id' in self.test_product_info:
+        if (
+            hasattr(self, "test_product_info")
+            and self.test_product_info
+            and "id" in self.test_product_info
+        ):
             try:
-                self.product_info_sdk.delete_product_info(self.test_product_info['id'])
+                self.product_info_sdk.delete_product_info(self.test_product_info["id"])
             except Exception as e:
-                logger.warning(f"清理产品SKU {self.test_product_info.get('id')} 失败: {e}")
-        if hasattr(self, 'test_product') and self.test_product and 'id' in self.test_product:
+                logger.warning(
+                    f"清理产品SKU {self.test_product_info.get('id')} 失败: {e}"
+                )
+        if (
+            hasattr(self, "test_product")
+            and self.test_product
+            and "id" in self.test_product
+        ):
             try:
-                self.product_sdk.delete_product(self.test_product['id'])
+                self.product_sdk.delete_product(self.test_product["id"])
             except Exception as e:
                 logger.warning(f"清理产品 {self.test_product.get('id')} 失败: {e}")
-        if hasattr(self, 'test_shelf') and self.test_shelf and 'id' in self.test_shelf:
+        if hasattr(self, "test_shelf") and self.test_shelf and "id" in self.test_shelf:
             try:
-                self.shelf_sdk.delete_shelf(self.test_shelf['id'])
+                self.shelf_sdk.delete_shelf(self.test_shelf["id"])
             except Exception as e:
                 logger.warning(f"清理货架 {self.test_shelf.get('id')} 失败: {e}")
-        if hasattr(self, 'test_warehouse') and self.test_warehouse and 'id' in self.test_warehouse:
+        if (
+            hasattr(self, "test_warehouse")
+            and self.test_warehouse
+            and "id" in self.test_warehouse
+        ):
             try:
-                self.warehouse_sdk.delete_warehouse(self.test_warehouse['id'])
+                self.warehouse_sdk.delete_warehouse(self.test_warehouse["id"])
             except Exception as e:
                 logger.warning(f"清理仓库 {self.test_warehouse.get('id')} 失败: {e}")
         self.test_data.clear()
 
-    def _create_goods_info_param(self, sku, product_info_id, type_val=1, count=1, price=100.0):
+    def _create_goods_info_param(
+        self, sku, product_info_id, type_val=1, count=1, price=100.0
+    ):
         """创建goodsInfo参数的辅助方法"""
         return {
-            'sku': sku,
-            'product': {'id': product_info_id},
-            'type': type_val,
-            'count': count,
-            'price': price,
-            'store': {'id': self.test_store['id']},
-            'shelf': [{'id': self.test_shelf['id']}],  # shelf字段是数组类型
-            'status': {'id': self.test_status['id']}
+            "sku": sku,
+            "product": {"id": product_info_id},
+            "type": type_val,
+            "count": count,
+            "price": price,
+            "store": {"id": self.test_store["id"]},
+            "shelf": [{"id": self.test_shelf["id"]}],  # shelf字段是数组类型
+            "status": {"id": self.test_status["id"]},
         }
 
     @classmethod
     def tearDownClass(cls):
         print("Goods Info 测试结束")
-    
+
     def test_create_goods_info(self):
         print("测试创建商品SKU...")
-        goods_info_param = self._create_goods_info_param('GOODS001', self.test_product_info['id'], count=10)
+        goods_info_param = self._create_goods_info_param(
+            "GOODS001", self.test_product_info["id"], count=10
+        )
         goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         self.assertIsNotNone(goods_info, "创建商品SKU失败")
-        required_fields = ['id', 'sku', 'product', 'type', 'count', 'price', 'creater', 'createTime', 'namespace']
+        required_fields = [
+            "id",
+            "sku",
+            "product",
+            "type",
+            "count",
+            "price",
+            "creater",
+            "createTime",
+            "namespace",
+        ]
         for field in required_fields:
             self.assertIn(field, goods_info, f"商品SKU缺少必填字段: {field}")
         self.test_data.append(goods_info)
-        print(f"✓ 商品SKU创建成功: ID={goods_info.get('id')}, SKU={goods_info.get('sku')}")
-    
+        print(
+            f"✓ 商品SKU创建成功: ID={goods_info.get('id')}, SKU={goods_info.get('sku')}"
+        )
+
     def test_query_goods_info(self):
         print("测试查询商品SKU...")
-        goods_info_param = self._create_goods_info_param('GOODS002', self.test_product_info['id'], count=5, price=150.0)
+        goods_info_param = self._create_goods_info_param(
+            "GOODS002", self.test_product_info["id"], count=5, price=150.0
+        )
         created_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         self.assertIsNotNone(created_info, "创建商品SKU失败")
-        queried_info = self.goods_info_sdk.query_goods_info(created_info['id'])
+        queried_info = self.goods_info_sdk.query_goods_info(created_info["id"])
         self.assertIsNotNone(queried_info, "查询商品SKU失败")
-        self.assertEqual(queried_info['id'], created_info['id'], "ID不匹配")
+        self.assertEqual(queried_info["id"], created_info["id"], "ID不匹配")
         self.test_data.append(created_info)
         print(f"✓ 商品SKU查询成功: ID={queried_info.get('id')}")
-    
+
     def test_update_goods_info(self):
         print("测试更新商品SKU...")
-        goods_info_param = self._create_goods_info_param('GOODS003', self.test_product_info['id'], count=3, price=200.0)
+        goods_info_param = self._create_goods_info_param(
+            "GOODS003", self.test_product_info["id"], count=3, price=200.0
+        )
         created_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         self.assertIsNotNone(created_info, "创建商品SKU失败")
-        update_param = {'count': 5, 'price': 250.0}
-        updated_info = self.goods_info_sdk.update_goods_info(created_info['id'], update_param)
+        update_param = {"count": 5, "price": 250.0}
+        updated_info = self.goods_info_sdk.update_goods_info(
+            created_info["id"], update_param
+        )
         if updated_info:
-            self.assertEqual(updated_info['count'], 5, "更新后数量不匹配")
+            self.assertEqual(updated_info["count"], 5, "更新后数量不匹配")
             print(f"✓ 商品SKU更新成功: ID={updated_info.get('id')}")
         else:
             print("⚠ 商品SKU更新未返回结果")
         self.test_data.append(created_info)
-    
+
     def test_delete_goods_info(self):
         print("测试删除商品SKU...")
-        goods_info_param = self._create_goods_info_param('GOODS004', self.test_product_info['id'], price=300.0)
+        goods_info_param = self._create_goods_info_param(
+            "GOODS004", self.test_product_info["id"], price=300.0
+        )
         created_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         self.assertIsNotNone(created_info, "创建商品SKU失败")
-        deleted_info = self.goods_info_sdk.delete_goods_info(created_info['id'])
+        deleted_info = self.goods_info_sdk.delete_goods_info(created_info["id"])
         if deleted_info:
-            self.assertEqual(deleted_info['id'], created_info['id'], "删除的商品SKUID不匹配")
+            self.assertEqual(
+                deleted_info["id"], created_info["id"], "删除的商品SKUID不匹配"
+            )
             print(f"✓ 商品SKU删除成功: ID={deleted_info.get('id')}")
         else:
             print("⚠ 商品SKU删除未返回结果")
-    
+
     def test_create_goods_info_with_different_type(self):
         print("测试创建不同类型商品SKU...")
         goods_types = [1, 2]
         for goods_type in goods_types:
             goods_info_param = self._create_goods_info_param(
-                f'GOODS{goods_type}', 
-                self.test_product_info['id'], 
-                type_val=goods_type, 
-                count=2
+                f"GOODS{goods_type}",
+                self.test_product_info["id"],
+                type_val=goods_type,
+                count=2,
             )
             goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
             self.assertIsNotNone(goods_info, f"创建类型{goods_type}商品SKU失败")
-            self.assertEqual(goods_info['type'], goods_type, f"商品类型不匹配: {goods_type}")
+            self.assertEqual(
+                goods_info["type"], goods_type, f"商品类型不匹配: {goods_type}"
+            )
             self.test_data.append(goods_info)
             print(f"✓ 类型{goods_type}商品SKU创建成功")
-    
+
     def test_create_goods_info_without_product(self):
         print("测试创建无产品的商品SKU...")
         goods_info_param = {
-            'sku': 'GOODS006',
-            'type': 1,
-            'count': 1,
-            'price': 100.0,
-            'store': {'id': self.test_store['id']},
-            'status': {'id': self.test_status['id']}
+            "sku": "GOODS006",
+            "type": 1,
+            "count": 1,
+            "price": 100.0,
+            "store": {"id": self.test_store["id"]},
+            "status": {"id": self.test_status["id"]},
         }
         goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         if goods_info is None:
             print("✓ 系统正确拒绝创建无产品的商品SKU")
         else:
-            self.assertIn('product', goods_info, "商品SKU应包含产品字段")
+            self.assertIn("product", goods_info, "商品SKU应包含产品字段")
             print(f"⚠ 系统允许创建无产品的商品SKU: ID={goods_info.get('id')}")
             self.test_data.append(goods_info)
-    
+
     def test_query_nonexistent_goods_info(self):
         print("测试查询不存在的商品SKU...")
         non_existent_id = 999999999
@@ -295,7 +460,7 @@ class GoodsInfoTestCase(unittest.TestCase):
             print("✓ 查询不存在的商品SKU返回None，符合预期")
         else:
             print(f"⚠ 查询不存在的商品SKU返回: {goods_info}")
-    
+
     def test_delete_nonexistent_goods_info(self):
         print("测试删除不存在的商品SKU...")
         non_existent_id = 999999999
@@ -304,23 +469,27 @@ class GoodsInfoTestCase(unittest.TestCase):
             print("✓ 删除不存在的商品SKU返回None，符合预期")
         else:
             print(f"⚠ 删除不存在的商品SKU返回: {deleted_info}")
-    
+
     def test_auto_generated_fields(self):
         print("测试系统自动生成字段...")
-        goods_info_param = self._create_goods_info_param('GOODS007', self.test_product_info['id'])
+        goods_info_param = self._create_goods_info_param(
+            "GOODS007", self.test_product_info["id"]
+        )
         goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         self.assertIsNotNone(goods_info, "创建商品SKU失败")
-        auto_fields = ['id', 'creater', 'createTime', 'namespace']
+        auto_fields = ["id", "creater", "createTime", "namespace"]
         for field in auto_fields:
             self.assertIn(field, goods_info, f"缺少自动生成字段: {field}")
         self.test_data.append(goods_info)
         print(f"✓ 系统自动生成字段验证成功: ID={goods_info.get('id')}")
-    
+
     def test_goods_info_type_validation(self):
         print("测试商品SKU类型验证...")
-        goods_info_param = self._create_goods_info_param('GOODS008', self.test_product_info['id'])
+        goods_info_param = self._create_goods_info_param(
+            "GOODS008", self.test_product_info["id"]
+        )
         goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         self.assertIsNotNone(goods_info, "创建商品SKU失败")
-        self.assertEqual(goods_info['type'], 1, "商品类型不匹配")
+        self.assertEqual(goods_info["type"], 1, "商品类型不匹配")
         self.test_data.append(goods_info)
         print(f"✓ 商品SKU类型验证成功: 类型={goods_info.get('type')}")
