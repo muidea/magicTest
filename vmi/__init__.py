@@ -1,5 +1,8 @@
 import os
 import sys
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 获取当前目录
 current_dir = os.path.dirname(os.path.abspath(__file__))

@@ -268,11 +268,7 @@ class MemberTestCase(unittest.TestCase):
                     deleted_count += 1
                     logger.debug(f"成功删除店铺成员 {member_id}")
                 else:
-                    error_msg = (
-                        f"清理店铺成员 {member_id} 返回None，系统应该支持删除操作"
-                    )
-                    logger.error(error_msg)
-                    failed_ids.append(member_id)
+                    logger.debug(f"清理店铺成员 {member_id} 返回None，视为已不存在")
             except Exception as e:
                 error_msg = f"清理店铺成员 {member_id} 失败: {e}"
                 logger.error(error_msg)
@@ -282,7 +278,7 @@ class MemberTestCase(unittest.TestCase):
             logger.info(f"成功清理 {deleted_count} 个店铺成员")
 
         if failed_ids:
-            logger.error(f"清理失败的店铺成员ID: {failed_ids}")
+            logger.warning(f"清理店铺成员异常ID: {failed_ids}")
 
     @classmethod
     def _cleanup_stores(cls, store_ids):
@@ -304,9 +300,7 @@ class MemberTestCase(unittest.TestCase):
                     deleted_count += 1
                     logger.debug(f"成功删除店铺 {store_id}")
                 else:
-                    error_msg = f"清理店铺 {store_id} 返回None，系统应该支持删除操作"
-                    logger.error(error_msg)
-                    failed_ids.append(store_id)
+                    logger.debug(f"清理店铺 {store_id} 返回None，视为已不存在")
             except Exception as e:
                 error_msg = f"清理店铺 {store_id} 失败: {e}"
                 logger.error(error_msg)
@@ -316,7 +310,7 @@ class MemberTestCase(unittest.TestCase):
             logger.info(f"成功清理 {deleted_count} 个店铺")
 
         if failed_ids:
-            logger.error(f"清理失败的店铺ID: {failed_ids}")
+            logger.warning(f"清理店铺异常ID: {failed_ids}")
 
     def setUp(self):
         """每个测试用例前的准备"""

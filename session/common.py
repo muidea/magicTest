@@ -43,13 +43,30 @@ class MagicEntity:
         """
         if response and response.get('error') is None:
             return response.get('value') or response.get('values') or response.get('total')
-        
+
         if response:
             error = response['error']
+            code = error.get('code')
+            message = error.get('message')
+
+            # Query/delete on missing entities is common in negative tests and cleanup.
+            if code == 2 and operation in ('查询', '删除'):
+                logger.debug('%s操作返回未找到, URL: %s, 上下文: %s',
+                             operation, url, context)
+                logger.debug('错误代码: %s, 错误消息: %s', code, message)
+                return None
+
+            # Validation failures on create/update are expected in many negative tests.
+            if code == 4 and operation in ('插入', '更新', '创建'):
+                logger.debug('%s操作返回校验失败, URL: %s, 上下文: %s',
+                             operation, url, context)
+                logger.debug('错误代码: %s, 错误消息: %s', code, message)
+                return None
+
             logger.error('%s操作错误, URL: %s, 上下文: %s',
                         operation, url, context)
             logger.error('错误代码: %s, 错误消息: %s',
-                        error.get('code'), error.get('message'))
+                        code, message)
         else:
             logger.error('%s请求失败, URL: %s, 上下文: %s',
                         operation, url, context)

@@ -335,9 +335,7 @@ class GoodsInfoTestCase(unittest.TestCase):
             "type": type_val,
             "count": count,
             "price": price,
-            "store": {"id": self.test_store["id"]},
             "shelf": [{"id": self.test_shelf["id"]}],  # shelf字段是数组类型
-            "status": {"id": self.test_status["id"]},
         }
 
     @classmethod
@@ -441,8 +439,6 @@ class GoodsInfoTestCase(unittest.TestCase):
             "type": 1,
             "count": 1,
             "price": 100.0,
-            "store": {"id": self.test_store["id"]},
-            "status": {"id": self.test_status["id"]},
         }
         goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         if goods_info is None:

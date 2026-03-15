@@ -1,0 +1,4 @@
+interface:
+  display_name: "magicTest VMI Regression"
+  short_description: "Run and tame remote VMI regression"
+  default_prompt: "Use $magictest-vmi-regression to align VMI tests with definitions, run remote regressions, and reduce expected negative-test noise."

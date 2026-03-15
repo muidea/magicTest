@@ -3,14 +3,41 @@
 提供统一的 SDK 基类，封装 MagicEntity 的 CRUD 操作。
 """
 
+import importlib.util
 import logging
+import os
 from typing import Any, Dict, List, Optional, Union
 
 # 导入session模块
 try:
-    # 尝试导入真实的MagicSession和MagicEntity
+    # 优先尝试真实的 MagicSession
     from session import MagicSession
-    from session.common import MagicEntity
+
+    try:
+        # 正常包布局: project_root 在 sys.path 中
+        from session.common import MagicEntity
+    except ImportError:
+        # 兼容旧测试脚本把 session/ 目录直接塞进 sys.path 的情况。
+        # 这里不能直接 `from common import MagicEntity`，否则会优先命中
+        # mock/common.py，最终把真实 SDK 回退成假实现。
+        session_common_path = os.path.join(
+            os.path.dirname(MagicSession.__module__.replace(".", os.sep)), "common.py"
+        )
+        if not os.path.exists(session_common_path):
+            import session as session_module
+
+            session_common_path = os.path.join(
+                os.path.dirname(session_module.__file__), "common.py"
+            )
+
+        spec = importlib.util.spec_from_file_location(
+            "magictest_session_common", session_common_path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"unable to load session common from {session_common_path}")
+        session_common = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(session_common)
+        MagicEntity = session_common.MagicEntity
 
     # 创建common模块并添加MagicEntity
     class CommonModule:
@@ -124,7 +151,7 @@ class VMISDKBase:
         try:
             result = self.entity.query(entity_id)
             if result is None:
-                logger.error("查询%s失败, ID: %s", self.entity_path, entity_id)
+                logger.debug("查询%s返回None, ID: %s", self.entity_path, entity_id)
             return result
         except Exception as e:
             logger.error("查询%s异常, ID: %s: %s", self.entity_path, entity_id, str(e))
@@ -142,8 +169,8 @@ class VMISDKBase:
         try:
             result = self.entity.insert(param)
             if result is None:
-                logger.error(
-                    "创建%s失败, 参数: %s", self.entity_path, param.get("name", "未知")
+                logger.debug(
+                    "创建%s返回None, 参数: %s", self.entity_path, param.get("name", "未知")
                 )
             return result
         except Exception as e:
@@ -168,7 +195,7 @@ class VMISDKBase:
                 param["id"] = entity_id
             result = self.entity.update(entity_id, param)
             if result is None:
-                logger.error("更新%s失败, ID: %s", self.entity_path, entity_id)
+                logger.debug("更新%s返回None, ID: %s", self.entity_path, entity_id)
             return result
         except Exception as e:
             logger.error("更新%s异常, ID: %s: %s", self.entity_path, entity_id, str(e))
@@ -186,20 +213,20 @@ class VMISDKBase:
         try:
             result = self.entity.delete(entity_id)
             if result is None:
-                logger.error("删除%s失败, ID: %s", self.entity_path, entity_id)
+                logger.debug("删除%s返回None, ID: %s", self.entity_path, entity_id)
             return result
         except Exception as e:
             logger.error("删除%s异常, ID: %s: %s", self.entity_path, entity_id, str(e))
             return None
 
-    def count(self, param: Dict[str, Any]) -> Optional[int]:
+    def count(self, param: Optional[Dict[str, Any]] = None) -> Optional[int]:
         """统计实体数量
 
         Returns:
             实体数量或 None（失败时）
         """
         try:
-            result = self.entity.count(param)
+            result = self.entity.count(param or {})
             if result is None:
                 logger.error("统计%s数量失败", self.entity_path)
             return result

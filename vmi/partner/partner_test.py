@@ -307,12 +307,7 @@ class PartnerTestCase(unittest.TestCase):
                     deleted_count += 1
                     logger.debug(f"成功删除合作伙伴 {partner_id}")
                 else:
-                    # 删除返回None，表示删除失败
-                    error_msg = (
-                        f"清理合作伙伴 {partner_id} 返回None，系统应该支持删除操作"
-                    )
-                    logger.error(error_msg)
-                    failed_ids.append(partner_id)
+                    logger.debug(f"清理合作伙伴 {partner_id} 返回None，视为已不存在")
             except Exception as e:
                 error_msg = f"清理合作伙伴 {partner_id} 失败: {e}"
                 logger.error(error_msg)
@@ -322,7 +317,7 @@ class PartnerTestCase(unittest.TestCase):
             logger.info(f"成功清理 {deleted_count} 个合作伙伴")
 
         if failed_ids:
-            logger.error(f"清理失败的合作伙伴ID: {failed_ids}")
+            logger.warning(f"清理合作伙伴异常ID: {failed_ids}")
 
     def setUp(self):
         """每个测试用例前的准备"""

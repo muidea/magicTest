@@ -10,9 +10,12 @@ import urllib3
 # Configure logger
 logger = logging.getLogger(__name__)
 
-# Disable SSL warnings only in development environment
-if os.getenv('ENVIRONMENT', 'development') == 'development':
+# Disable SSL warnings whenever SSL verification is explicitly disabled.
+if os.getenv('VERIFY_SSL', 'false').lower() == 'false':
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    requests.packages.urllib3.disable_warnings(  # type: ignore[attr-defined]
+        urllib3.exceptions.InsecureRequestWarning
+    )
 
 class MagicSession:
     """HTTP client session with authentication and request methods.
@@ -262,4 +265,3 @@ class MagicSession:
                     "message": f"文件下载失败: {str(e)}"
                 }
             }
-
