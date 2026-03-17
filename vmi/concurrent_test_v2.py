@@ -11,6 +11,7 @@ import random
 import threading
 import time
 import unittest
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
@@ -363,6 +364,21 @@ class ConcurrentTestFactory:
     """并发测试函数工厂"""
 
     @staticmethod
+    def _build_unique_suffix(worker_id: int) -> str:
+        return f"{worker_id:04d}_{uuid.uuid4().hex[:8]}"
+
+    @staticmethod
+    def _resolve_status_id(session_manager) -> int:
+        from sdk.status import StatusSDK
+        from test_dependency_helper import resolve_status_id
+
+        status_sdk = StatusSDK(session_manager.get_session())
+        status_id = resolve_status_id(status_sdk)
+        if not status_id:
+            raise AssertionError("无法获取可用状态ID")
+        return status_id
+
+    @staticmethod
     def create_store_creation_test():
         """创建门店创建测试函数"""
 
@@ -370,17 +386,17 @@ class ConcurrentTestFactory:
             from sdk.store import StoreSDK
 
             store_sdk = StoreSDK(session_manager.get_session())
+            suffix = ConcurrentTestFactory._build_unique_suffix(worker_id)
             store_data = {
-                "name": f"并发测试门店 {worker_id}",
-                "code": f"STORE_CONC_{worker_id:04d}",
-                "address": f"测试地址 {worker_id}",
-                "contact": f"test{worker_id}@example.com",
-                "status": "active",
+                "name": f"并发测试门店_{suffix}",
+                "description": f"并发测试创建的门店_{suffix}",
             }
 
             result = store_sdk.create_store(store_data)
             assert result is not None
             assert "id" in result
+            delete_result = store_sdk.delete_store(result["id"])
+            assert delete_result is not None
             logger.debug(f"线程 {worker_id}: 创建门店成功 - ID: {result.get('id')}")
 
         return test_create_store
@@ -393,17 +409,22 @@ class ConcurrentTestFactory:
             from sdk.product import ProductSDK
 
             product_sdk = ProductSDK(session_manager.get_session())
+            status_id = ConcurrentTestFactory._resolve_status_id(session_manager)
+            suffix = ConcurrentTestFactory._build_unique_suffix(worker_id)
             product_data = {
-                "name": f"并发测试产品 {worker_id}",
-                "code": f"PRODUCT_CONC_{worker_id:04d}",
-                "price": random.uniform(10.0, 1000.0),
-                "category": "test",
-                "status": "active",
+                "name": f"并发测试产品_{suffix}",
+                "description": f"并发测试创建的产品_{suffix}",
+                "image": [],
+                "expire": random.randint(30, 365),
+                "tags": ["concurrent", f"worker-{worker_id}", suffix],
+                "status": {"id": status_id},
             }
 
             result = product_sdk.create_product(product_data)
             assert result is not None
             assert "id" in result
+            delete_result = product_sdk.delete_product(result["id"])
+            assert delete_result is not None
             logger.debug(f"线程 {worker_id}: 创建产品成功 - ID: {result.get('id')}")
 
         return test_create_product
@@ -416,17 +437,17 @@ class ConcurrentTestFactory:
             from sdk.warehouse import WarehouseSDK
 
             warehouse_sdk = WarehouseSDK(session_manager.get_session())
+            suffix = ConcurrentTestFactory._build_unique_suffix(worker_id)
             warehouse_data = {
-                "name": f"并发测试仓库 {worker_id}",
-                "code": f"WAREHOUSE_CONC_{worker_id:04d}",
-                "address": f"仓库地址 {worker_id}",
-                "contact": f"warehouse{worker_id}@example.com",
-                "status": "active",
+                "name": f"并发测试仓库_{suffix}",
+                "description": f"并发测试创建的仓库_{suffix}",
             }
 
             result = warehouse_sdk.create_warehouse(warehouse_data)
             assert result is not None
             assert "id" in result
+            delete_result = warehouse_sdk.delete_warehouse(result["id"])
+            assert delete_result is not None
             logger.debug(f"线程 {worker_id}: 创建仓库成功 - ID: {result.get('id')}")
 
         return test_create_warehouse

@@ -1052,8 +1052,17 @@ class AgingTestRunner:
                 if not self._check_continue_conditions():
                     break
 
-                # 等待报告间隔
-                self.stop_event.wait(self.config.report_interval_minutes * 60)
+                # 等待下一个报告周期，但不要超过预定结束时间。
+                remaining_seconds = max(
+                    0.0, (end_time - datetime.now()).total_seconds()
+                )
+                if remaining_seconds <= 0:
+                    break
+                wait_seconds = min(
+                    self.config.report_interval_minutes * 60,
+                    remaining_seconds,
+                )
+                self.stop_event.wait(wait_seconds)
 
         except KeyboardInterrupt:
             logger.info("测试被用户中断")

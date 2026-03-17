@@ -23,7 +23,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "test_config.json")
 
@@ -131,9 +131,18 @@ def run_scenario_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
 
 
 def run_aging_tests(
-    duration: int = 60, pytest_mode: bool = False
+    duration: Optional[int] = None, pytest_mode: bool = False
 ) -> Tuple[bool, float]:
     """运行老化测试"""
+    if duration is None:
+        logger.info("运行老化测试（使用配置文件时长）")
+        if pytest_mode:
+            cmd = "python3 aging_test_simple.py --threads 2"
+            return run_command(cmd, "老化测试 (配置文件) - 轻量模式")
+
+        cmd = "python3 aging_test_simple.py"
+        return run_command(cmd, "老化测试 (配置文件)")
+
     logger.info("运行老化测试（%s分钟）", duration)
     duration_hours = duration / 60.0
 
@@ -172,7 +181,11 @@ def run_module_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
     return run_command(cmd, "模块测试")
 
 
-def run_all_tests(pytest_mode: bool = False) -> List[Tuple[str, bool, float]]:
+def run_all_tests(
+    pytest_mode: bool = False,
+    include_aging: bool = False,
+    aging_duration: Optional[int] = None,
+) -> List[Tuple[str, bool, float]]:
     """运行所有测试"""
     logger.info("运行所有测试")
 
@@ -183,6 +196,13 @@ def run_all_tests(pytest_mode: bool = False) -> List[Tuple[str, bool, float]]:
     results.append(("并发测试", *run_concurrent_tests(pytest_mode)))
     results.append(("场景测试", *run_scenario_tests(pytest_mode)))
     results.append(("模块测试", *run_module_tests(pytest_mode)))
+    if include_aging:
+        aging_label = (
+            f"老化测试 ({aging_duration}分钟)"
+            if aging_duration is not None
+            else "老化测试 (配置文件)"
+        )
+        results.append((aging_label, *run_aging_tests(aging_duration, pytest_mode)))
 
     return results
 
@@ -251,7 +271,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-    python3 run_tests.py --all           # 运行所有测试
+    python3 run_tests.py --all           # 运行所有测试（不含老化）
+    python3 run_tests.py --all --include-aging      # 全量+配置文件老化测试
+    python3 run_tests.py --all --aging 30           # 全量+30分钟老化测试
     python3 run_tests.py --quick         # 快速验证
     python3 run_tests.py --validation    # 框架验证测试
     python3 run_tests.py --module        # 模块测试
@@ -268,7 +290,17 @@ def main():
     parser.add_argument("--validation", action="store_true", help="运行框架验证测试")
     parser.add_argument("--concurrent", action="store_true", help="运行并发测试")
     parser.add_argument("--scenario", action="store_true", help="运行场景测试")
-    parser.add_argument("--aging", type=int, metavar="MINUTES", help="运行老化测试")
+    parser.add_argument(
+        "--aging",
+        type=int,
+        metavar="MINUTES",
+        help="运行老化测试；若与 --all 联用，则将老化测试加入全量回归",
+    )
+    parser.add_argument(
+        "--include-aging",
+        action="store_true",
+        help="与 --all 联用，在全量回归中包含老化测试（默认使用配置文件时长）",
+    )
     parser.add_argument("--multi-tenant", action="store_true", help="运行多租户测试")
     parser.add_argument("--module", action="store_true", help="运行模块测试")
     parser.add_argument("--pytest", action="store_true", help="使用 pytest 运行测试")
@@ -293,7 +325,12 @@ def main():
         return
 
     if args.all:
-        results = run_all_tests(args.pytest)
+        include_aging = args.include_aging or args.aging is not None
+        results = run_all_tests(
+            args.pytest,
+            include_aging=include_aging,
+            aging_duration=args.aging,
+        )
     elif args.quick:
         results = run_quick_tests(args.pytest)
     else:
@@ -303,7 +340,7 @@ def main():
             results.append(("并发测试", *run_concurrent_tests(args.pytest)))
         if args.scenario:
             results.append(("场景测试", *run_scenario_tests(args.pytest)))
-        if args.aging:
+        if args.aging is not None:
             results.append(
                 (
                     f"老化测试 ({args.aging}分钟)",

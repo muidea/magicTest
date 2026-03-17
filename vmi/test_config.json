@@ -1,8 +1,8 @@
 {
   "server": {
-    "url": "https://autotest.local.vpc",
+    "url": "https://autotest.remote.vpc",
     "namespace": "autotest",
-    "environment": "local"
+    "environment": "remote"
   },
   "credentials": {
     "username": "administrator",
