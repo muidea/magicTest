@@ -1,26 +1,4 @@
 """
-import os
-import sys
-
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
 Store 测试用例
 
 基于 magicProjectRepo/vmi/VMI实体定义和使用说明.md:176-185 中的 store 实体定义编写。
@@ -72,165 +50,65 @@ Store 测试用例
 最后更新：2026-01-25
 """
 
-import os
-import sys
+from test_bootstrap import ensure_test_paths
 
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
+ensure_test_paths(__file__)
 
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
-
-# 确保vmi目录在路径中（用于导入sdk模块）
-vmi_dir = os.path.join(project_root, "vmi")
-if vmi_dir not in sys.path:
-    sys.path.insert(0, vmi_dir)
-
-
-
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
-
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-
-
-from session import MagicSession
-from cas.cas import Cas
 from mock import common as mock
 import logging
 import unittest
-import warnings
-
 
 from sdk import ShelfSDK, StatusSDK, StoreSDK, WarehouseSDK
+from test_dependency_helper import resolve_status_id
+from test_vmi_base import VMITestCase
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
-class StoreTestCase(unittest.TestCase):
+class StoreTestCase(VMITestCase):
     """Store 测试用例类"""
 
     namespace = ""
 
     @classmethod
     def setUpClass(cls):
-        # 从config_helper获取配置
-
-        # 从config_helper获取配置
-        from config_helper import get_credentials, get_server_url
-
-        cls.server_url = get_server_url()
-        cls.credentials = get_credentials()
-
-        """测试类初始化"""
-        warnings.simplefilter("ignore", ResourceWarning)
-        cls.work_session = MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(
-            cls.credentials["username"], cls.credentials["password"]
-        ):
-            logger.error("CAS登录失败")
-            raise Exception("CAS登录失败")
-        cls.work_session.bind_token(cls.cas_session.get_session_token())
-        cls.store_sdk = StoreSDK(cls.work_session)
-        cls.shelf_sdk = ShelfSDK(cls.work_session)
-        cls.warehouse_sdk = WarehouseSDK(cls.work_session)
-        cls.status_sdk = StatusSDK(cls.work_session)
+        super().setUpClass()
+        cls.status_id = resolve_status_id(cls.status_sdk)
+        if not cls.status_id:
+            raise Exception("无法获取可用状态ID")
 
         # 类级别的数据清理记录
         cls._class_cleanup_ids = []
         cls._class_cleanup_shelf_ids = []
         cls._class_cleanup_warehouse_ids = []
 
-        # 记录测试开始前的初始状态（可选）
-        cls._initial_store_count = cls._get_store_count()
-        logger.info(f"测试开始前店铺数量: {cls._initial_store_count}")
+        cls.record_initial_count(
+            "_initial_store_count", cls._get_store_count, entity_name="店铺"
+        )
+
+    @classmethod
+    def _init_sdk(cls):
+        cls.store_sdk = StoreSDK(cls.work_session)
+        cls.shelf_sdk = ShelfSDK(cls.work_session)
+        cls.warehouse_sdk = WarehouseSDK(cls.work_session)
+        cls.status_sdk = StatusSDK(cls.work_session)
 
     @classmethod
     def _get_store_count(cls):
         """获取当前店铺数量"""
-        try:
-            # 尝试使用count方法
-            count = cls.store_sdk.count_store({})
-            if count is not None:
-                return count
-        except Exception as e:
-            logger.warning(f"获取店铺数量失败: {e}")
-
-        # 如果count方法不可用，尝试通过过滤空条件获取列表
-        try:
-            stores = cls.store_sdk.filter_store({})
-            if stores is not None:
-                return len(stores)
-        except Exception as e:
-            logger.warning(f"通过过滤获取店铺数量失败: {e}")
-
-        return 0
+        return cls.get_entity_count(
+            "store_sdk",
+            "count_store",
+            "filter_store",
+            entity_name="店铺",
+            count_args=({},),
+            filter_args=({},),
+        )
 
     @classmethod
     def tearDownClass(cls):
         """测试类结束后的清理"""
-        # 记录类级别清理列表的状态
         original_store_count = len(cls._class_cleanup_ids)
         original_shelf_count = len(cls._class_cleanup_shelf_ids)
         original_warehouse_count = len(cls._class_cleanup_warehouse_ids)
@@ -238,156 +116,26 @@ class StoreTestCase(unittest.TestCase):
             f"测试类清理开始: 需要清理 {original_store_count} 个店铺、{original_shelf_count} 个货架和 {original_warehouse_count} 个仓库"
         )
 
-        # 清理类级别记录的所有数据
-        cls._cleanup_stores(cls._class_cleanup_ids)
-        cls._cleanup_shelves(cls._class_cleanup_shelf_ids)
-        cls._cleanup_warehouses(cls._class_cleanup_warehouse_ids)
-
-        # 验证数据清理
-        final_store_count = cls._get_store_count()
-        logger.info(
-            f"测试类清理完成: 尝试清理 {original_store_count} 个店铺，最终店铺数量: {final_store_count}"
+        cls.cleanup_id_list(cls._class_cleanup_ids, "store_sdk", "店铺")
+        cls.cleanup_id_list(cls._class_cleanup_shelf_ids, "shelf_sdk", "货架")
+        cls.cleanup_id_list(cls._class_cleanup_warehouse_ids, "warehouse_sdk", "仓库")
+        cls.verify_cleanup_count(
+            "_initial_store_count",
+            cls._get_store_count,
+            entity_name="店铺",
+            remaining_sdk_ref="store_sdk",
+            remaining_filter_method_name="filter_store",
+            remaining_filter_args=({},),
+            remaining_describe=lambda store: (
+                f"ID: {store['id']}, 名称: {store['name']}, 编码: {store.get('code', 'N/A')}"
+                if isinstance(store, dict)
+                and "id" in store
+                and "name" in store
+                else None
+            ),
         )
 
-        # 检查是否有数据残留（可选，根据业务需求）
-        if hasattr(cls, "_initial_store_count"):
-            expected_count = cls._initial_store_count
-            if final_store_count > expected_count:
-                logger.warning(
-                    f"可能存在数据残留: 期望数量 {expected_count}, 实际数量 {final_store_count}"
-                )
-                # 尝试查找残留的店铺
-                cls._find_and_log_remaining_stores(expected_count)
-            else:
-                logger.info(
-                    f"数据清理验证通过: 最终数量 {final_store_count} <= 初始数量 {expected_count}"
-                )
-
-    @classmethod
-    def _find_and_log_remaining_stores(cls, expected_count):
-        """查找并记录残留的店铺"""
-        try:
-            # 获取所有店铺
-            all_stores = cls.store_sdk.filter_store({})
-            if all_stores is not None:
-                current_count = len(all_stores)
-                if current_count > expected_count:
-                    logger.warning(f"发现 {current_count - expected_count} 个残留店铺:")
-                    for store in all_stores:
-                        if "id" in store and "name" in store:
-                            logger.warning(
-                                f"  ID: {store['id']}, 名称: {store['name']}, 编码: {store.get('code', 'N/A')}"
-                            )
-        except Exception as e:
-            logger.warning(f"查找残留店铺失败: {e}")
-
-    @classmethod
-    def _cleanup_stores(cls, store_ids):
-        """清理指定的店铺列表
-
-        注意：系统支持删除操作，如果删除失败应该记录错误。
-        在测试类级别的清理中，我们尝试删除但不抛出异常，
-        因为测试方法应该已经验证了删除操作。
-        """
-        if not store_ids:
-            logger.debug("清理店铺列表为空，无需清理")
-            return
-
-        logger.info(f"开始清理 {len(store_ids)} 个店铺: {store_ids}")
-        deleted_count = 0
-        failed_ids = []
-
-        for store_id in store_ids:
-            try:
-                # 系统应该支持删除操作
-                logger.debug(f"尝试删除店铺 ID: {store_id}")
-                result = cls.store_sdk.delete_store(store_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(f"成功删除店铺 {store_id}")
-                else:
-                    logger.debug(f"清理店铺 {store_id} 返回None，视为已不存在")
-            except Exception as e:
-                error_msg = f"清理店铺 {store_id} 失败: {e}"
-                logger.error(error_msg)
-                failed_ids.append(store_id)
-
-        if deleted_count > 0:
-            logger.info(f"成功清理 {deleted_count} 个店铺")
-
-        if failed_ids:
-            logger.warning(f"清理店铺异常ID: {failed_ids}")
-
-    @classmethod
-    def _cleanup_shelves(cls, shelf_ids):
-        """清理指定的货架列表
-
-        注意：系统支持删除操作，如果删除失败应该记录错误。
-        在测试类级别的清理中，我们尝试删除但不抛出异常，
-        因为测试方法应该已经验证了删除操作。
-        """
-        if not shelf_ids:
-            logger.debug("清理货架列表为空，无需清理")
-            return
-
-        logger.info(f"开始清理 {len(shelf_ids)} 个货架: {shelf_ids}")
-        deleted_count = 0
-        failed_ids = []
-
-        for shelf_id in shelf_ids:
-            try:
-                # 系统应该支持删除操作
-                logger.debug(f"尝试删除货架 ID: {shelf_id}")
-                result = cls.shelf_sdk.delete_shelf(shelf_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(f"成功删除货架 {shelf_id}")
-                else:
-                    logger.debug(f"清理货架 {shelf_id} 返回None，视为已不存在")
-            except Exception as e:
-                error_msg = f"清理货架 {shelf_id} 失败: {e}"
-                logger.error(error_msg)
-                failed_ids.append(shelf_id)
-
-        if deleted_count > 0:
-            logger.info(f"成功清理 {deleted_count} 个货架")
-
-        if failed_ids:
-            logger.error(f"清理失败的货架ID: {failed_ids}")
-
-    @classmethod
-    def _cleanup_warehouses(cls, warehouse_ids):
-        """清理指定的仓库列表"""
-        if not warehouse_ids:
-            logger.debug("清理仓库列表为空，无需清理")
-            return
-
-        logger.info(f"开始清理 {len(warehouse_ids)} 个仓库: {warehouse_ids}")
-        deleted_count = 0
-        failed_ids = []
-
-        for warehouse_id in warehouse_ids:
-            try:
-                logger.debug(f"尝试删除仓库 ID: {warehouse_id}")
-                result = cls.warehouse_sdk.delete_warehouse(warehouse_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(f"成功删除仓库 {warehouse_id}")
-                else:
-                    logger.debug(f"清理仓库 {warehouse_id} 返回None，视为已不存在")
-            except Exception as e:
-                error_msg = f"清理仓库 {warehouse_id} 失败: {e}"
-                logger.error(error_msg)
-                failed_ids.append(warehouse_id)
-
-        if deleted_count > 0:
-            logger.info(f"成功清理 {deleted_count} 个仓库")
-
-        if failed_ids:
-            logger.error(f"清理失败的仓库ID: {failed_ids}")
+        super().tearDownClass()
 
     def setUp(self):
         """每个测试用例前的准备"""
@@ -408,199 +156,37 @@ class StoreTestCase(unittest.TestCase):
         if hasattr(self.__class__, "_class_cleanup_warehouse_ids"):
             self.__class__._class_cleanup_warehouse_ids.extend(self.created_warehouse_ids)
 
-        # 尝试立即清理本测试创建的数据
-        self._cleanup_test_stores()
-        self._cleanup_test_shelves()
-        self._cleanup_test_warehouses()
+        self._cleanup_test_entities()
 
         self.created_store_ids.clear()
         self.created_shelf_ids.clear()
         self.created_warehouse_ids.clear()
 
-    def _cleanup_test_stores(self):
-        """清理本测试创建的店铺
-
-        注意：系统支持删除操作，如果删除失败应该抛出异常，
-        以便测试失败并排查server错误。
-        """
-        if not self.created_store_ids:
-            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的店铺")
-            return
-
-        logger.info(
-            f"测试 {self._testMethodName}: 开始清理 {len(self.created_store_ids)} 个店铺: {self.created_store_ids}"
+    def _cleanup_test_entities(self):
+        self.cleanup_id_list(
+            self.created_store_ids,
+            "store_sdk",
+            "店铺",
+            owner=self,
+            remove_from=self.__class__._class_cleanup_ids,
+            log_prefix=f"测试 {self._testMethodName}",
         )
-        deleted_count = 0
-        failed_ids = []
-
-        for store_id in self.created_store_ids:
-            try:
-                # 系统应该支持删除操作
-                logger.debug(
-                    f"测试 {self._testMethodName}: 尝试删除店铺 ID: {store_id}"
-                )
-                result = self.store_sdk.delete_store(store_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 成功删除店铺 {store_id}"
-                    )
-                    # 从类级别清理列表中移除（如果存在）
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_ids")
-                        and store_id in self.__class__._class_cleanup_ids
-                    ):
-                        self.__class__._class_cleanup_ids.remove(store_id)
-                        logger.debug(
-                            f"测试 {self._testMethodName}: 从类级别清理列表中移除店铺 {store_id}"
-                        )
-                else:
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 删除店铺 {store_id} 返回None，视为已不存在"
-                    )
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_ids")
-                        and store_id in self.__class__._class_cleanup_ids
-                    ):
-                        self.__class__._class_cleanup_ids.remove(store_id)
-
-            except Exception as e:
-                error_msg = (
-                    f"测试 {self._testMethodName}: 删除店铺 {store_id} 失败: {e}"
-                )
-                logger.error(error_msg)
-                failed_ids.append(store_id)
-                # 不抛出异常，继续尝试清理其他店铺
-
-        if deleted_count > 0:
-            logger.info(f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个店铺")
-
-        if failed_ids:
-            # 记录错误但不抛出异常，因为这是在tearDown中
-            # 实际的测试方法应该已经验证了删除操作
-            logger.error(f"测试 {self._testMethodName}: 清理失败的店铺ID: {failed_ids}")
-            # 这里可以选择抛出异常让测试失败
-            # 但考虑到这是清理阶段，可能已经过了测试验证
-            # 我们只记录错误，不中断测试
-
-    def _cleanup_test_shelves(self):
-        """清理本测试创建的货架
-
-        注意：系统支持删除操作，如果删除失败应该抛出异常，
-        以便测试失败并排查server错误。
-        """
-        if not self.created_shelf_ids:
-            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的货架")
-            return
-
-        logger.info(
-            f"测试 {self._testMethodName}: 开始清理 {len(self.created_shelf_ids)} 个货架: {self.created_shelf_ids}"
+        self.cleanup_id_list(
+            self.created_shelf_ids,
+            "shelf_sdk",
+            "货架",
+            owner=self,
+            remove_from=self.__class__._class_cleanup_shelf_ids,
+            log_prefix=f"测试 {self._testMethodName}",
         )
-        deleted_count = 0
-        failed_ids = []
-
-        for shelf_id in self.created_shelf_ids:
-            try:
-                # 系统应该支持删除操作
-                logger.debug(
-                    f"测试 {self._testMethodName}: 尝试删除货架 ID: {shelf_id}"
-                )
-                result = self.shelf_sdk.delete_shelf(shelf_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 成功删除货架 {shelf_id}"
-                    )
-                    # 从类级别清理列表中移除（如果存在）
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_shelf_ids")
-                        and shelf_id in self.__class__._class_cleanup_shelf_ids
-                    ):
-                        self.__class__._class_cleanup_shelf_ids.remove(shelf_id)
-                        logger.debug(
-                            f"测试 {self._testMethodName}: 从类级别清理列表中移除货架 {shelf_id}"
-                        )
-                else:
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 删除货架 {shelf_id} 返回None，视为已不存在"
-                    )
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_shelf_ids")
-                        and shelf_id in self.__class__._class_cleanup_shelf_ids
-                    ):
-                        self.__class__._class_cleanup_shelf_ids.remove(shelf_id)
-
-            except Exception as e:
-                error_msg = (
-                    f"测试 {self._testMethodName}: 删除货架 {shelf_id} 失败: {e}"
-                )
-                logger.error(error_msg)
-                failed_ids.append(shelf_id)
-                # 不抛出异常，继续尝试清理其他货架
-
-        if deleted_count > 0:
-            logger.info(f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个货架")
-
-        if failed_ids:
-            # 记录错误但不抛出异常，因为这是在tearDown中
-            # 实际的测试方法应该已经验证了删除操作
-            logger.error(f"测试 {self._testMethodName}: 清理失败的货架ID: {failed_ids}")
-            # 这里可以选择抛出异常让测试失败
-            # 但考虑到这是清理阶段，可能已经过了测试验证
-            # 我们只记录错误，不中断测试
-
-    def _cleanup_test_warehouses(self):
-        """清理本测试创建的仓库"""
-        if not self.created_warehouse_ids:
-            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的仓库")
-            return
-
-        logger.info(
-            f"测试 {self._testMethodName}: 开始清理 {len(self.created_warehouse_ids)} 个仓库: {self.created_warehouse_ids}"
+        self.cleanup_id_list(
+            self.created_warehouse_ids,
+            "warehouse_sdk",
+            "仓库",
+            owner=self,
+            remove_from=self.__class__._class_cleanup_warehouse_ids,
+            log_prefix=f"测试 {self._testMethodName}",
         )
-        deleted_count = 0
-        failed_ids = []
-
-        for warehouse_id in self.created_warehouse_ids:
-            try:
-                logger.debug(
-                    f"测试 {self._testMethodName}: 尝试删除仓库 ID: {warehouse_id}"
-                )
-                result = self.warehouse_sdk.delete_warehouse(warehouse_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 成功删除仓库 {warehouse_id}"
-                    )
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_warehouse_ids")
-                        and warehouse_id in self.__class__._class_cleanup_warehouse_ids
-                    ):
-                        self.__class__._class_cleanup_warehouse_ids.remove(warehouse_id)
-                else:
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 删除仓库 {warehouse_id} 返回None，视为已不存在"
-                    )
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_warehouse_ids")
-                        and warehouse_id in self.__class__._class_cleanup_warehouse_ids
-                    ):
-                        self.__class__._class_cleanup_warehouse_ids.remove(warehouse_id)
-            except Exception as e:
-                error_msg = (
-                    f"测试 {self._testMethodName}: 删除仓库 {warehouse_id} 失败: {e}"
-                )
-                logger.error(error_msg)
-                failed_ids.append(warehouse_id)
-
-        if deleted_count > 0:
-            logger.info(f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个仓库")
-
-        if failed_ids:
-            logger.error(f"测试 {self._testMethodName}: 清理失败的仓库ID: {failed_ids}")
 
     def _record_store_for_cleanup(self, store_id):
         """记录店铺ID以便清理"""
@@ -667,7 +253,7 @@ class StoreTestCase(unittest.TestCase):
             "description": mock.sentence(),
             "capacity": mock.number(10, 100),
             "warehouse": {"id": warehouse_id},
-            "status": {"id": 19},
+            "status": {"id": self.status_id},
         }
 
     def test_create_store(self):

@@ -1,26 +1,4 @@
 """
-import os
-import sys
-
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
 Reward Policy 测试用例
 
 基于 VMI实体定义和使用说明.md:115-124 中的 rewardPolicy 实体定义编写。
@@ -41,136 +19,40 @@ Reward Policy 测试用例
 12. test_reward_policy_status_validation
 """
 
-import os
-import sys
+from test_bootstrap import ensure_test_paths
 
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
+ensure_test_paths(__file__)
 
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
-
-# 确保vmi目录在路径中（用于导入sdk模块）
-vmi_dir = os.path.join(project_root, "vmi")
-if vmi_dir not in sys.path:
-    sys.path.insert(0, vmi_dir)
-
-
-
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
-
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-
-
-from session import MagicSession
-from cas.cas import Cas
-from mock import common as mock
 import logging
-import time
 import unittest
-import warnings
-
 
 from sdk import RewardPolicySDK, StatusSDK
+from test_dependency_helper import resolve_status_id
+from test_vmi_base import VMITestCase
 
 logger = logging.getLogger(__name__)
 
 
-class RewardPolicyTestCase(unittest.TestCase):
+class RewardPolicyTestCase(VMITestCase):
     namespace = ""
 
     @classmethod
     def setUpClass(cls):
-        # 从config_helper获取配置
+        super().setUpClass()
+        cls.log_suite_start("Reward Policy 测试开始")
 
-        # 从config_helper获取配置
-        from config_helper import get_credentials, get_server_url
-
-        cls.server_url = get_server_url()
-        cls.credentials = get_credentials()
-
-        warnings.simplefilter("ignore", ResourceWarning)
-        cls.work_session = MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(
-            cls.credentials["username"], cls.credentials["password"]
-        ):
-            logger.error("CAS登录失败")
-            raise Exception("CAS登录失败")
-        cls.work_session.bind_token(cls.cas_session.get_session_token())
+    @classmethod
+    def _init_sdk(cls):
         cls.reward_policy_sdk = RewardPolicySDK(cls.work_session)
         cls.status_sdk = StatusSDK(cls.work_session)
-        cls.test_data = []
-        print("Reward Policy 测试开始...")
 
     def setUp(self):
-        # 获取状态信息
+        self.test_data = []
         try:
-            statuses = self.status_sdk.filter_status({})
-            if statuses and len(statuses) > 0:
-                self.test_status = statuses[0]
-            else:
+            status_id = resolve_status_id(self.status_sdk)
+            if not status_id:
                 self.skipTest("无法获取状态信息")
+            self.test_status = {"id": status_id}
         except Exception as e:
             logger.warning(f"获取状态信息失败: {e}")
             self.skipTest(f"获取状态信息失败: {e}")
@@ -186,10 +68,11 @@ class RewardPolicyTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        print("Reward Policy 测试结束")
+        cls.log_suite_end("Reward Policy 测试结束")
+        super().tearDownClass()
 
     def test_create_reward_policy(self):
-        print("测试创建积分策略...")
+        self.log_test_step("测试创建积分策略")
         reward_policy_param = {
             "name": "测试积分策略",
             "description": "测试策略描述",
@@ -211,10 +94,10 @@ class RewardPolicyTestCase(unittest.TestCase):
         for field in required_fields:
             self.assertIn(field, reward_policy, f"积分策略缺少必填字段: {field}")
         self.test_data.append(reward_policy)
-        print(f"✓ 积分策略创建成功: ID={reward_policy.get('id')}")
+        self.log_test_success(f"✓ 积分策略创建成功: ID={reward_policy.get('id')}")
 
     def test_query_reward_policy(self):
-        print("测试查询积分策略...")
+        self.log_test_step("测试查询积分策略")
         reward_policy_param = {
             "name": "查询测试策略",
             "description": "查询测试描述",
@@ -231,10 +114,10 @@ class RewardPolicyTestCase(unittest.TestCase):
         self.assertIsNotNone(queried_policy, "查询积分策略失败")
         self.assertEqual(queried_policy["id"], created_policy["id"], "ID不匹配")
         self.test_data.append(created_policy)
-        print(f"✓ 积分策略查询成功: ID={queried_policy.get('id')}")
+        self.log_test_success(f"✓ 积分策略查询成功: ID={queried_policy.get('id')}")
 
     def test_update_reward_policy(self):
-        print("测试更新积分策略...")
+        self.log_test_step("测试更新积分策略")
         reward_policy_param = {
             "name": "更新前策略",
             "description": "更新前描述",
@@ -251,13 +134,13 @@ class RewardPolicyTestCase(unittest.TestCase):
         )
         if updated_policy:
             self.assertEqual(updated_policy["name"], "更新后策略", "更新后名称不匹配")
-            print(f"✓ 积分策略更新成功: ID={updated_policy.get('id')}")
+            self.log_test_success(f"✓ 积分策略更新成功: ID={updated_policy.get('id')}")
         else:
-            print("⚠ 积分策略更新未返回结果")
+            self.log_test_observation("⚠ 积分策略更新未返回结果")
         self.test_data.append(created_policy)
 
     def test_delete_reward_policy(self):
-        print("测试删除积分策略...")
+        self.log_test_step("测试删除积分策略")
         reward_policy_param = {
             "name": "删除测试策略",
             "description": "删除测试描述",
@@ -275,12 +158,12 @@ class RewardPolicyTestCase(unittest.TestCase):
             self.assertEqual(
                 deleted_policy["id"], created_policy["id"], "删除的积分策略ID不匹配"
             )
-            print(f"✓ 积分策略删除成功: ID={deleted_policy.get('id')}")
+            self.log_test_success(f"✓ 积分策略删除成功: ID={deleted_policy.get('id')}")
         else:
-            print("⚠ 积分策略删除未返回结果")
+            self.log_test_observation("⚠ 积分策略删除未返回结果")
 
     def test_create_reward_policy_with_long_name(self):
-        print("测试创建超长名称积分策略...")
+        self.log_test_step("测试创建超长名称积分策略")
         long_name = "超长名称积分策略" * 10
         reward_policy_param = {
             "name": long_name,
@@ -292,10 +175,10 @@ class RewardPolicyTestCase(unittest.TestCase):
         self.assertIsNotNone(reward_policy, "创建超长名称积分策略失败")
         self.assertEqual(reward_policy["name"], long_name, "超长名称不匹配")
         self.test_data.append(reward_policy)
-        print(f"✓ 超长名称积分策略创建成功: 名称长度={len(reward_policy.get('name'))}")
+        self.log_test_success(f"✓ 超长名称积分策略创建成功: 名称长度={len(reward_policy.get('name'))}")
 
     def test_create_reward_policy_with_long_description(self):
-        print("测试创建超长描述积分策略...")
+        self.log_test_step("测试创建超长描述积分策略")
         long_description = "超长描述积分策略" * 20
         reward_policy_param = {
             "name": "超长描述测试",
@@ -309,12 +192,12 @@ class RewardPolicyTestCase(unittest.TestCase):
             reward_policy["description"], long_description, "超长描述不匹配"
         )
         self.test_data.append(reward_policy)
-        print(
+        self.log_test_success(
             f"✓ 超长描述积分策略创建成功: 描述长度={len(reward_policy.get('description'))}"
         )
 
     def test_create_reward_policy_without_status(self):
-        print("测试创建无状态积分策略...")
+        self.log_test_step("测试创建无状态积分策略")
         reward_policy_param = {
             "name": "无状态测试",
             "description": "无状态描述",
@@ -322,32 +205,32 @@ class RewardPolicyTestCase(unittest.TestCase):
         }
         reward_policy = self.reward_policy_sdk.create_reward_policy(reward_policy_param)
         if reward_policy is None:
-            print("✓ 系统正确拒绝创建无状态积分策略")
+            self.log_test_success("✓ 系统正确拒绝创建无状态积分策略")
         else:
             self.assertIn("status", reward_policy, "积分策略应包含状态字段")
-            print(f"⚠ 系统允许创建无状态积分策略: ID={reward_policy.get('id')}")
+            self.log_test_observation(f"⚠ 系统允许创建无状态积分策略: ID={reward_policy.get('id')}")
             self.test_data.append(reward_policy)
 
     def test_query_nonexistent_reward_policy(self):
-        print("测试查询不存在的积分策略...")
+        self.log_test_step("测试查询不存在的积分策略")
         non_existent_id = 999999999
         reward_policy = self.reward_policy_sdk.query_reward_policy(non_existent_id)
         if reward_policy is None:
-            print("✓ 查询不存在的积分策略返回None，符合预期")
+            self.log_test_success("✓ 查询不存在的积分策略返回None，符合预期")
         else:
-            print(f"⚠ 查询不存在的积分策略返回: {reward_policy}")
+            self.log_test_observation(f"⚠ 查询不存在的积分策略返回: {reward_policy}")
 
     def test_delete_nonexistent_reward_policy(self):
-        print("测试删除不存在的积分策略...")
+        self.log_test_step("测试删除不存在的积分策略")
         non_existent_id = 999999999
         deleted_policy = self.reward_policy_sdk.delete_reward_policy(non_existent_id)
         if deleted_policy is None:
-            print("✓ 删除不存在的积分策略返回None，符合预期")
+            self.log_test_success("✓ 删除不存在的积分策略返回None，符合预期")
         else:
-            print(f"⚠ 删除不存在的积分策略返回: {deleted_policy}")
+            self.log_test_observation(f"⚠ 删除不存在的积分策略返回: {deleted_policy}")
 
     def test_auto_generated_fields(self):
-        print("测试系统自动生成字段...")
+        self.log_test_step("测试系统自动生成字段")
         reward_policy_param = {
             "name": "自动字段测试",
             "description": "自动字段描述",
@@ -360,10 +243,10 @@ class RewardPolicyTestCase(unittest.TestCase):
         for field in auto_fields:
             self.assertIn(field, reward_policy, f"缺少自动生成字段: {field}")
         self.test_data.append(reward_policy)
-        print(f"✓ 系统自动生成字段验证成功: ID={reward_policy.get('id')}")
+        self.log_test_success(f"✓ 系统自动生成字段验证成功: ID={reward_policy.get('id')}")
 
     def test_modify_time_auto_update(self):
-        print("测试修改时间字段定义对齐...")
+        self.log_test_step("测试修改时间字段定义对齐")
         reward_policy_param = {
             "name": "时间测试策略",
             "description": "时间测试描述",
@@ -375,13 +258,13 @@ class RewardPolicyTestCase(unittest.TestCase):
         )
         self.assertIsNotNone(created_policy, "创建积分策略失败")
         if "modifyTime" in created_policy:
-            print("⚠ 当前服务返回了未在定义中声明的 modifyTime 字段，测试仅记录现象")
+            self.log_test_observation("⚠ 当前服务返回了未在定义中声明的 modifyTime 字段，测试仅记录现象")
         else:
-            print("✓ 当前定义未声明 modifyTime，返回结果与定义一致")
+            self.log_test_success("✓ 当前定义未声明 modifyTime，返回结果与定义一致")
         self.test_data.append(created_policy)
 
     def test_reward_policy_status_validation(self):
-        print("测试积分策略状态验证...")
+        self.log_test_step("测试积分策略状态验证")
         reward_policy_param = {
             "name": "状态验证策略",
             "description": "状态验证描述",
@@ -394,7 +277,7 @@ class RewardPolicyTestCase(unittest.TestCase):
             reward_policy["status"]["id"], self.test_status["id"], "状态ID不匹配"
         )
         self.test_data.append(reward_policy)
-        print(
+        self.log_test_success(
             f"✓ 积分策略状态验证成功: 状态ID={reward_policy.get('status', {}).get('id')}"
         )
 

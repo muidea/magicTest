@@ -115,7 +115,7 @@ class ConcurrentTestRunner:
     def _cleanup_session_managers(self):
         """清理所有会话管理器"""
         import threading
-        
+
         def cleanup_single_manager(thread_id, session_mgr):
             """清理单个会话管理器"""
             try:
@@ -125,22 +125,22 @@ class ConcurrentTestRunner:
                 logger.info(f"线程 {thread_id}: 会话管理器清理完成")
             except Exception as e:
                 logger.error(f"线程 {thread_id}: 清理会话管理器失败 - {e}")
-        
+
         # 并行清理所有会话管理器
         cleanup_threads = []
         for thread_id, session_mgr in self.session_managers.items():
             thread = threading.Thread(
                 target=cleanup_single_manager,
                 args=(thread_id, session_mgr),
-                daemon=True
+                daemon=True,
             )
             thread.start()
             cleanup_threads.append(thread)
-        
+
         # 等待所有清理线程完成（最多5秒）
         for thread in cleanup_threads:
             thread.join(timeout=5)
-        
+
         self.session_managers.clear()
 
     def run_concurrent_test(
@@ -439,14 +439,14 @@ class TestConcurrentStoreOperations(ConcurrentTestBase):
     def test_concurrent_store_creation(self):
         """并发创建门店测试"""
         runner = ConcurrentTestRunner(max_workers=5)
-        
+
         test_func = ConcurrentTestFactory.create_store_creation_test()
         result = runner.run_concurrent_test(
             test_func=test_func,
             test_name="concurrent_store_creation",
-            num_requests=10
+            num_requests=10,
         )
-        
+
         # 验证测试结果 - 降低要求以适应实际服务器性能
         self.assertGreaterEqual(result.successful_requests, 5, "至少50%的请求应该成功")
         self.assertLess(result.avg_response_time, 10.0, "平均响应时间应小于10秒")
@@ -455,14 +455,14 @@ class TestConcurrentStoreOperations(ConcurrentTestBase):
     def test_high_concurrency_store_operations(self):
         """高并发门店操作测试"""
         runner = ConcurrentTestRunner(max_workers=10)
-        
+
         test_func = ConcurrentTestFactory.create_store_creation_test()
         result = runner.run_concurrent_test(
             test_func=test_func,
             test_name="high_concurrency_store_operations",
-            num_requests=20
+            num_requests=20,
         )
-        
+
         # 验证测试结果 - 降低要求以适应实际服务器性能
         self.assertGreaterEqual(result.successful_requests, 10, "至少50%的请求应该成功")
         self.assertLess(result.avg_response_time, 15.0, "平均响应时间应小于15秒")
@@ -564,8 +564,8 @@ def run_all_concurrent_tests():
 
 
 if __name__ == "__main__":
-    print("🚀 基于会话管理器的并发测试V2")
-    print("=" * 60)
+    logger.info("基于会话管理器的并发测试V2")
+    logger.info("%s", "=" * 60)
 
     # 运行所有并发测试
     result = run_all_concurrent_tests()

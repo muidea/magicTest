@@ -1,26 +1,4 @@
 """
-import os
-import sys
-
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
 Stockin 测试用例
 
 基于 magicProjectRepo/vmi/VMI实体定义和使用说明.md:229-242 中的 stockin 实体定义编写。
@@ -76,125 +54,50 @@ Stockin 测试用例
 最后更新：2026-01-26
 """
 
-import os
-import sys
+from test_bootstrap import ensure_test_paths
 
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
+ensure_test_paths(__file__)
 
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
-
-# 确保vmi目录在路径中（用于导入sdk模块）
-vmi_dir = os.path.join(project_root, "vmi")
-if vmi_dir not in sys.path:
-    sys.path.insert(0, vmi_dir)
-
-
-
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
-
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-
-
-from session import MagicSession
-from cas.cas import Cas
 from mock import common as mock
 import logging
 import unittest
-import warnings
-
 
 from sdk import (GoodsInfoSDK, ProductInfoSDK, ProductSDK, ShelfSDK, StatusSDK,
-                 StockinSDK, StoreSDK)
+                 StockinSDK, StoreSDK, WarehouseSDK)
+from test_dependency_helper import prepare_inventory_dependencies
+from test_vmi_base import VMITestCase
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
-class StockinTestCase(unittest.TestCase):
+class StockinTestCase(VMITestCase):
     """Stockin 测试用例类"""
 
     namespace = ""
 
     @classmethod
     def setUpClass(cls):
-        # 从config_helper获取配置
-        from config_helper import get_credentials, get_server_url
+        super().setUpClass()
 
-        cls.server_url = get_server_url()
-        cls.credentials = get_credentials()
+        # 类级别的数据清理记录
+        cls._class_cleanup_ids = cls.build_cleanup_registry(
+            "stockin",
+            "store",
+            "warehouse",
+            "goods_info",
+            "product",
+            "product_info",
+            "shelf",
+            "status",
+        )
 
-        """测试类初始化"""
-        warnings.simplefilter("ignore", ResourceWarning)
-        cls.work_session = MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(
-            cls.credentials["username"], cls.credentials["password"]
-        ):
-            logger.error("CAS登录失败")
-            raise Exception("CAS登录失败")
-        cls.work_session.bind_token(cls.cas_session.get_session_token())
+        cls.record_initial_count(
+            "_initial_stockin_count", cls._get_stockin_count, entity_name="入库单"
+        )
+
+    @classmethod
+    def _init_sdk(cls):
         cls.stockin_sdk = StockinSDK(cls.work_session)
         cls.store_sdk = StoreSDK(cls.work_session)
         cls.goods_info_sdk = GoodsInfoSDK(cls.work_session)
@@ -202,277 +105,110 @@ class StockinTestCase(unittest.TestCase):
         cls.product_sdk = ProductSDK(cls.work_session)
         cls.product_info_sdk = ProductInfoSDK(cls.work_session)
         cls.shelf_sdk = ShelfSDK(cls.work_session)
-
-        # 类级别的数据清理记录
-        cls._class_cleanup_ids = {
-            "stockin": [],
-            "store": [],
-            "goods_info": [],
-            "product_info": [],
-            "shelf": [],
-            "status": [],
-        }
-
-        # 记录测试开始前的初始状态（可选）
-        cls._initial_stockin_count = cls._get_stockin_count()
-        logger.info(f"测试开始前入库单数量: {cls._initial_stockin_count}")
+        cls.warehouse_sdk = WarehouseSDK(cls.work_session)
 
     @classmethod
     def _get_stockin_count(cls):
         """获取当前入库单数量"""
-        try:
-            # 尝试使用count方法
-            count = cls.stockin_sdk.count_stockin({})
-            if count is not None:
-                return count
-        except Exception as e:
-            logger.warning(f"获取入库单数量失败: {e}")
-
-        # 如果count方法不可用，尝试通过过滤空条件获取列表
-        try:
-            stockins = cls.stockin_sdk.filter_stockin({})
-            if stockins is not None:
-                return len(stockins)
-        except Exception as e:
-            logger.warning(f"通过过滤获取入库单数量失败: {e}")
-
-        return 0
+        return cls.get_entity_count(
+            "stockin_sdk",
+            "count_stockin",
+            "filter_stockin",
+            entity_name="入库单",
+            count_args=({},),
+            filter_args=({},),
+        )
 
     @classmethod
     def tearDownClass(cls):
         """测试类结束后的清理"""
-        # 清理所有类型的数据
         cls._cleanup_all_data()
+        cls.verify_cleanup_count(
+            "_initial_stockin_count", cls._get_stockin_count, entity_name="入库单"
+        )
 
-        # 验证数据清理
-        final_stockin_count = cls._get_stockin_count()
-        logger.info(f"测试类清理完成: 最终入库单数量: {final_stockin_count}")
-
-        # 检查是否有数据残留（可选，根据业务需求）
-        if hasattr(cls, "_initial_stockin_count"):
-            expected_count = cls._initial_stockin_count
-            if final_stockin_count > expected_count:
-                logger.warning(
-                    f"可能存在数据残留: 期望数量 {expected_count}, 实际数量 {final_stockin_count}"
-                )
+        super().tearDownClass()
 
     @classmethod
     def _cleanup_all_data(cls):
         """清理所有测试数据"""
-        # 按依赖顺序反向清理
-        cls._cleanup_entities(
-            cls.stockin_sdk, cls._class_cleanup_ids["stockin"], "入库单"
+        cls.cleanup_registry_entries(
+            cls._class_cleanup_ids,
+            [
+                ("stockin", "stockin_sdk", "入库单"),
+                ("goods_info", "goods_info_sdk", "商品信息"),
+                ("store", "store_sdk", "店铺"),
+                ("warehouse", "warehouse_sdk", "仓库"),
+                ("product", "product_sdk", "产品"),
+                ("product_info", "product_info_sdk", "产品SKU"),
+                ("shelf", "shelf_sdk", "货架"),
+                ("status", "status_sdk", "状态"),
+            ],
         )
-        cls._cleanup_entities(
-            cls.goods_info_sdk, cls._class_cleanup_ids["goods_info"], "商品信息"
-        )
-        cls._cleanup_entities(cls.store_sdk, cls._class_cleanup_ids["store"], "店铺")
-        cls._cleanup_entities(
-            cls.product_info_sdk, cls._class_cleanup_ids["product_info"], "产品SKU"
-        )
-        cls._cleanup_entities(cls.shelf_sdk, cls._class_cleanup_ids["shelf"], "货架")
-        cls._cleanup_entities(cls.status_sdk, cls._class_cleanup_ids["status"], "状态")
-
-    @classmethod
-    def _cleanup_entities(cls, sdk, entity_ids, entity_name):
-        """清理指定类型的实体"""
-        if not entity_ids:
-            logger.debug(f"清理{entity_name}列表为空，无需清理")
-            return
-
-        logger.info(f"开始清理 {len(entity_ids)} 个{entity_name}: {entity_ids}")
-        deleted_count = 0
-        failed_ids = []
-
-        for entity_id in entity_ids:
-            try:
-                logger.debug(f"尝试删除{entity_name} ID: {entity_id}")
-                result = sdk.delete(entity_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(f"成功删除{entity_name} {entity_id}")
-                else:
-                    logger.debug(f"清理{entity_name} {entity_id} 返回None，视为已不存在")
-            except Exception as e:
-                error_msg = f"清理{entity_name} {entity_id} 失败: {e}"
-                logger.error(error_msg)
-                failed_ids.append(entity_id)
-
-        if deleted_count > 0:
-            logger.info(f"成功清理 {deleted_count} 个{entity_name}")
-
-        if failed_ids:
-            logger.warning(f"清理{entity_name}异常ID: {failed_ids}")
 
     def setUp(self):
         """每个测试用例前的准备"""
         # 记录测试创建的实体ID以便清理
-        self.created_ids = {
-            "stockin": [],
-            "store": [],
-            "goods_info": [],
-            "product_info": [],
-            "shelf": [],
-            "status": [],
-        }
+        self.created_ids = self.build_cleanup_registry(
+            "stockin",
+            "store",
+            "warehouse",
+            "goods_info",
+            "product",
+            "product_info",
+            "shelf",
+            "status",
+        )
 
         # 创建必要的依赖实体
         self._setup_dependencies()
 
     def _setup_dependencies(self):
         """创建测试依赖的实体（店铺、商品信息、状态等）"""
-        # 创建店铺
-        store_param = {"name": "STORE_" + mock.name(), "description": mock.sentence()}
-        new_store = self.store_sdk.create_store(store_param)
-        self.assertIsNotNone(new_store, "创建店铺失败")
-        if new_store and "id" in new_store:
-            self.created_ids["store"].append(new_store["id"])
-            self._class_cleanup_ids["store"].append(new_store["id"])
-
-        # 创建货架（简化处理）
-        shelf_param = {
-            "name": "SHELF_" + mock.name(),
-            "description": mock.sentence(),
-            "capacity": 100,
-            "warehouse": {"id": 1},  # 假设仓库ID为1
-            "status": {"id": 19},  # 状态ID 19: "启用"
-        }
-        new_shelf = self.shelf_sdk.create_shelf(shelf_param)
-        if new_shelf is not None and "id" in new_shelf:
-            self.created_ids["shelf"].append(new_shelf["id"])
-            self._class_cleanup_ids["shelf"].append(new_shelf["id"])
-
-        # 创建产品
-        product_param = {
-            "name": "PRODUCT_" + mock.name(),
-            "description": mock.sentence(),
-            "image": [],
-            "expire": 365,
-            "tags": ["test"],
-            "status": {"id": 19},  # 使用状态ID 19: "启用"
-        }
-        new_product = self.product_sdk.create_product(product_param)
-
-        # 创建产品SKU（需要引用产品）
-        if new_product and "id" in new_product:
-            product_info_param = {
-                "sku": str(mock.int(10000, 99999)),  # 纯数字SKU
-                "description": mock.sentence(),
-                "product": {"id": new_product["id"]},  # 引用创建的产品
-            }
-            new_product_info = self.product_info_sdk.create_product_info(
-                product_info_param
-            )
-            if new_product_info is not None and "id" in new_product_info:
-                self.created_ids["product_info"].append(new_product_info["id"])
-                self._class_cleanup_ids["product_info"].append(new_product_info["id"])
-        else:
-            new_product_info = None
-
-        # 创建商品信息（goodsInfo）
-        # 如果product_info不存在，使用一个虚拟的ID
-        product_id = new_product_info["id"] if new_product_info else 99999
-
-        goods_info_param = {
-            "sku": str(mock.int(20000, 29999)),  # 纯数字SKU
-            "product": {"id": product_id},
-            "type": 1,  # 入库类型
-            "count": 100,
-            "price": 99.99,
-            "shelf": [{"id": new_shelf["id"]}] if new_shelf else [],
-        }
-        new_goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
-        if new_goods_info is not None and "id" in new_goods_info:
-            self.created_ids["goods_info"].append(new_goods_info["id"])
-            self._class_cleanup_ids["goods_info"].append(new_goods_info["id"])
-
-        # 获取状态（假设系统已有状态）
-        self.status_id = 19  # 状态ID 19: "启用"
-
-        # 保存依赖实体ID
-        self.store_id = new_store["id"] if new_store else None
-        self.shelf_id = new_shelf["id"] if new_shelf else None
-        self.product_info_id = new_product_info["id"] if new_product_info else None
-        self.goods_info_id = new_goods_info["id"] if new_goods_info else None
+        deps = prepare_inventory_dependencies(
+            store_sdk=self.store_sdk,
+            warehouse_sdk=self.warehouse_sdk,
+            shelf_sdk=self.shelf_sdk,
+            status_sdk=self.status_sdk,
+            product_sdk=self.product_sdk,
+            product_info_sdk=self.product_info_sdk,
+            goods_info_sdk=self.goods_info_sdk,
+            goods_info_type=1,
+            created_ids=self.created_ids,
+            class_cleanup_ids=self._class_cleanup_ids,
+        )
+        self.status_id = deps["status_id"]
+        self.store_id = deps["store_id"]
+        self.warehouse_id = deps["warehouse_id"]
+        self.shelf_id = deps["shelf_id"]
+        self.product_id = deps["product_id"]
+        self.product_info_id = deps["product_info_id"]
+        self.goods_info_id = deps["goods_info_id"]
 
     def tearDown(self):
         """每个测试用例后的清理"""
-        # 将本测试创建的实体ID添加到类级别清理列表
-        for entity_type in self.created_ids:
-            if self.created_ids[entity_type]:
-                self.__class__._class_cleanup_ids[entity_type].extend(
-                    self.created_ids[entity_type]
-                )
-
-        # 尝试立即清理本测试创建的数据
+        self.merge_cleanup_registry(self.__class__._class_cleanup_ids, self.created_ids)
         self._cleanup_test_entities()
-
-        # 清空本测试记录
-        for entity_type in self.created_ids:
-            self.created_ids[entity_type].clear()
+        self.clear_cleanup_registry(self.created_ids)
 
     def _cleanup_test_entities(self):
         """清理本测试创建的实体"""
-        # 按依赖顺序反向清理
-        for entity_type in [
-            "stockin",
-            "goods_info",
-            "store",
-            "product_info",
-            "shelf",
-            "status",
-        ]:
-            if not self.created_ids[entity_type]:
-                continue
-
-            sdk_map = {
-                "stockin": self.stockin_sdk,
-                "store": self.store_sdk,
-                "goods_info": self.goods_info_sdk,
-                "product_info": self.product_info_sdk,
-                "shelf": self.shelf_sdk,
-                "status": self.status_sdk,
-            }
-
-            sdk = sdk_map[entity_type]
-            entity_name = {
-                "stockin": "入库单",
-                "store": "店铺",
-                "goods_info": "商品信息",
-                "product_info": "产品SKU",
-                "shelf": "货架",
-                "status": "状态",
-            }[entity_type]
-
-            for entity_id in self.created_ids[entity_type]:
-                try:
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 尝试删除{entity_name} ID: {entity_id}"
-                    )
-                    result = sdk.delete(entity_id)
-
-                    if result is not None:
-                        logger.debug(
-                            f"测试 {self._testMethodName}: 成功删除{entity_name} {entity_id}"
-                        )
-                        # 从类级别清理列表中移除（如果存在）
-                        if entity_id in self.__class__._class_cleanup_ids[entity_type]:
-                            self.__class__._class_cleanup_ids[entity_type].remove(
-                                entity_id
-                            )
-                    else:
-                        logger.debug(
-                            f"测试 {self._testMethodName}: 删除{entity_name} {entity_id} 返回None，视为已不存在"
-                        )
-                        if entity_id in self.__class__._class_cleanup_ids[entity_type]:
-                            self.__class__._class_cleanup_ids[entity_type].remove(
-                                entity_id
-                            )
-                except Exception as e:
-                    logger.error(
-                        f"测试 {self._testMethodName}: 删除{entity_name} {entity_id} 失败: {e}"
-                    )
+        self.cleanup_registry_entries(
+            self.created_ids,
+            [
+                ("stockin", "stockin_sdk", "入库单"),
+                ("goods_info", "goods_info_sdk", "商品信息"),
+                ("product_info", "product_info_sdk", "产品SKU"),
+                ("product", "product_sdk", "产品"),
+                ("store", "store_sdk", "店铺"),
+                ("shelf", "shelf_sdk", "货架"),
+                ("warehouse", "warehouse_sdk", "仓库"),
+                ("status", "status_sdk", "状态"),
+            ],
+            owner=self,
+            remove_from=self.__class__._class_cleanup_ids,
+            log_prefix=f"测试 {self._testMethodName}",
+        )
 
     def _record_entity_for_cleanup(self, entity_type, entity_id):
         """记录实体ID以便清理"""
@@ -484,23 +220,22 @@ class StockinTestCase(unittest.TestCase):
 
     def mock_stockin_param(self):
         """模拟入库单参数"""
-        # 如果goods_info_id不存在，使用一个虚拟的ID
-        goods_info_id = self.goods_info_id if self.goods_info_id else 99999
+        self.assertIsNotNone(self.goods_info_id, "缺少商品信息依赖")
+        self.assertIsNotNone(self.product_info_id, "缺少产品SKU依赖")
+        self.assertIsNotNone(self.store_id, "缺少店铺依赖")
+        self.assertTrue(hasattr(self, "status_id") and self.status_id, "缺少状态依赖")
+
+        goods_info_id = self.goods_info_id
 
         # 查询已创建的goodsInfo获取完整信息
-        goods_info = None
-        if goods_info_id != 99999:
-            goods_info = self.goods_info_sdk.query_goods_info(goods_info_id)
+        goods_info = self.goods_info_sdk.query_goods_info(goods_info_id)
 
         if goods_info:
             # 使用查询到的完整goodsInfo对象
             goods_info_obj = {
                 "id": goods_info["id"],
                 "sku": goods_info.get("sku", f"TEST_SKU_{goods_info_id}"),
-                "product": goods_info.get(
-                    "product",
-                    {"id": self.product_info_id} if self.product_info_id else {"id": 1},
-                ),
+                "product": goods_info.get("product", {"id": self.product_info_id}),
                 "type": goods_info.get("type", 1),
                 "count": goods_info.get("count", 100),
                 "price": goods_info.get("price", 99.99),
@@ -511,9 +246,7 @@ class StockinTestCase(unittest.TestCase):
             goods_info_obj = {
                 "id": goods_info_id,
                 "sku": f"TEST_SKU_{goods_info_id}",
-                "product": (
-                    {"id": self.product_info_id} if self.product_info_id else {"id": 1}
-                ),
+                "product": {"id": self.product_info_id},
                 "type": 1,
                 "count": 100,
                 "price": 99.99,
@@ -523,8 +256,8 @@ class StockinTestCase(unittest.TestCase):
         return {
             "goodsInfo": [goods_info_obj],
             "description": mock.sentence(),
-            "store": {"id": self.store_id} if self.store_id else None,
-            "status": {"id": self.status_id} if hasattr(self, "status_id") else None,
+            "store": {"id": self.store_id},
+            "status": {"id": self.status_id},
         }
 
     def test_create_stockin(self):

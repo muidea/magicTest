@@ -8,6 +8,13 @@ import threading
 import time
 from typing import Optional, Tuple
 
+from test_bootstrap import ensure_test_paths
+
+ensure_test_paths(__file__)
+
+from session import MagicSession
+from cas.cas import Cas
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,27 +73,6 @@ class SessionManager:
             登录是否成功
         """
         try:
-            # 添加必要的Python路径
-            import os
-            import sys
-
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            parent_dir = os.path.dirname(current_dir)
-
-            # 确保session模块在路径中
-            session_path = os.path.join(parent_dir, "session")
-            if session_path not in sys.path:
-                sys.path.insert(0, session_path)
-
-            from session import MagicSession
-
-            # 确保cas模块在路径中
-            cas_dir = os.path.join(parent_dir, "cas")
-            if cas_dir not in sys.path:
-                sys.path.insert(0, cas_dir)
-
-            from cas.cas import Cas
-
             # 创建会话
             self.work_session = MagicSession(self.server_url, self.namespace)
             self.cas_session = Cas(self.work_session)

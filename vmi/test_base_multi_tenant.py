@@ -491,33 +491,33 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    print("=" * 60)
-    print("多租户测试基类测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("多租户测试基类测试")
+    logger.info("=" * 60)
 
     # 创建测试类实例
     class TestMultiTenantDemo(TestBaseMultiTenant):
         def test_multi_tenant_feature(self):
-            print(f"当前租户: {self.current_tenant_id}")
-            print(f"多租户启用: {self.multi_tenant_enabled}")
+            logger.info("当前租户: %s", self.current_tenant_id)
+            logger.info("多租户启用: %s", self.multi_tenant_enabled)
 
             if self.multi_tenant_enabled:
                 # 获取所有租户状态
                 status = self.get_all_tenant_status()
-                print(f"租户状态: {list(status.keys())}")
+                logger.info("租户状态: %s", list(status.keys()))
 
                 # 测试切换租户
                 tenant_ids = list(status.keys())
                 if len(tenant_ids) > 1:
-                    print(f"可用租户: {tenant_ids}")
+                    logger.info("可用租户: %s", tenant_ids)
 
                     # 切换到第一个租户
                     if self.switch_tenant(tenant_ids[0]):
-                        print(f"切换到租户: {self.current_tenant_id}")
+                        logger.info("切换到租户: %s", self.current_tenant_id)
 
                     # 切换回默认租户
                     self.switch_tenant("autotest")
-                    print(f"切换回默认租户: {self.current_tenant_id}")
+                    logger.info("切换回默认租户: %s", self.current_tenant_id)
 
             self.assertTrue(True, "测试通过")
 
@@ -526,5 +526,5 @@ if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
 
-    print(f"\n测试结果: {'通过' if result.wasSuccessful() else '失败'}")
-    print("✅ 多租户测试基类测试完成")
+    logger.info("测试结果: %s", "通过" if result.wasSuccessful() else "失败")
+    logger.info("多租户测试基类测试完成")

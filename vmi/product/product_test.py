@@ -1,26 +1,4 @@
 """
-import os
-import sys
-
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
 Product 测试用例
 
 基于 magicProjectRepo/vmi/VMI实体定义和使用说明.md:150-161 中的 product 实体定义编写。
@@ -74,246 +52,84 @@ Product 测试用例
 最后更新：2026-01-25
 """
 
-import os
-import sys
+from test_bootstrap import ensure_test_paths
 
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
+ensure_test_paths(__file__)
 
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
-
-# 确保vmi目录在路径中（用于导入sdk模块）
-vmi_dir = os.path.join(project_root, "vmi")
-if vmi_dir not in sys.path:
-    sys.path.insert(0, vmi_dir)
-
-
-
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
-
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-
-
-from session import MagicSession
-from cas.cas import Cas
 from mock import common as mock
 import logging
 import unittest
-import warnings
 
-
-from sdk import ProductSDK
+from sdk import ProductSDK, StatusSDK
+from test_dependency_helper import resolve_status_id
+from test_vmi_base import VMITestCase
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
-class ProductTestCase(unittest.TestCase):
+class ProductTestCase(VMITestCase):
     """Product 测试用例类"""
 
     namespace = ""
 
     @classmethod
     def setUpClass(cls):
-        # 从config_helper获取配置
-
-        # 从config_helper获取配置
-        from config_helper import get_credentials, get_server_url
-
-        cls.server_url = get_server_url()
-        cls.credentials = get_credentials()
-
-        """测试类初始化"""
-        warnings.simplefilter("ignore", ResourceWarning)
-        cls.work_session = MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(
-            cls.credentials["username"], cls.credentials["password"]
-        ):
-            logger.error("CAS登录失败")
-            raise Exception("CAS登录失败")
-        cls.work_session.bind_token(cls.cas_session.get_session_token())
-        cls.product_sdk = ProductSDK(cls.work_session)
+        super().setUpClass()
+        cls.status_id = resolve_status_id(cls.status_sdk)
+        if not cls.status_id:
+            raise Exception("无法获取可用状态ID")
 
         # 类级别的数据清理记录
         cls._class_cleanup_ids = []
 
-        # 记录测试开始前的初始状态（可选）
-        cls._initial_product_count = cls._get_product_count()
-        logger.info(f"测试开始前产品数量: {cls._initial_product_count}")
+        cls.record_initial_count(
+            "_initial_product_count", cls._get_product_count, entity_name="产品"
+        )
+
+    @classmethod
+    def _init_sdk(cls):
+        cls.product_sdk = ProductSDK(cls.work_session)
+        cls.status_sdk = StatusSDK(cls.work_session)
 
     @classmethod
     def _get_product_count(cls):
         """获取当前产品数量"""
-        try:
-            # 尝试使用count方法
-            count = cls.product_sdk.count_product({})
-            if count is not None:
-                return count
-        except Exception as e:
-            logger.warning(f"获取产品数量失败: {e}")
-
-        # 如果count方法不可用，尝试通过过滤空条件获取列表
-        try:
-            products = cls.product_sdk.filter_product({})
-            if products is not None:
-                return len(products)
-        except Exception as e:
-            logger.warning(f"通过过滤获取产品数量失败: {e}")
-
-        return 0
+        return cls.get_entity_count(
+            "product_sdk",
+            "count_product",
+            "filter_product",
+            entity_name="产品",
+            count_args=({},),
+            filter_args=({},),
+        )
 
     @classmethod
     def tearDownClass(cls):
         """测试类结束后的清理"""
-        # 记录类级别清理列表的状态
         original_count = len(cls._class_cleanup_ids)
         logger.info(
             f"测试类清理开始: 需要清理 {original_count} 个产品: {cls._class_cleanup_ids}"
         )
 
-        # 清理类级别记录的所有数据
-        cls._cleanup_products(cls._class_cleanup_ids)
-
-        # 验证数据清理
-        final_product_count = cls._get_product_count()
-        logger.info(
-            f"测试类清理完成: 尝试清理 {original_count} 个产品，最终产品数量: {final_product_count}"
+        cls.cleanup_id_list(cls._class_cleanup_ids, "product_sdk", "产品")
+        cls.verify_cleanup_count(
+            "_initial_product_count",
+            cls._get_product_count,
+            entity_name="产品",
+            remaining_sdk_ref="product_sdk",
+            remaining_filter_method_name="filter_product",
+            remaining_filter_args=({},),
+            remaining_describe=lambda product: (
+                f"ID: {product['id']}, 名称: {product['name']}, 描述: {product.get('description', 'N/A')}"
+                if isinstance(product, dict)
+                and "id" in product
+                and "name" in product
+                else None
+            ),
         )
 
-        # 检查是否有数据残留（可选，根据业务需求）
-        if hasattr(cls, "_initial_product_count"):
-            expected_count = cls._initial_product_count
-            if final_product_count > expected_count:
-                logger.warning(
-                    f"可能存在数据残留: 期望数量 {expected_count}, 实际数量 {final_product_count}"
-                )
-                # 尝试查找残留的产品
-                cls._find_and_log_remaining_products(expected_count)
-            else:
-                logger.info(
-                    f"数据清理验证通过: 最终数量 {final_product_count} <= 初始数量 {expected_count}"
-                )
-
-    @classmethod
-    def _find_and_log_remaining_products(cls, expected_count):
-        """查找并记录残留的产品"""
-        try:
-            # 获取所有产品
-            all_products = cls.product_sdk.filter_product({})
-            if all_products is not None:
-                current_count = len(all_products)
-                if current_count > expected_count:
-                    logger.warning(f"发现 {current_count - expected_count} 个残留产品:")
-                    for product in all_products:
-                        if "id" in product and "name" in product:
-                            logger.warning(
-                                f"  ID: {product['id']}, 名称: {product['name']}, 描述: {product.get('description', 'N/A')}"
-                            )
-        except Exception as e:
-            logger.warning(f"查找残留产品失败: {e}")
-
-    @classmethod
-    def _cleanup_products(cls, product_ids):
-        """清理指定的产品列表
-
-        注意：系统支持删除操作，如果删除失败应该记录错误。
-        在测试类级别的清理中，我们尝试删除但不抛出异常，
-        因为测试方法应该已经验证了删除操作。
-        """
-        if not product_ids:
-            logger.debug("清理产品列表为空，无需清理")
-            return
-
-        logger.info(f"开始清理 {len(product_ids)} 个产品: {product_ids}")
-        deleted_count = 0
-        failed_ids = []
-
-        for product_id in product_ids:
-            try:
-                # 系统应该支持删除操作
-                logger.debug(f"尝试删除产品 ID: {product_id}")
-                result = cls.product_sdk.delete_product(product_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(f"成功删除产品 {product_id}")
-                else:
-                    # 删除返回None，表示删除失败
-                    error_msg = f"清理产品 {product_id} 返回None，系统应该支持删除操作"
-                    logger.error(error_msg)
-                    failed_ids.append(product_id)
-            except Exception as e:
-                error_msg = f"清理产品 {product_id} 失败: {e}"
-                logger.error(error_msg)
-                failed_ids.append(product_id)
-
-        if deleted_count > 0:
-            logger.info(f"成功清理 {deleted_count} 个产品")
-
-        if failed_ids:
-            logger.error(f"清理失败的产品ID: {failed_ids}")
+        super().tearDownClass()
 
     def setUp(self):
         """每个测试用例前的准备"""
@@ -337,64 +153,14 @@ class ProductTestCase(unittest.TestCase):
         注意：系统支持删除操作，如果删除失败应该抛出异常，
         以便测试失败并排查server错误。
         """
-        if not self.created_product_ids:
-            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的产品")
-            return
-
-        logger.info(
-            f"测试 {self._testMethodName}: 开始清理 {len(self.created_product_ids)} 个产品: {self.created_product_ids}"
+        self.cleanup_id_list(
+            self.created_product_ids,
+            "product_sdk",
+            "产品",
+            owner=self,
+            remove_from=self.__class__._class_cleanup_ids,
+            log_prefix=f"测试 {self._testMethodName}",
         )
-        deleted_count = 0
-        failed_ids = []
-
-        for product_id in self.created_product_ids:
-            try:
-                # 系统应该支持删除操作
-                logger.debug(
-                    f"测试 {self._testMethodName}: 尝试删除产品 ID: {product_id}"
-                )
-                result = self.product_sdk.delete_product(product_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 成功删除产品 {product_id}"
-                    )
-                    # 从类级别清理列表中移除（如果存在）
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_ids")
-                        and product_id in self.__class__._class_cleanup_ids
-                    ):
-                        self.__class__._class_cleanup_ids.remove(product_id)
-                        logger.debug(
-                            f"测试 {self._testMethodName}: 从类级别清理列表中移除产品 {product_id}"
-                        )
-                else:
-                    # 删除返回None，表示删除失败
-                    error_msg = f"测试 {self._testMethodName}: 删除产品 {product_id} 返回None，系统应该支持删除操作"
-                    logger.error(error_msg)
-                    failed_ids.append(product_id)
-                    # 不抛出异常，继续尝试清理其他产品
-                    # 但记录严重错误
-
-            except Exception as e:
-                error_msg = (
-                    f"测试 {self._testMethodName}: 删除产品 {product_id} 失败: {e}"
-                )
-                logger.error(error_msg)
-                failed_ids.append(product_id)
-                # 不抛出异常，继续尝试清理其他产品
-
-        if deleted_count > 0:
-            logger.info(f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个产品")
-
-        if failed_ids:
-            # 记录错误但不抛出异常，因为这是在tearDown中
-            # 实际的测试方法应该已经验证了删除操作
-            logger.error(f"测试 {self._testMethodName}: 清理失败的产品ID: {failed_ids}")
-            # 这里可以选择抛出异常让测试失败
-            # 但考虑到这是清理阶段，可能已经过了测试验证
-            # 我们只记录错误，不中断测试
 
     def _record_product_for_cleanup(self, product_id):
         """记录产品ID以便清理"""
@@ -421,7 +187,7 @@ class ProductTestCase(unittest.TestCase):
             "image": [mock.url(), mock.url()],
             "expire": 100,
             "tags": ["tag1", "tag2", "tag3"],
-            "status": {"id": 3},  # 假设状态ID 3是有效状态
+            "status": {"id": self.status_id},
         }
 
     def test_create_product(self):
@@ -628,7 +394,7 @@ class ProductTestCase(unittest.TestCase):
         # 验证状态字段
         self.assertIn("status", new_product, "产品缺少状态字段")
         self.assertIn("id", new_product["status"], "状态缺少id字段")
-        self.assertEqual(new_product["status"]["id"], 3, "状态ID不匹配")
+        self.assertEqual(new_product["status"]["id"], self.status_id, "状态ID不匹配")
 
     def test_auto_generated_fields(self):
         """测试系统自动生成字段"""

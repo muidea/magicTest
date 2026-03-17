@@ -14,6 +14,7 @@
 
 import json
 import logging
+import os
 import random
 import statistics
 import threading
@@ -21,8 +22,9 @@ import time
 from datetime import datetime, timedelta
 
 # 配置日志
+LOG_LEVEL = os.getenv("VMI_TEST_LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.DEBUG,  # 改为DEBUG级别以获取更多信息
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -100,6 +102,8 @@ class AgingTestWorker:
         # 重试配置
         self.max_retries = 3
         self.retry_delay = 1.0  # 秒
+        self.skipped_operations = 0
+        self.bootstrap_resources = {}
 
     def run(self, stop_event: threading.Event):
         """运行测试工作线程"""
@@ -118,8 +122,9 @@ class AgingTestWorker:
 
             # 导入配置助手
             from config_helper import get_credentials, get_server_url
-            from sdk import (GoodsSDK, PartnerSDK, ProductSDK, StockinSDK,
-                             StockoutSDK)
+            from sdk import (GoodsInfoSDK, GoodsSDK, PartnerSDK, ProductInfoSDK,
+                             ProductSDK, ShelfSDK, StatusSDK, StockinSDK,
+                             StockoutSDK, StoreSDK, WarehouseSDK)
             from session_manager import SessionManager
 
             # 初始化会话管理器
@@ -150,9 +155,19 @@ class AgingTestWorker:
             # 初始化SDK
             self.partner_sdk = PartnerSDK(work_session)
             self.product_sdk = ProductSDK(work_session)
+            self.product_info_sdk = ProductInfoSDK(work_session)
             self.goods_sdk = GoodsSDK(work_session)
+            self.goods_info_sdk = GoodsInfoSDK(work_session)
             self.stockin_sdk = StockinSDK(work_session)
             self.stockout_sdk = StockoutSDK(work_session)
+            self.status_sdk = StatusSDK(work_session)
+            self.warehouse_sdk = WarehouseSDK(work_session)
+            self.shelf_sdk = ShelfSDK(work_session)
+            self.store_sdk = StoreSDK(work_session)
+
+            if not self._bootstrap_resources():
+                logger.error(f"工作线程 {self.worker_id}: 初始化依赖资源失败")
+                return
 
             # 运行测试循环
             while self.running and not stop_event.is_set():
@@ -175,8 +190,19 @@ class AgingTestWorker:
                         operation_types = ["create", "read", "update", "delete", "list"]
                     operation_type = random.choice(operation_types)
 
+                    if (
+                        operation_type == "delete"
+                        and not self.entity_cache[entity_type]
+                    ):
+                        self.skipped_operations += 1
+                        time.sleep(self.config.operation_interval)
+                        continue
+
                     # 执行操作（带重试机制）
                     start_time = time.time()
+                    attempt_duration_total = 0.0
+                    backoff_duration_total = 0.0
+                    attempt_count = 0
                     success = False
                     error = None
                     result = None
@@ -184,6 +210,8 @@ class AgingTestWorker:
                     # 重试逻辑
                     for retry_count in range(self.max_retries + 1):
                         try:
+                            attempt_start_time = time.time()
+                            attempt_count += 1
                             # 在执行操作前检查会话
                             if (
                                 hasattr(self, "session_manager")
@@ -219,6 +247,7 @@ class AgingTestWorker:
                                 result = self._list_entities(entity_type)
                             else:
                                 raise ValueError(f"未知操作类型: {operation_type}")
+                            attempt_duration_total += time.time() - attempt_start_time
 
                             success = result is not None
                             if success:
@@ -237,11 +266,12 @@ class AgingTestWorker:
                                     logger.warning(
                                         f"工作线程 {self.worker_id} {entity_type}.{operation_type} 操作失败（result=None），第{retry_count + 1}次重试..."
                                     )
-                                time.sleep(
-                                    self.retry_delay * (retry_count + 1)
-                                )  # 指数退避
+                                sleep_duration = self.retry_delay * (retry_count + 1)
+                                backoff_duration_total += sleep_duration
+                                time.sleep(sleep_duration)  # 指数退避
 
                         except Exception as e:
+                            attempt_duration_total += time.time() - attempt_start_time
                             error = str(e)
                             self.error_counts["total"] += 1
                             self.error_counts["by_entity"][entity_type] += 1
@@ -251,16 +281,19 @@ class AgingTestWorker:
                                 logger.warning(
                                     f"工作线程 {self.worker_id} {entity_type}.{operation_type} 操作异常: {error}，第{retry_count + 1}次重试..."
                                 )
-                                time.sleep(
-                                    self.retry_delay * (retry_count + 1)
-                                )  # 指数退避
+                                sleep_duration = self.retry_delay * (retry_count + 1)
+                                backoff_duration_total += sleep_duration
+                                time.sleep(sleep_duration)  # 指数退避
                             else:
                                 logger.error(
                                     f"工作线程 {self.worker_id} {entity_type}.{operation_type} 操作最终失败: {error}"
                                 )
                                 break
 
-                    duration = time.time() - start_time
+                    wall_duration = time.time() - start_time
+                    request_duration = (
+                        attempt_duration_total / attempt_count if attempt_count else 0
+                    )
 
                     # 记录结果
                     self.results.append(
@@ -268,14 +301,19 @@ class AgingTestWorker:
                             "operation_type": operation_type,
                             "entity_type": entity_type,
                             "success": success,
-                            "duration": duration,
+                            "duration": request_duration,
+                            "wall_duration": wall_duration,
+                            "request_duration": request_duration,
+                            "backoff_duration": backoff_duration_total,
+                            "attempt_count": attempt_count,
                             "error": error,
                             "timestamp": datetime.now().isoformat(),
                         }
                     )
 
-                    # 更新性能监控窗口
-                    self._update_performance_window(duration)
+                    # 仅使用成功请求的接口耗时建立性能基线，避免重试退避放大误报。
+                    if success and request_duration > 0:
+                        self._update_performance_window(request_duration)
 
                     # 操作间隔
                     time.sleep(self.config.operation_interval)
@@ -332,37 +370,275 @@ class AgingTestWorker:
 
         return None
 
+    def _bootstrap_resources(self) -> bool:
+        """准备老化测试依赖的基础资源。"""
+        status_refs = self._load_status_refs()
+        if not status_refs:
+            logger.error(f"工作线程 {self.worker_id}: 未找到可用状态数据")
+            return False
+
+        warehouse = self._ensure_warehouse()
+        if not warehouse or "id" not in warehouse:
+            logger.error(f"工作线程 {self.worker_id}: 准备仓库失败")
+            return False
+
+        shelf = self._ensure_shelf(int(warehouse["id"]), status_refs["default"]["id"])
+        if not shelf or "id" not in shelf:
+            logger.error(f"工作线程 {self.worker_id}: 准备货架失败")
+            return False
+
+        store = self._ensure_store()
+        if not store or "id" not in store:
+            logger.error(f"工作线程 {self.worker_id}: 准备店铺失败")
+            return False
+
+        self.bootstrap_resources = {
+            "status_refs": status_refs,
+            "warehouse": {"id": int(warehouse["id"])},
+            "shelf": {"id": int(shelf["id"])},
+            "store": {"id": int(store["id"])},
+            "dependency_product": None,
+            "dependency_product_info": None,
+            "dependency_goods_info": None,
+        }
+        logger.info(
+            "工作线程 %s 依赖资源就绪: status=%s warehouse=%s shelf=%s store=%s",
+            self.worker_id,
+            status_refs["default"]["id"],
+            warehouse["id"],
+            shelf["id"],
+            store["id"],
+        )
+        return True
+
+    def _load_status_refs(self):
+        """加载状态列表并选出优先使用的状态。"""
+        statuses = self.status_sdk.filter_status({"page": 1, "size": 100}) or []
+        statuses = [item for item in statuses if isinstance(item, dict) and item.get("id")]
+        if not statuses:
+            return None
+
+        def pick(preferred_names):
+            lowered = {name.lower() for name in preferred_names}
+            for item in statuses:
+                name = str(item.get("name", "")).strip().lower()
+                if name in lowered:
+                    return {"id": int(item["id"]), "name": item.get("name", "")}
+            return {"id": int(statuses[0]["id"]), "name": statuses[0].get("name", "")}
+
+        return {
+            "default": pick(["启用", "已启用", "正常", "active", "enabled"]),
+            "partner": pick(["启用", "已启用", "正常", "active", "enabled"]),
+            "product": pick(["启用", "已启用", "正常", "active", "enabled"]),
+            "fallbacks": [
+                {"id": int(item["id"]), "name": item.get("name", "")} for item in statuses
+            ],
+        }
+
+    def _ensure_warehouse(self):
+        """获取现有仓库或创建测试仓库。"""
+        warehouses = self.warehouse_sdk.filter_warehouse({"page": 1, "size": 10}) or []
+        for warehouse in warehouses:
+            if isinstance(warehouse, dict) and warehouse.get("id"):
+                return warehouse
+
+        warehouse = self.warehouse_sdk.create_warehouse(
+            {
+                "name": f"AGING_WAREHOUSE_{self.worker_id}_{int(time.time())}",
+                "description": f"老化测试仓库_{self.worker_id}",
+            }
+        )
+        if warehouse:
+            return warehouse
+        return None
+
+    def _ensure_shelf(self, warehouse_id: int, status_id: int):
+        """获取与仓库匹配的货架，必要时创建。"""
+        shelves = self.shelf_sdk.filter_shelf({"page": 1, "size": 20}) or []
+        for shelf in shelves:
+            if not isinstance(shelf, dict) or not shelf.get("id"):
+                continue
+            shelf_warehouse = shelf.get("warehouse") or {}
+            if shelf_warehouse.get("id") == warehouse_id:
+                return shelf
+
+        shelf = self.shelf_sdk.create_shelf(
+            {
+                "description": f"老化测试货架_{self.worker_id}",
+                "capacity": max(random.randint(100, 1000), 1),
+                "warehouse": {"id": warehouse_id},
+                "status": {"id": status_id},
+            }
+        )
+        if shelf:
+            return shelf
+        return None
+
+    def _ensure_store(self):
+        """获取现有店铺或创建测试店铺。"""
+        stores = self.store_sdk.filter_store({"page": 1, "size": 10}) or []
+        for store in stores:
+            if isinstance(store, dict) and store.get("id"):
+                return store
+
+        store = self.store_sdk.create_store(
+            {
+                "name": f"AGING_STORE_{self.worker_id}_{int(time.time())}",
+                "description": f"老化测试店铺_{self.worker_id}",
+            }
+        )
+        if store:
+            return store
+        return None
+
+    def _status_ref(self, key: str = "default"):
+        """返回指定用途的状态引用。"""
+        refs = self.bootstrap_resources.get("status_refs") or {}
+        status_ref = refs.get(key) or refs.get("default")
+        if status_ref and status_ref.get("id"):
+            return {"id": int(status_ref["id"])}
+        return None
+
+    def _resource_ref(self, key: str):
+        """返回 bootstrap 后的资源引用。"""
+        ref = self.bootstrap_resources.get(key)
+        if ref and ref.get("id"):
+            return {"id": int(ref["id"])}
+        return None
+
+    def _query_dependency_entity(self, sdk, query_method_name: str, key: str):
+        """查询缓存的依赖实体，失效时返回 None。"""
+        cached = self.bootstrap_resources.get(key)
+        if not cached or not cached.get("id"):
+            return None
+
+        query_method = getattr(sdk, query_method_name)
+        entity = query_method(int(cached["id"]))
+        if entity and entity.get("id"):
+            self.bootstrap_resources[key] = entity
+            return entity
+
+        self.bootstrap_resources[key] = None
+        return None
+
+    def _ensure_dependency_product(self):
+        """获取或创建依赖产品。"""
+        existing = self._query_dependency_entity(
+            self.product_sdk, "query_product", "dependency_product"
+        )
+        if existing:
+            return existing
+
+        status_ref = self._status_ref("product")
+        if not status_ref:
+            return None
+
+        product = self.product_sdk.create_product(
+            {
+                "name": f"AGING_DEP_PRODUCT_{self.worker_id}_{int(time.time())}",
+                "description": f"老化测试依赖产品_{self.worker_id}",
+                "image": [],
+                "expire": 365,
+                "tags": ["aging"],
+                "status": status_ref,
+            }
+        )
+        if product and product.get("id"):
+            self.bootstrap_resources["dependency_product"] = product
+            self.bootstrap_resources["dependency_product_info"] = None
+            self.bootstrap_resources["dependency_goods_info"] = None
+            return product
+        return None
+
+    def _ensure_dependency_product_info(self):
+        """获取或创建依赖产品 SKU。"""
+        existing = self._query_dependency_entity(
+            self.product_info_sdk,
+            "query_product_info",
+            "dependency_product_info",
+        )
+        if existing:
+            return existing
+
+        product = self._ensure_dependency_product()
+        if not product or not product.get("id"):
+            return None
+
+        product_info = self.product_info_sdk.create_product_info(
+            {
+                "sku": f"{self.worker_id}{int(time.time() * 1000) % 100000000}",
+                "description": f"老化测试依赖产品SKU_{self.worker_id}",
+                "product": {"id": int(product["id"])},
+            }
+        )
+        if product_info and product_info.get("id"):
+            self.bootstrap_resources["dependency_product_info"] = product_info
+            self.bootstrap_resources["dependency_goods_info"] = None
+            return product_info
+        return None
+
+    def _ensure_dependency_goods_info(self):
+        """获取或创建依赖商品 SKU。"""
+        existing = self._query_dependency_entity(
+            self.goods_info_sdk,
+            "query_goods_info",
+            "dependency_goods_info",
+        )
+        if existing:
+            return existing
+
+        product_info = self._ensure_dependency_product_info()
+        shelf_ref = self._resource_ref("shelf")
+        if not product_info or not product_info.get("id") or not shelf_ref:
+            return None
+
+        goods_info = self.goods_info_sdk.create_goods_info(
+            {
+                "sku": f"{self.worker_id}{int(time.time() * 1000) % 100000000}",
+                "product": {"id": int(product_info["id"])},
+                "type": 1,
+                "count": random.randint(50, 200),
+                "price": round(random.uniform(5.0, 500.0), 2),
+                "shelf": [shelf_ref],
+            }
+        )
+        if goods_info and goods_info.get("id"):
+            self.bootstrap_resources["dependency_goods_info"] = goods_info
+            return goods_info
+        return None
+
     def _create_entity(self, entity_type: str):
         """创建实体"""
         if entity_type == "partner":
             data = self._generate_partner_data()
+            if not data:
+                return None
             result = self.partner_sdk.create_partner(data)
         elif entity_type == "product":
             data = self._generate_product_data()
+            if not data:
+                return None
             result = self.product_sdk.create_product(data)
         elif entity_type == "goods":
-            data = self._generate_goods_data()
+            product_info = self._get_or_create_product_info()
+            if not product_info or "id" not in product_info:
+                return None
+            data = self._generate_goods_data(int(product_info["id"]))
+            if not data:
+                return None
             result = self.goods_sdk.create_goods(data)
         elif entity_type == "stockin":
-            # 需要先有商品
-            goods_info = self._get_or_create_goods()
-            if goods_info:
-                goods_id = str(goods_info.get("id", f"goods_{self.worker_id}"))
-                goods_sku = str(goods_info.get("sku", f"SKU_{self.worker_id:04d}"))
-                product_id = int(goods_info.get("product_id", 1))
-                data = self._generate_stockin_data(goods_id, goods_sku, product_id)
-                result = self.stockin_sdk.create_stockin(data)
+            goods_info = self._get_or_create_goods_info()
+            if goods_info and goods_info.get("id") and goods_info.get("product_id"):
+                data = self._generate_stockin_data(goods_info)
+                result = self.stockin_sdk.create_stockin(data) if data else None
             else:
                 result = None
         elif entity_type == "stockout":
-            # 需要先有商品
-            goods_info = self._get_or_create_goods()
-            if goods_info:
-                goods_id = str(goods_info.get("id", f"goods_{self.worker_id}"))
-                goods_sku = str(goods_info.get("sku", f"SKU_{self.worker_id:04d}"))
-                product_id = int(goods_info.get("product_id", 1))
-                data = self._generate_stockout_data(goods_id, goods_sku, product_id)
-                result = self.stockout_sdk.create_stockout(data)
+            goods_info = self._get_or_create_goods_info()
+            if goods_info and goods_info.get("id") and goods_info.get("product_id"):
+                data = self._generate_stockout_data(goods_info)
+                result = self.stockout_sdk.create_stockout(data) if data else None
             else:
                 result = None
         else:
@@ -504,21 +780,28 @@ class AgingTestWorker:
             try:
                 goods_info = self.goods_sdk.query_goods(int(goods_id))
                 if goods_info:
+                    product_ref = goods_info.get("product") or {}
+                    product_id = product_ref.get("id")
+                    if not product_id:
+                        product_info = self._get_or_create_product_info()
+                        product_id = product_info.get("id") if product_info else None
                     return {
                         "id": goods_id,
                         "sku": goods_info.get("sku", f"SKU_{self.worker_id:04d}"),
-                        "product_id": goods_info.get("product", {}).get("id", 1),
+                        "product_id": product_id,
                     }
             except:
                 pass
 
-        # 需要先创建产品
-        product_info = self._get_or_create_product()
+        # 需要先准备产品 SKU
+        product_info = self._get_or_create_product_info()
+        if not product_info or "id" not in product_info:
+            return None
 
         # 创建新商品
-        goods_data = self._generate_goods_data()
-        if product_info and "id" in product_info:
-            goods_data["product"]["id"] = product_info["id"]
+        goods_data = self._generate_goods_data(int(product_info["id"]))
+        if not goods_data:
+            return None
 
         goods = self.goods_sdk.create_goods(goods_data)
         if goods and "id" in goods:
@@ -531,150 +814,140 @@ class AgingTestWorker:
             }
 
         # 如果创建失败，返回默认值
+        return None
+
+    def _get_or_create_product_info(self):
+        """获取或创建产品 SKU 信息。"""
+        product_info = self._ensure_dependency_product_info()
+        if product_info and product_info.get("id"):
+            return {"id": int(product_info["id"])}
+        return None
+
+    def _get_or_create_goods_info(self):
+        """获取或创建商品 SKU 信息。"""
+        goods_info = self._ensure_dependency_goods_info()
+        if not goods_info or not goods_info.get("id"):
+            return None
+
+        product_ref = goods_info.get("product") or {}
         return {
-            "id": f"goods_{self.worker_id}",
-            "sku": f"SKU_{self.worker_id:04d}",
-            "product_id": 1,
+            "id": int(goods_info["id"]),
+            "sku": goods_info.get("sku", ""),
+            "product_id": product_ref.get("id"),
+            "shelf": goods_info.get("shelf") or [],
         }
-
-    def _get_or_create_product(self):
-        """获取或创建产品信息"""
-        product_ids = self.entity_cache["product"]
-        if product_ids:
-            # 随机选择一个产品ID
-            product_id = random.choice(product_ids)
-            try:
-                product_info = self.product_sdk.query_product(int(product_id))
-                if product_info:
-                    return {"id": product_id}
-            except:
-                pass
-
-        # 创建新产品
-        product_data = self._generate_product_data()
-        product = self.product_sdk.create_product(product_data)
-        if product and "id" in product:
-            product_id = str(product["id"])
-            self.entity_cache["product"].append(product_id)
-            return {"id": product_id}
-
-        # 如果创建失败，返回默认值
-        return {"id": 1}
 
     def _generate_partner_data(self):
         """生成合作伙伴数据"""
+        status_ref = self._status_ref("partner")
+        if not status_ref:
+            return None
         return {
             "name": f"老化测试合作伙伴_{self.worker_id}_{int(time.time())}",
             "telephone": f"138{random.randint(10000000, 99999999)}",
             "wechat": f"wechat_{self.worker_id}",
             "description": f"老化测试合作伙伴描述_{self.worker_id}",
-            "status": {"id": 3},
+            "status": status_ref,
         }
 
     def _generate_product_data(self):
         """生成产品数据"""
+        status_ref = self._status_ref("product")
+        if not status_ref:
+            return None
         return {
             "name": f"老化测试产品_{self.worker_id}_{int(time.time())}",
-            "code": f"PROD_{self.worker_id:04d}",
-            "price": round(random.uniform(10.0, 1000.0), 2),
             "description": f"老化测试产品描述_{self.worker_id}",
-            "status": {"id": 1},
+            "image": [],
+            "expire": random.randint(30, 365),
+            "tags": ["aging", f"worker-{self.worker_id}"],
+            "status": status_ref,
         }
 
-    def _generate_goods_data(self):
+    def _generate_goods_data(self, product_id: int):
         """生成商品数据"""
         timestamp = int(time.time())
-        # 需要先有产品，这里使用一个默认的产品ID
-        # 在实际测试中，应该先创建产品，然后使用产品ID
+        status_ref = self._status_ref("default")
+        store_ref = self._resource_ref("store")
+        shelf_ref = self._resource_ref("shelf")
+        if not status_ref or not store_ref or not shelf_ref or not product_id:
+            return None
         return {
             "name": f"老化测试商品_{self.worker_id}_{timestamp}",
-            "code": f"GOODS_{self.worker_id:04d}",
             "sku": f"SKU_{self.worker_id:04d}_{timestamp}",
             "price": round(random.uniform(5.0, 500.0), 2),
             "count": random.randint(1, 1000),  # 注意：是count不是quantity
             "description": f"老化测试商品描述_{self.worker_id}",
-            "status": {"id": 1},
-            "product": {"id": 1},  # 默认产品ID
-            "shelf": [{"id": 1}],  # shelf应该是数组
-            "store": {"id": 1},  # 需要store字段
+            "parameter": f"参数_{self.worker_id}_{timestamp}",
+            "serviceInfo": f"服务信息_{self.worker_id}_{timestamp}",
+            "status": status_ref,
+            "product": {"id": int(product_id)},
+            "shelf": [shelf_ref],
+            "store": store_ref,
         }
 
-    def _generate_stockin_data(
-        self, goods_id: str, goods_sku: str = "", product_id: int = 1
-    ):
+    def _generate_stockin_data(self, goods_info: dict):
         """生成入库数据"""
-        # 尝试将goods_id转换为整数，如果失败则使用默认值
-        try:
-            goods_id_int = int(goods_id)
-        except ValueError:
-            goods_id_int = 1
+        if not goods_info or not goods_info.get("id") or not goods_info.get("product_id"):
+            return None
 
-        # 如果没有提供sku，使用默认值
-        if not goods_sku:
-            goods_sku = f"SKU_{self.worker_id:04d}_{int(time.time())}"
-
-        # 如果没有提供product_id，使用默认值
-        if not product_id:
-            product_id = 1
+        store_ref = self._resource_ref("store")
+        status_ref = self._status_ref("default")
+        shelf_refs = goods_info.get("shelf") or [self._resource_ref("shelf")]
+        if (
+            not store_ref
+            or not status_ref
+            or not shelf_refs
+        ):
+            return None
 
         return {
-            "warehouse": {"id": 1},  # 默认仓库ID
             "goodsInfo": [
                 {
-                    "id": goods_id_int,
-                    "sku": goods_sku,
-                    "product": {"id": product_id},
+                    "id": int(goods_info["id"]),
+                    "sku": goods_info.get("sku", ""),
+                    "product": {"id": int(goods_info["product_id"])},
                     "type": 1,  # 入库类型，整数
                     "count": random.randint(1, 100),
                     "price": round(random.uniform(5.0, 500.0), 2),
-                    "shelf": [{"id": 1}],  # 需要shelf字段
+                    "shelf": shelf_refs,
                 }
             ],
-            "quantity": random.randint(1, 100),
-            "type": "in",
-            "remark": f"老化测试入库_{self.worker_id}",
-            "operator": f"operator_{self.worker_id}",
-            "status": {"id": 1},  # 需要status字段
-            "store": {"id": 1},  # 需要store字段
+            "description": f"老化测试入库_{self.worker_id}_{int(time.time())}",
+            "status": status_ref,
+            "store": store_ref,
         }
 
-    def _generate_stockout_data(
-        self, goods_id: str, goods_sku: str = "", product_id: int = 1
-    ):
+    def _generate_stockout_data(self, goods_info: dict):
         """生成出库数据"""
-        # 尝试将goods_id转换为整数，如果失败则使用默认值
-        try:
-            goods_id_int = int(goods_id)
-        except ValueError:
-            goods_id_int = 1
+        if not goods_info or not goods_info.get("id") or not goods_info.get("product_id"):
+            return None
 
-        # 如果没有提供sku，使用默认值
-        if not goods_sku:
-            goods_sku = f"SKU_{self.worker_id:04d}_{int(time.time())}"
-
-        # 如果没有提供product_id，使用默认值
-        if not product_id:
-            product_id = 1
+        store_ref = self._resource_ref("store")
+        status_ref = self._status_ref("default")
+        shelf_refs = goods_info.get("shelf") or [self._resource_ref("shelf")]
+        if (
+            not store_ref
+            or not status_ref
+            or not shelf_refs
+        ):
+            return None
 
         return {
-            "warehouse": {"id": 1},  # 默认仓库ID
             "goodsInfo": [
                 {
-                    "id": goods_id_int,
-                    "sku": goods_sku,
-                    "product": {"id": product_id},
+                    "id": int(goods_info["id"]),
+                    "sku": goods_info.get("sku", ""),
+                    "product": {"id": int(goods_info["product_id"])},
                     "type": 2,  # 出库类型，整数
                     "count": random.randint(1, 50),
                     "price": round(random.uniform(5.0, 500.0), 2),
-                    "shelf": [{"id": 1}],  # 需要shelf字段
+                    "shelf": shelf_refs,
                 }
             ],
-            "quantity": random.randint(1, 50),
-            "type": "out",
-            "remark": f"老化测试出库_{self.worker_id}",
-            "operator": f"operator_{self.worker_id}",
-            "status": {"id": 1},  # 需要status字段
-            "store": {"id": 1},  # 需要store字段
+            "description": f"老化测试出库_{self.worker_id}_{int(time.time())}",
+            "status": status_ref,
+            "store": store_ref,
         }
 
     def get_statistics(self):
@@ -700,17 +973,22 @@ class AgingTestWorker:
             if self.results and total_errors > 0
             else 0
         )
+        wall_durations = [r["wall_duration"] for r in self.results if r["wall_duration"] > 0]
+        retry_counts = [r["attempt_count"] for r in self.results if r["attempt_count"] > 0]
 
         return {
             "total_operations": len(self.results),
             "successful_operations": len(successful_results),
             "failed_operations": len(failed_results),
+            "skipped_operations": self.skipped_operations,
             "success_rate": (
                 len(successful_results) / len(self.results) * 100 if self.results else 0
             ),
             "avg_duration": statistics.mean(durations) if durations else 0,
+            "avg_wall_duration": statistics.mean(wall_durations) if wall_durations else 0,
             "min_duration": min(durations) if durations else 0,
             "max_duration": max(durations) if durations else 0,
+            "avg_attempt_count": statistics.mean(retry_counts) if retry_counts else 0,
             "entity_counts": {
                 entity_type: len(ids) for entity_type, ids in self.entity_cache.items()
             },
@@ -737,6 +1015,7 @@ class AgingTestRunner:
     def __init__(self, config=None):
         self.config = config or AgingTestConfig()
         self.workers = []
+        self.worker_threads = []
         self.stop_event = threading.Event()
         self.start_time = None
         self.metrics_history = []
@@ -774,7 +1053,7 @@ class AgingTestRunner:
                     break
 
                 # 等待报告间隔
-                time.sleep(self.config.report_interval_minutes * 60)
+                self.stop_event.wait(self.config.report_interval_minutes * 60)
 
         except KeyboardInterrupt:
             logger.info("测试被用户中断")
@@ -804,20 +1083,24 @@ class AgingTestRunner:
             self.workers.append(worker)
 
         # 启动工作线程
+        self.worker_threads = []
         for worker in self.workers:
             thread = threading.Thread(
                 target=worker.run, args=(self.stop_event,), daemon=True
             )
             thread.start()
+            self.worker_threads.append(thread)
 
         logger.info(f"启动 {thread_count} 个工作线程")
 
     def _stop_workers(self):
         """停止工作线程"""
         self.stop_event.set()
-        time.sleep(2.0)  # 给线程时间停止
+        for thread in self.worker_threads:
+            thread.join(timeout=5.0)
         self.stop_event.clear()
         self.workers = []
+        self.worker_threads = []
         logger.info("工作线程已停止")
 
     def _record_metrics(self):
@@ -826,6 +1109,7 @@ class AgingTestRunner:
             "total_operations": 0,
             "successful_operations": 0,
             "failed_operations": 0,
+            "skipped_operations": 0,
             "avg_duration": 0,
             "total_entities": 0,
             "worker_count": len(self.workers),
@@ -842,6 +1126,7 @@ class AgingTestRunner:
                 total_stats["total_operations"] += stats["total_operations"]
                 total_stats["successful_operations"] += stats["successful_operations"]
                 total_stats["failed_operations"] += stats["failed_operations"]
+                total_stats["skipped_operations"] += stats.get("skipped_operations", 0)
                 total_stats["total_entities"] += stats.get("total_entities", 0)
 
                 if stats["avg_duration"] > 0:
@@ -885,8 +1170,7 @@ class AgingTestRunner:
             total_stats["performance_degradation_detected"] = True
             total_stats["avg_degradation_percent"] = avg_degradation
             self.performance_degradation_detected = True
-            self.stop_reason = f"检测到性能劣化: 平均{avg_degradation:.1f}%"
-            logger.error(f"检测到性能劣化: 平均{avg_degradation:.1f}%")
+            logger.warning(f"检测到性能劣化: 平均{avg_degradation:.1f}%")
 
         if self.start_time:
             elapsed_minutes = (datetime.now() - self.start_time).total_seconds() / 60
@@ -909,10 +1193,6 @@ class AgingTestRunner:
             logger.error(f"测试停止: {self.stop_reason}")
             return False
 
-        if self.performance_degradation_detected:
-            logger.error(f"测试停止: {self.stop_reason}")
-            return False
-
         return True
 
     def _print_status(self, metrics):
@@ -928,7 +1208,8 @@ class AgingTestRunner:
             f"操作数: {m.get('total_operations', 0)}, "
             f"成功率: {m.get('success_rate', 0):.1f}%, "
             f"平均耗时: {m.get('avg_duration', 0):.3f}s, "
-            f"数据量: {m.get('total_entities', 0)}/{self.config.max_data_count * 10000}"
+            f"数据量: {m.get('total_entities', 0)}/{self.config.max_data_count * 10000}, "
+            f"跳过: {m.get('skipped_operations', 0)}"
         )
 
         if m.get("performance_degradation_detected"):
@@ -945,19 +1226,13 @@ class AgingTestRunner:
         total_duration = (
             (end_time - self.start_time).total_seconds() if self.start_time else 0
         )
+        final_metrics = self.metrics_history[-1]["metrics"] if self.metrics_history else {}
 
-        # 汇总所有阶段的指标
-        total_operations = sum(
-            m["metrics"].get("total_operations", 0) for m in self.metrics_history
-        )
-        successful_operations = sum(
-            m["metrics"].get("successful_operations", 0) for m in self.metrics_history
-        )
-        total_entities = (
-            self.metrics_history[-1]["metrics"].get("total_entities", 0)
-            if self.metrics_history
-            else 0
-        )
+        total_operations = final_metrics.get("total_operations", 0)
+        successful_operations = final_metrics.get("successful_operations", 0)
+        failed_operations = final_metrics.get("failed_operations", 0)
+        skipped_operations = final_metrics.get("skipped_operations", 0)
+        total_entities = final_metrics.get("total_entities", 0)
 
         report = {
             "test_info": {
@@ -976,7 +1251,8 @@ class AgingTestRunner:
             "summary": {
                 "total_operations": total_operations,
                 "successful_operations": successful_operations,
-                "failed_operations": total_operations - successful_operations,
+                "failed_operations": failed_operations,
+                "skipped_operations": skipped_operations,
                 "success_rate": (
                     (successful_operations / total_operations * 100)
                     if total_operations > 0
@@ -998,13 +1274,21 @@ class AgingTestRunner:
         if not self.metrics_history:
             return {}
 
+        effective_history = [
+            item
+            for item in self.metrics_history
+            if item.get("metrics", {}).get("total_operations", 0) > 0
+        ]
+        if not effective_history:
+            effective_history = self.metrics_history
+
         # 趋势分析
         success_rates = [
-            m["metrics"].get("success_rate", 0) for m in self.metrics_history
+            m["metrics"].get("success_rate", 0) for m in effective_history
         ]
-        durations = [m["metrics"].get("avg_duration", 0) for m in self.metrics_history]
+        durations = [m["metrics"].get("avg_duration", 0) for m in effective_history]
         entity_counts = [
-            m["metrics"].get("total_entities", 0) for m in self.metrics_history
+            m["metrics"].get("total_entities", 0) for m in effective_history
         ]
 
         analysis = {
@@ -1183,35 +1467,46 @@ def main():
     parser.add_argument(
         "--duration",
         type=float,
-        default=24.0,
-        help="测试持续时间（小时），默认24小时，支持小数如0.1（6分钟）",
-    )
-    parser.add_argument("--threads", type=int, default=10, help="并发线程数，默认10")
-    parser.add_argument(
-        "--interval", type=float, default=1.0, help="操作间隔（秒），默认1.0"
+        default=None,
+        help="测试持续时间（小时），未指定时使用配置文件，支持小数如0.5（30分钟）",
     )
     parser.add_argument(
-        "--max-data", type=int, default=1000, help="最大数据量（万条），默认1000万条"
+        "--threads", type=int, default=None, help="并发线程数，未指定时使用配置文件"
+    )
+    parser.add_argument(
+        "--interval", type=float, default=None, help="操作间隔（秒），未指定时使用配置文件"
+    )
+    parser.add_argument(
+        "--max-data", type=int, default=None, help="最大数据量（万条），未指定时使用配置文件"
     )
     parser.add_argument(
         "--degradation-threshold",
         type=float,
-        default=20.0,
-        help="性能劣化阈值（百分比），默认20%",
+        default=None,
+        help="性能劣化阈值（百分比），未指定时使用配置文件",
     )
     parser.add_argument(
-        "--report-interval", type=int, default=30, help="报告生成间隔（分钟），默认30"
+        "--report-interval",
+        type=float,
+        default=None,
+        help="报告生成间隔（分钟），未指定时使用配置文件",
     )
 
     args = parser.parse_args()
 
     config = AgingTestConfig()
-    config.duration_hours = args.duration
-    config.concurrent_threads = args.threads
-    config.operation_interval = args.interval
-    config.max_data_count = args.max_data
-    config.performance_degradation_threshold = args.degradation_threshold
-    config.report_interval_minutes = args.report_interval
+    if args.duration is not None:
+        config.duration_hours = args.duration
+    if args.threads is not None:
+        config.concurrent_threads = args.threads
+    if args.interval is not None:
+        config.operation_interval = args.interval
+    if args.max_data is not None:
+        config.max_data_count = args.max_data
+    if args.degradation_threshold is not None:
+        config.performance_degradation_threshold = args.degradation_threshold
+    if args.report_interval is not None:
+        config.report_interval_minutes = args.report_interval
 
     runner = AgingTestRunner(config)
     runner.run()

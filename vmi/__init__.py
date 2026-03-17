@@ -4,13 +4,13 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 获取当前目录
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(PACKAGE_DIR)
 
-# 添加必要的路径
-sys.path.insert(0, os.path.join(parent_dir, "session"))  # session模块
-sys.path.insert(0, os.path.join(parent_dir, "cas/cas"))  # cas/cas模块
-sys.path.insert(0, os.path.join(parent_dir, "cas"))  # cas目录
-sys.path.insert(0, os.path.join(parent_dir, "mock"))  # mock目录
-sys.path.insert(0, current_dir)  # 当前目录（最后）
+for component in ("session", "cas", "mock"):
+    component_path = os.path.join(PROJECT_ROOT, component)
+    if component_path not in sys.path:
+        sys.path.insert(0, component_path)
+
+if PACKAGE_DIR not in sys.path:
+    sys.path.insert(0, PACKAGE_DIR)

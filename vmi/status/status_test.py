@@ -1,27 +1,5 @@
 """Status 测试用例
 
-import os
-import sys
-
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
 基于 VMI实体定义和使用说明.md:55-61 中的 status 实体定义编写。
 使用 StatusSDK 进行测试。
 
@@ -56,152 +34,44 @@ if mock_dir not in sys.path:
 最后更新：2026-01-28
 """
 
-import os
-import sys
+from test_bootstrap import ensure_test_paths
 
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
+ensure_test_paths(__file__)
 
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
-
-# 确保vmi目录在路径中（用于导入sdk模块）
-vmi_dir = os.path.join(project_root, "vmi")
-if vmi_dir not in sys.path:
-    sys.path.insert(0, vmi_dir)
-
-
-
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
-
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-
-
-from session import MagicSession
-from cas.cas import Cas
-from mock import common as mock
 import logging
-import unittest
-import warnings
-
 
 from sdk import StatusSDK
+from test_vmi_base import VMITestCase
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
-class StatusTestCase(unittest.TestCase):
+class StatusTestCase(VMITestCase):
     """Status 测试用例类"""
 
-    namespace = ""
+    @classmethod
+    def _init_sdk(cls):
+        cls.status_sdk = StatusSDK(cls.work_session)
 
     @classmethod
     def setUpClass(cls):
-        # 从config_helper获取配置
-
-        # 从config_helper获取配置
-        from config_helper import get_credentials, get_server_url
-
-        cls.server_url = get_server_url()
-        cls.credentials = get_credentials()
-
-        """测试类初始化"""
-        warnings.simplefilter("ignore", ResourceWarning)
-        cls.work_session = MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(
-            cls.credentials["username"], cls.credentials["password"]
-        ):
-            logger.error("CAS登录失败")
-            raise Exception("CAS登录失败")
-        cls.work_session.bind_token(cls.cas_session.get_session_token())
-        cls.status_sdk = StatusSDK(cls.work_session)
-
-        # 记录测试开始前的初始状态
-        cls._initial_status_count = cls._get_status_count()
-        logger.info(f"测试开始前状态数量: {cls._initial_status_count}")
+        super().setUpClass()
+        cls.record_initial_count(
+            "_initial_status_count", cls._get_status_count, entity_name="状态"
+        )
 
     @classmethod
     def _get_status_count(cls):
         """获取当前状态数量"""
-        try:
-            # 尝试使用count方法
-            count = cls.status_sdk.count_status({})
-            if count is not None:
-                return count
-        except Exception as e:
-            logger.warning(f"获取状态数量失败: {e}")
-
-        # 如果count方法不可用，尝试通过过滤空条件获取列表
-        try:
-            statuses = cls.status_sdk.filter_status({})
-            if statuses is not None:
-                return len(statuses)
-        except Exception as e:
-            logger.warning(f"通过过滤获取状态数量失败: {e}")
-
-        return 0
+        return cls.get_entity_count(
+            "status_sdk",
+            "count_status",
+            "filter_status",
+            entity_name="状态",
+            count_args=({},),
+            filter_args=({},),
+        )
 
     def test_query_status(self):
         """测试查询状态信息"""

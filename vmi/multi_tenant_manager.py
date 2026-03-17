@@ -496,9 +496,9 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    print("=" * 60)
-    print("多租户会话管理器测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("多租户会话管理器测试")
+    logger.info("=" * 60)
 
     # 创建测试配置
     test_tenant_configs = {
@@ -520,39 +520,39 @@ if __name__ == "__main__":
 
     try:
         # 创建多租户管理器
-        print("创建多租户管理器...")
+        logger.info("创建多租户管理器...")
         mt_manager = MultiTenantSessionManager(test_tenant_configs)
 
         # 获取租户列表
         tenant_ids = mt_manager.get_all_tenant_ids()
-        print(f"租户列表: {tenant_ids}")
+        logger.info("租户列表: %s", tenant_ids)
 
         # 获取启用的租户
         enabled_tenants = mt_manager.get_enabled_tenant_ids()
-        print(f"启用的租户: {enabled_tenants}")
+        logger.info("启用的租户: %s", enabled_tenants)
 
         # 测试SDK工厂
-        print("\n测试SDK工厂...")
+        logger.info("测试SDK工厂...")
         sdk_factory = SDKFactory(mt_manager)
 
         # 模拟获取SDK（实际需要导入真实的SDK类）
         class MockSDK:
             def __init__(self, session):
                 self.session = session
-                print(f"创建MockSDK，会话: {session}")
+                logger.info("创建MockSDK，会话: %s", session)
 
         # 尝试为租户获取SDK
         for tenant_id in enabled_tenants:
             sdk = sdk_factory.get_sdk_for_tenant(tenant_id, MockSDK)
             if sdk:
-                print(f"租户 '{tenant_id}' 的SDK创建成功")
+                logger.info("租户 '%s' 的SDK创建成功", tenant_id)
             else:
-                print(f"租户 '{tenant_id}' 的SDK创建失败")
+                logger.error("租户 '%s' 的SDK创建失败", tenant_id)
 
-        print("\n✅ 多租户会话管理器测试完成")
+        logger.info("多租户会话管理器测试完成")
 
     except Exception as e:
-        print(f"❌ 测试失败: {e}")
+        logger.exception("测试失败: %s", e)
         import traceback
 
         traceback.print_exc()

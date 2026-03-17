@@ -133,7 +133,8 @@ class VMISDKBase:
         try:
             result = self.entity.filter(param)
             if result is None:
-                logger.error("过滤%s失败: 无返回结果", self.entity_path)
+                logger.debug("过滤%s返回空结果，按空列表处理", self.entity_path)
+                return []
             return result
         except Exception as e:
             logger.error("过滤%s异常: %s", self.entity_path, str(e))

@@ -5,9 +5,11 @@
 """
 
 import json
+import logging
 import os
 
 _config_cache = None
+logger = logging.getLogger(__name__)
 
 
 def get_config():
@@ -45,7 +47,7 @@ def get_config():
                 _config_cache = file_config
                 return _config_cache
         except Exception as e:
-            print(f"警告: 读取配置文件失败，使用默认配置: {e}")
+            logger.warning("读取配置文件失败，使用默认配置: %s", e)
 
     _config_cache = default_config
     return _config_cache
@@ -158,14 +160,15 @@ def update_config(server_url=None, username=None, password=None, namespace=None)
         _config_cache = None
         return True
     except Exception as e:
-        print(f"错误: 保存配置文件失败: {e}")
+        logger.error("保存配置文件失败: %s", e)
         return False
 
 
 # 测试代码
 if __name__ == "__main__":
-    print("当前配置:")
-    print(f"  服务器地址: {get_server_url()}")
-    print(f"  用户名: {get_username()}")
-    print(f"  密码: {get_password()}")
-    print(f"  命名空间: {get_namespace()}")
+    logging.basicConfig(level=logging.INFO)
+    logger.info("当前配置:")
+    logger.info("  服务器地址: %s", get_server_url())
+    logger.info("  用户名: %s", get_username())
+    logger.info("  密码: %s", get_password())
+    logger.info("  命名空间: %s", get_namespace())

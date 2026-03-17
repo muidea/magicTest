@@ -2,11 +2,12 @@
 
 import logging
 
-from cas import cas
+from cas.cas import Cas
 from mock import common as mock
-from session import session
+from session import MagicSession
 
-from sdk import RewardPolicySDK
+from sdk import RewardPolicySDK, StatusSDK
+from test_dependency_helper import resolve_status_id
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -22,7 +23,6 @@ def mock_reward_policy_param():
         "name": "积分策略" + mock.name(),
         "description": mock.sentence(),
         "policy": '{"rule": "每消费10元获得1积分"}',
-        "status": {"id": 3},  # 假设状态ID为3
     }
 
 
@@ -36,7 +36,7 @@ def main(server_url: str, namespace: str) -> bool:
     Returns:
         成功返回True，失败返回False
     """
-    work_session = session.MagicSession("{0}".format(server_url), namespace)
+    work_session = MagicSession("{0}".format(server_url), namespace)
     cas_session = Cas(work_session)
     if not cas_session.login("administrator", "administrator"):
         logger.error("CAS登录失败")
@@ -46,7 +46,14 @@ def main(server_url: str, namespace: str) -> bool:
 
     # 使用 RewardPolicySDK
     reward_policy_sdk = RewardPolicySDK(work_session)
+    status_sdk = StatusSDK(work_session)
+    status_id = resolve_status_id(status_sdk)
+    if not status_id:
+        logger.error("无法获取可用状态ID")
+        return False
+
     reward_policy_param = mock_reward_policy_param()
+    reward_policy_param["status"] = {"id": status_id}
 
     # 创建积分策略
     new_reward_policy = reward_policy_sdk.create_reward_policy(reward_policy_param)

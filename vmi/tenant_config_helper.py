@@ -248,34 +248,34 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    print("=" * 60)
-    print("多租户配置助手测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("多租户配置助手测试")
+    logger.info("=" * 60)
 
     # 测试获取配置
     config = get_multi_tenant_config()
-    print(f"多租户启用状态: {config['enabled']}")
-    print(f"默认租户: {config['default_tenant']}")
-    print(f"可用租户数量: {len(config['tenants'])}")
+    logger.info("多租户启用状态: %s", config["enabled"])
+    logger.info("默认租户: %s", config["default_tenant"])
+    logger.info("可用租户数量: %s", len(config["tenants"]))
 
     # 测试获取租户ID列表
     tenant_ids = get_all_tenant_ids()
-    print(f"启用的租户ID: {tenant_ids}")
+    logger.info("启用的租户ID: %s", tenant_ids)
 
     # 测试获取单个租户配置
     for tenant_id in tenant_ids:
         tenant_config = get_tenant_config(tenant_id)
         if tenant_config:
-            print(f"\n租户 '{tenant_id}' 配置:")
-            print(f"  服务器: {tenant_config['server_url']}")
-            print(f"  命名空间: {tenant_config['namespace']}")
-            print(f"  用户名: {tenant_config['username']}")
+            logger.info("租户 '%s' 配置:", tenant_id)
+            logger.info("  服务器: %s", tenant_config["server_url"])
+            logger.info("  命名空间: %s", tenant_config["namespace"])
+            logger.info("  用户名: %s", tenant_config["username"])
 
     # 显示配置模板
-    print("\n" + "=" * 60)
-    print("多租户配置模板:")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("多租户配置模板:")
+    logger.info("=" * 60)
     template = create_multi_tenant_config_template()
-    print(json.dumps(template, indent=2, ensure_ascii=False))
+    logger.info("%s", json.dumps(template, indent=2, ensure_ascii=False))
 
-    print("\n✅ 多租户配置助手测试完成")
+    logger.info("多租户配置助手测试完成")

@@ -2,6 +2,11 @@
 cas模块模拟 - 用于测试框架
 """
 
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 class Cas:
     def __init__(self, session):
@@ -10,7 +15,7 @@ class Cas:
 
     def login(self, username, password):
         """模拟登录"""
-        print(f"[Cas Mock] 模拟登录: {username}")
+        logger.info("[Cas Mock] 模拟登录: %s", username)
         self.token = f"mock_token_{username}"
         return True
 

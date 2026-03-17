@@ -1,26 +1,4 @@
 """
-import os
-import sys
-
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
 Order 测试用例
 
 基于 VMI实体定义和使用说明.md:125-141 中的 order 实体定义编写。
@@ -41,173 +19,68 @@ Order 测试用例
 12. test_order_status_validation
 """
 
-import os
-import sys
+from test_bootstrap import ensure_test_paths
 
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
+ensure_test_paths(__file__)
 
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
-
-# 确保vmi目录在路径中（用于导入sdk模块）
-vmi_dir = os.path.join(project_root, "vmi")
-if vmi_dir not in sys.path:
-    sys.path.insert(0, vmi_dir)
-
-
-
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
-
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-
-
-from session import MagicSession
-from cas.cas import Cas
-from mock import common as mock
 import logging
-import time
 import unittest
-import warnings
-
 
 from sdk import OrderSDK, PartnerSDK, StatusSDK, StoreSDK
+from test_dependency_helper import (
+    prepare_partner_dependency,
+    prepare_store_dependency,
+    resolve_status_id,
+)
+from test_vmi_base import VMITestCase
 
 logger = logging.getLogger(__name__)
 
 
-class OrderTestCase(unittest.TestCase):
+class OrderTestCase(VMITestCase):
     namespace = ""
 
     @classmethod
     def setUpClass(cls):
-        # 从config_helper获取配置
+        super().setUpClass()
+        cls.status_id = resolve_status_id(cls.status_sdk)
+        if not cls.status_id:
+            raise Exception("无法获取可用状态ID")
+        cls.log_suite_start("Order 测试开始")
 
-        # 从config_helper获取配置
-        from config_helper import get_credentials, get_server_url
-
-        cls.server_url = get_server_url()
-        cls.credentials = get_credentials()
-
-        warnings.simplefilter("ignore", ResourceWarning)
-        cls.work_session = MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(
-            cls.credentials["username"], cls.credentials["password"]
-        ):
-            logger.error("CAS登录失败")
-            raise Exception("CAS登录失败")
-        cls.work_session.bind_token(cls.cas_session.get_session_token())
+    @classmethod
+    def _init_sdk(cls):
         cls.order_sdk = OrderSDK(cls.work_session)
         cls.partner_sdk = PartnerSDK(cls.work_session)
         cls.store_sdk = StoreSDK(cls.work_session)
         cls.status_sdk = StatusSDK(cls.work_session)
-        cls.test_data = []
-        print("Order 测试开始...")
 
     def setUp(self):
-        # 创建测试合作伙伴
-        partner_param = {
-            "name": "测试订单客户",
-            "telephone": "13800138002",
-            "status": {"id": 19},
-        }
+        self.test_data = []
         try:
-            self.test_partner = self.partner_sdk.create_partner(partner_param)
-            if not self.test_partner:
-                partners = self.partner_sdk.filter_partner({"name": "测试订单客户"})
-                if partners and len(partners) > 0:
-                    self.test_partner = partners[0]
-                else:
-                    self.skipTest("无法创建或找到测试合作伙伴")
+            partner_deps = prepare_partner_dependency(
+                partner_sdk=self.partner_sdk,
+                status_sdk=self.status_sdk,
+                name_prefix="ORDER_CUSTOMER",
+            )
+            self.test_partner = partner_deps["partner"]
         except Exception as e:
             logger.warning(f"创建测试合作伙伴失败: {e}")
             self.skipTest(f"创建测试合作伙伴失败: {e}")
 
         # 创建测试店铺
-        store_param = {"name": "测试订单店铺", "description": "订单测试用店铺"}
         try:
-            self.test_store = self.store_sdk.create_store(store_param)
-            if not self.test_store:
-                stores = self.store_sdk.filter_store({"name": "测试订单店铺"})
-                if stores and len(stores) > 0:
-                    self.test_store = stores[0]
-                else:
-                    self.skipTest("无法创建或找到测试店铺")
+            store_deps = prepare_store_dependency(
+                store_sdk=self.store_sdk,
+                created_ids={"store": []},
+                class_cleanup_ids={"store": []},
+            )
+            self.test_store = {"id": store_deps["store_id"]}
         except Exception as e:
             logger.warning(f"创建测试店铺失败: {e}")
             self.skipTest(f"创建测试店铺失败: {e}")
 
-        # 获取状态
-        try:
-            statuses = self.status_sdk.filter_status({})
-            if statuses and len(statuses) > 0:
-                self.test_status = statuses[0]
-            else:
-                self.skipTest("无法获取状态信息")
-        except Exception as e:
-            logger.warning(f"获取状态信息失败: {e}")
-            self.skipTest(f"获取状态信息失败: {e}")
+        self.test_status = {"id": self.status_id}
 
     def tearDown(self):
         for data in self.test_data:
@@ -234,10 +107,11 @@ class OrderTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        print("Order 测试结束")
+        cls.log_suite_end("Order 测试结束")
+        super().tearDownClass()
 
     def test_create_order(self):
-        print("测试创建订单...")
+        self.log_test_step("测试创建订单")
         order_param = {
             "type": 1,
             "customer": {"id": self.test_partner["id"]},
@@ -266,10 +140,10 @@ class OrderTestCase(unittest.TestCase):
         for field in required_fields:
             self.assertIn(field, order, f"订单缺少必填字段: {field}")
         self.test_data.append(order)
-        print(f"✓ 订单创建成功: ID={order.get('id')}")
+        self.log_test_success(f"✓ 订单创建成功: ID={order.get('id')}")
 
     def test_query_order(self):
-        print("测试查询订单...")
+        self.log_test_step("测试查询订单")
         order_param = {
             "type": 1,
             "customer": {"id": self.test_partner["id"]},
@@ -286,10 +160,10 @@ class OrderTestCase(unittest.TestCase):
         self.assertIsNotNone(queried_order, "查询订单失败")
         self.assertEqual(queried_order["id"], created_order["id"], "ID不匹配")
         self.test_data.append(created_order)
-        print(f"✓ 订单查询成功: ID={queried_order.get('id')}")
+        self.log_test_success(f"✓ 订单查询成功: ID={queried_order.get('id')}")
 
     def test_update_order(self):
-        print("测试更新订单...")
+        self.log_test_step("测试更新订单")
         order_param = {
             "type": 1,
             "customer": {"id": self.test_partner["id"]},
@@ -306,13 +180,13 @@ class OrderTestCase(unittest.TestCase):
         updated_order = self.order_sdk.update_order(created_order["id"], update_param)
         if updated_order:
             self.assertEqual(updated_order["cost"], 250.0, "更新后金额不匹配")
-            print(f"✓ 订单更新成功: ID={updated_order.get('id')}")
+            self.log_test_success(f"✓ 订单更新成功: ID={updated_order.get('id')}")
         else:
-            print("⚠ 订单更新未返回结果")
+            self.log_test_observation("⚠ 订单更新未返回结果")
         self.test_data.append(created_order)
 
     def test_delete_order(self):
-        print("测试删除订单...")
+        self.log_test_step("测试删除订单")
         order_param = {
             "type": 1,
             "customer": {"id": self.test_partner["id"]},
@@ -330,12 +204,12 @@ class OrderTestCase(unittest.TestCase):
             self.assertEqual(
                 deleted_order["id"], created_order["id"], "删除的订单ID不匹配"
             )
-            print(f"✓ 订单删除成功: ID={deleted_order.get('id')}")
+            self.log_test_success(f"✓ 订单删除成功: ID={deleted_order.get('id')}")
         else:
-            print("⚠ 订单删除未返回结果")
+            self.log_test_observation("⚠ 订单删除未返回结果")
 
     def test_create_order_with_goods_items(self):
-        print("测试创建带商品项的订单...")
+        self.log_test_step("测试创建带商品项的订单")
         goods_items = [
             {"sku": "TEST001", "name": "测试商品1", "price": 50.0, "count": 2},
             {"sku": "TEST002", "name": "测试商品2", "price": 30.0, "count": 3},
@@ -352,10 +226,12 @@ class OrderTestCase(unittest.TestCase):
         self.assertIsNotNone(order, "创建带商品项的订单失败")
         self.assertIsInstance(order.get("goods"), list, "商品项应为列表")
         self.test_data.append(order)
-        print(f"✓ 带商品项的订单创建成功: 商品数量={len(order.get('goods', []))}")
+        self.log_test_success(
+            f"✓ 带商品项的订单创建成功: 商品数量={len(order.get('goods', []))}"
+        )
 
     def test_create_order_with_different_type(self):
-        print("测试创建不同类型订单...")
+        self.log_test_step("测试创建不同类型订单")
         order_types = [1, 2]
         for i, order_type in enumerate(order_types):
             order_param = {
@@ -377,10 +253,10 @@ class OrderTestCase(unittest.TestCase):
             self.assertIsNotNone(order, f"创建类型{order_type}订单失败")
             self.assertEqual(order["type"], order_type, f"订单类型不匹配: {order_type}")
             self.test_data.append(order)
-            print(f"✓ 类型{order_type}订单创建成功")
+            self.log_test_success(f"✓ 类型{order_type}订单创建成功")
 
     def test_create_order_without_customer(self):
-        print("测试创建无客户的订单...")
+        self.log_test_step("测试创建无客户的订单")
         order_param = {
             "type": 1,
             "goods": [
@@ -397,32 +273,32 @@ class OrderTestCase(unittest.TestCase):
         }
         order = self.order_sdk.create_order(order_param)
         if order is None:
-            print("✓ 系统正确拒绝创建无客户的订单")
+            self.log_test_success("✓ 系统正确拒绝创建无客户的订单")
         else:
             self.assertIn("customer", order, "订单应包含客户字段")
-            print(f"⚠ 系统允许创建无客户的订单: ID={order.get('id')}")
+            self.log_test_observation(f"⚠ 系统允许创建无客户的订单: ID={order.get('id')}")
             self.test_data.append(order)
 
     def test_query_nonexistent_order(self):
-        print("测试查询不存在的订单...")
+        self.log_test_step("测试查询不存在的订单")
         non_existent_id = 999999999
         order = self.order_sdk.query_order(non_existent_id)
         if order is None:
-            print("✓ 查询不存在的订单返回None，符合预期")
+            self.log_test_success("✓ 查询不存在的订单返回None，符合预期")
         else:
-            print(f"⚠ 查询不存在的订单返回: {order}")
+            self.log_test_observation(f"⚠ 查询不存在的订单返回: {order}")
 
     def test_delete_nonexistent_order(self):
-        print("测试删除不存在的订单...")
+        self.log_test_step("测试删除不存在的订单")
         non_existent_id = 999999999
         deleted_order = self.order_sdk.delete_order(non_existent_id)
         if deleted_order is None:
-            print("✓ 删除不存在的订单返回None，符合预期")
+            self.log_test_success("✓ 删除不存在的订单返回None，符合预期")
         else:
-            print(f"⚠ 删除不存在的订单返回: {deleted_order}")
+            self.log_test_observation(f"⚠ 删除不存在的订单返回: {deleted_order}")
 
     def test_auto_generated_fields(self):
-        print("测试系统自动生成字段...")
+        self.log_test_step("测试系统自动生成字段")
         order_param = {
             "type": 1,
             "customer": {"id": self.test_partner["id"]},
@@ -444,10 +320,10 @@ class OrderTestCase(unittest.TestCase):
         for field in auto_fields:
             self.assertIn(field, order, f"缺少自动生成字段: {field}")
         self.test_data.append(order)
-        print(f"✓ 系统自动生成字段验证成功: SN={order.get('sn')}")
+        self.log_test_success(f"✓ 系统自动生成字段验证成功: SN={order.get('sn')}")
 
     def test_modify_time_auto_update(self):
-        print("测试修改时间自动更新...")
+        self.log_test_step("测试修改时间自动更新")
         order_param = {
             "type": 1,
             "customer": {"id": self.test_partner["id"]},
@@ -500,8 +376,10 @@ class OrderTestCase(unittest.TestCase):
                     original_modify_time,
                     "modifyTime字段在更新后未自动刷新",
                 )
-                print(f"✓ 修改时间自动更新验证成功")
-                print(f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}")
+                self.log_test_success("✓ 修改时间自动更新验证成功")
+                self.log_test_success(
+                    f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}"
+                )
             else:
                 self.fail("更新操作未返回modifyTime字段")
         else:
@@ -510,7 +388,7 @@ class OrderTestCase(unittest.TestCase):
         self.test_data.append(created_order)
 
     def test_order_status_validation(self):
-        print("测试订单状态验证...")
+        self.log_test_step("测试订单状态验证")
         order_param = {
             "type": 1,
             "customer": {"id": self.test_partner["id"]},
@@ -530,7 +408,9 @@ class OrderTestCase(unittest.TestCase):
         self.assertIsNotNone(order, "创建订单失败")
         self.assertEqual(order["status"]["id"], self.test_status["id"], "状态ID不匹配")
         self.test_data.append(order)
-        print(f"✓ 订单状态验证成功: 状态ID={order.get('status', {}).get('id')}")
+        self.log_test_success(
+            f"✓ 订单状态验证成功: 状态ID={order.get('status', {}).get('id')}"
+        )
 
 
 if __name__ == "__main__":

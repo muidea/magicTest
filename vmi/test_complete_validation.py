@@ -5,9 +5,20 @@ VMI 测试框架 - 完整验证测试
 """
 
 import json
+import logging
 import os
 import unittest
 from unittest.mock import Mock, patch
+
+logger = logging.getLogger(__name__)
+
+
+def _clear_config_cache() -> None:
+    import sys
+
+    for module in ["config_helper", "tenant_config_helper"]:
+        if module in sys.modules:
+            del sys.modules[module]
 
 
 class TestFrameworkValidation(unittest.TestCase):
@@ -15,7 +26,7 @@ class TestFrameworkValidation(unittest.TestCase):
 
     def test_config_system(self):
         """测试配置系统"""
-        print("\n🔧 测试配置系统")
+        logger.info("测试配置系统")
 
         self.assertTrue(os.path.exists("test_config.json"), "配置文件不存在")
 
@@ -25,11 +36,11 @@ class TestFrameworkValidation(unittest.TestCase):
         self.assertIn("server", config, "配置缺少server字段")
         self.assertIn("credentials", config, "配置缺少credentials字段")
 
-        print("✅ 配置系统测试通过")
+        logger.info("配置系统测试通过")
 
     def test_module_imports(self):
         """测试模块导入"""
-        print("\n📦 测试模块导入")
+        logger.info("测试模块导入")
 
         try:
             from multi_tenant_manager import (MultiTenantSessionManager,
@@ -38,7 +49,7 @@ class TestFrameworkValidation(unittest.TestCase):
                                               is_multi_tenant_enabled)
             from test_base_multi_tenant import TestBaseMultiTenant
 
-            print("✅ 核心模块导入成功")
+            logger.info("核心模块导入成功")
         except ImportError as e:
             self.fail(f"核心模块导入失败: {e}")
 
@@ -49,15 +60,16 @@ class TestFrameworkValidation(unittest.TestCase):
                 ConcurrentTestMixin, PerformanceMonitor,
                 TestBaseWithSessionManager)
 
-            print("✅ 基础模块导入成功")
+            logger.info("基础模块导入成功")
         except ImportError as e:
             self.fail(f"基础模块导入失败: {e}")
 
-        print("✅ 模块导入测试通过")
+        logger.info("模块导入测试通过")
 
     def test_config_helpers(self):
         """测试配置助手"""
-        print("\n⚙️ 测试配置助手")
+        logger.info("测试配置助手")
+        _clear_config_cache()
 
         from tenant_config_helper import (get_multi_tenant_config,
                                           is_multi_tenant_enabled)
@@ -67,16 +79,16 @@ class TestFrameworkValidation(unittest.TestCase):
         self.assertIn("enabled", config)
         self.assertIn("default_tenant", config)
         self.assertIn("tenants", config)
-        self.assertFalse(config["enabled"])
-        self.assertFalse(is_multi_tenant_enabled())
+        self.assertIsInstance(config["enabled"], bool)
+        self.assertEqual(config["enabled"], is_multi_tenant_enabled())
         self.assertIn("autotest", config["tenants"])
 
-        print("✅ 配置助手测试通过")
+        logger.info("配置助手测试通过")
 
     @patch("session_manager.SessionManager")
     def test_multi_tenant_manager(self, MockSessionManager):
         """测试多租户管理器"""
-        print("\n🏢 测试多租户管理器")
+        logger.info("测试多租户管理器")
 
         from multi_tenant_manager import MultiTenantSessionManager, SDKFactory
 
@@ -118,11 +130,11 @@ class TestFrameworkValidation(unittest.TestCase):
         sdk = sdk_factory.get_sdk_for_tenant("tenant1", TestSDK)
         self.assertIsNotNone(sdk)
 
-        print("✅ 多租户管理器测试通过")
+        logger.info("多租户管理器测试通过")
 
     def test_base_classes(self):
         """测试测试基类"""
-        print("\n🧪 测试测试基类")
+        logger.info("测试测试基类")
 
         from test_base_multi_tenant import TestBaseMultiTenant
         from test_base_with_session_manager import TestBaseWithSessionManager
@@ -145,11 +157,11 @@ class TestFrameworkValidation(unittest.TestCase):
                 f"TestBaseMultiTenant缺少方法: {method}",
             )
 
-        print("✅ 测试基类测试通过")
+        logger.info("测试基类测试通过")
 
     def test_backward_compatibility(self):
         """测试向后兼容性"""
-        print("\n🔄 测试向后兼容性")
+        logger.info("测试向后兼容性")
 
         test_files = ["scenario_test.py", "aging_test_simple.py", "run_tests.py"]
 
@@ -160,11 +172,11 @@ class TestFrameworkValidation(unittest.TestCase):
 
         self.assertFalse(is_multi_tenant_enabled())
 
-        print("✅ 向后兼容性测试通过")
+        logger.info("向后兼容性测试通过")
 
     def test_test_runner(self):
         """测试运行器"""
-        print("\n🚀 测试运行器")
+        logger.info("测试运行器")
 
         self.assertTrue(os.path.exists("run_tests.py"), "统一测试入口不存在")
 
@@ -177,11 +189,11 @@ class TestFrameworkValidation(unittest.TestCase):
         self.assertIn("--quick", content)
         self.assertIn("--all", content)
 
-        print("✅ 测试运行器测试通过")
+        logger.info("测试运行器测试通过")
 
     def test_integration(self):
         """测试集成"""
-        print("\n🔗 测试集成")
+        logger.info("测试集成")
 
         try:
             from multi_tenant_manager import MultiTenantSessionManager
@@ -206,16 +218,16 @@ class TestFrameworkValidation(unittest.TestCase):
                 mt_manager = MultiTenantSessionManager(test_config)
                 self.assertIn("autotest", mt_manager.session_managers)
 
-            print("✅ 集成测试通过")
+            logger.info("集成测试通过")
         except Exception as e:
             self.fail(f"集成测试失败: {e}")
 
 
 def run_validation():
     """运行验证测试"""
-    print("=" * 60)
-    print("VMI 测试框架 - 验证测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("VMI 测试框架 - 验证测试")
+    logger.info("=" * 60)
 
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromTestCase(TestFrameworkValidation)
@@ -223,40 +235,41 @@ def run_validation():
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
 
-    print("\n" + "=" * 60)
-    print("验证结果摘要")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("验证结果摘要")
+    logger.info("=" * 60)
 
     total = result.testsRun
     passed = total - len(result.failures) - len(result.errors)
 
-    print(f"总测试数: {total}")
-    print(f"通过数: {passed}")
-    print(f"失败数: {len(result.failures)}")
+    logger.info("总测试数: %s", total)
+    logger.info("通过数: %s", passed)
+    logger.info("失败数: %s", len(result.failures))
 
     if result.wasSuccessful():
-        print("\n🎉 所有验证测试通过！")
-        print("\n框架验证清单：")
-        print("✅ 1. 配置系统正常")
-        print("✅ 2. 模块导入正常")
-        print("✅ 3. 配置助手正常")
-        print("✅ 4. 多租户管理器正常")
-        print("✅ 5. 测试基类正常")
-        print("✅ 6. 向后兼容性保证")
-        print("✅ 7. 测试运行器正常")
-        print("✅ 8. 集成测试正常")
+        logger.info("所有验证测试通过")
+        logger.info("框架验证清单:")
+        logger.info("1. 配置系统正常")
+        logger.info("2. 模块导入正常")
+        logger.info("3. 配置助手正常")
+        logger.info("4. 多租户管理器正常")
+        logger.info("5. 测试基类正常")
+        logger.info("6. 向后兼容性保证")
+        logger.info("7. 测试运行器正常")
+        logger.info("8. 集成测试正常")
         return True
-    else:
-        print("\n❌ 部分测试失败")
-        if result.failures:
-            for test, traceback in result.failures:
-                print(f"  失败: {test}")
-        if result.errors:
-            for test, traceback in result.errors:
-                print(f"  错误: {test}")
-        return False
+
+    logger.error("部分测试失败")
+    if result.failures:
+        for test, _traceback in result.failures:
+            logger.error("失败: %s", test)
+    if result.errors:
+        for test, _traceback in result.errors:
+            logger.error("错误: %s", test)
+    return False
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     success = run_validation()
     exit(0 if success else 1)

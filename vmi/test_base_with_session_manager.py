@@ -318,5 +318,6 @@ class TestBaseWithSessionManager(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    print("VMI 测试基类模块")
-    print("提供 TestBaseWithSessionManager, ConcurrentTestMixin, PerformanceMonitor")
+    logging.basicConfig(level=logging.INFO)
+    logger.info("VMI 测试基类模块")
+    logger.info("提供 TestBaseWithSessionManager, ConcurrentTestMixin, PerformanceMonitor")

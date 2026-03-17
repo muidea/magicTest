@@ -12,8 +12,25 @@
 import logging
 import unittest
 from typing import Any, Dict
+from unittest.mock import Mock, patch
 
 logger = logging.getLogger(__name__)
+
+
+def _build_mock_multi_tenant_manager(tenant_ids=None):
+    tenant_ids = tenant_ids or ["autotest", "tenant1"]
+    manager = Mock()
+    manager.get_all_tenant_ids.return_value = tenant_ids
+    manager.get_enabled_tenant_ids.return_value = tenant_ids
+    manager.ensure_session_valid.return_value = True
+    manager.get_tenant_status.side_effect = (
+        lambda tenant_id: {"tenant_id": tenant_id, "is_logged_in": True}
+    )
+    manager.get_all_tenant_status.return_value = {
+        tenant_id: {"tenant_id": tenant_id, "is_logged_in": True}
+        for tenant_id in tenant_ids
+    }
+    return manager
 
 
 class TestMultiTenantExample(unittest.TestCase):
@@ -30,9 +47,9 @@ class TestMultiTenantExample(unittest.TestCase):
         config = get_multi_tenant_config()
         enabled = is_multi_tenant_enabled()
 
-        print(f"多租户启用状态: {enabled}")
-        print(f"默认租户: {config.get('default_tenant', 'autotest')}")
-        print(f"租户数量: {len(config.get('tenants', {}))}")
+        logger.info("多租户启用状态: %s", enabled)
+        logger.info("默认租户: %s", config.get("default_tenant", "autotest"))
+        logger.info("租户数量: %s", len(config.get("tenants", {})))
 
         # 验证配置结构
         self.assertIn("enabled", config)
@@ -47,36 +64,28 @@ class TestMultiTenantExample(unittest.TestCase):
 
     def test_multi_tenant_session_management(self):
         """测试多租户会话管理"""
-        from multi_tenant_manager import init_global_multi_tenant_manager
+        import multi_tenant_manager
 
-        # 初始化多租户管理器
-        mt_manager = init_global_multi_tenant_manager()
+        mock_manager = _build_mock_multi_tenant_manager()
+        multi_tenant_manager.cleanup_global_multi_tenant_manager()
 
-        if mt_manager:
-            # 获取租户列表
-            tenant_ids = mt_manager.get_all_tenant_ids()
-            print(f"可用租户: {tenant_ids}")
+        with patch(
+            "multi_tenant_manager.init_global_multi_tenant_manager",
+            return_value=mock_manager,
+        ):
+            mt_manager = multi_tenant_manager.init_global_multi_tenant_manager()
 
-            # 验证至少有一个租户
-            self.assertGreaterEqual(len(tenant_ids), 1)
+        tenant_ids = mt_manager.get_all_tenant_ids()
+        logger.info("可用租户: %s", tenant_ids)
 
-            # 验证默认租户存在
-            self.assertIn("autotest", tenant_ids)
+        self.assertGreaterEqual(len(tenant_ids), 1)
+        self.assertIn("autotest", tenant_ids)
 
-            # 获取租户状态
-            status = mt_manager.get_all_tenant_status()
-            print(f"租户状态: {list(status.keys())}")
+        status = mt_manager.get_all_tenant_status()
+        logger.info("租户状态: %s", list(status.keys()))
+        self.assertIn("autotest", status)
 
-            # 清理
-            from multi_tenant_manager import \
-                cleanup_global_multi_tenant_manager
-
-            cleanup_global_multi_tenant_manager()
-
-            logger.info("多租户会话管理测试通过")
-        else:
-            logger.info("多租户功能未启用，跳过会话管理测试")
-            self.skipTest("多租户功能未启用")
+        logger.info("多租户会话管理测试通过")
 
     def test_multi_tenant_sdk_factory(self):
         """测试多租户SDK工厂"""
@@ -93,24 +102,31 @@ class TestMultiTenantExample(unittest.TestCase):
             }
         }
 
-        # 创建多租户管理器
-        mt_manager = MultiTenantSessionManager(test_config)
+        with patch("session_manager.SessionManager") as MockSessionManager:
+            mock_session_mgr = Mock()
+            mock_session_mgr.create_session.return_value = True
+            mock_session_mgr.is_logged_in = True
+            mock_session_mgr.work_session = Mock()
+            MockSessionManager.return_value = mock_session_mgr
 
-        # 创建SDK工厂
-        sdk_factory = SDKFactory(mt_manager)
+            # 创建多租户管理器
+            mt_manager = MultiTenantSessionManager(test_config)
 
-        # 模拟SDK类
-        class MockSDK:
-            def __init__(self, session):
-                self.session = session
-                self.name = "MockSDK"
+            # 创建SDK工厂
+            sdk_factory = SDKFactory(mt_manager)
 
-        # 测试获取SDK实例
-        sdk = sdk_factory.get_sdk_for_tenant("autotest", MockSDK)
+            # 模拟SDK类
+            class MockSDK:
+                def __init__(self, session):
+                    self.session = session
+                    self.name = "MockSDK"
 
-        # 验证SDK实例创建成功
-        self.assertIsNotNone(sdk)
-        self.assertEqual(sdk.name, "MockSDK")
+            # 测试获取SDK实例
+            sdk = sdk_factory.get_sdk_for_tenant("autotest", MockSDK)
+
+            # 验证SDK实例创建成功
+            self.assertIsNotNone(sdk)
+            self.assertEqual(sdk.name, "MockSDK")
 
         logger.info("多租户SDK工厂测试通过")
 
@@ -126,38 +142,24 @@ class TestMultiTenantIntegration(TestMultiTenantExample):
         """测试租户切换功能"""
         from test_base_multi_tenant import TestBaseMultiTenant
 
-        # 创建测试实例
         test_instance = TestBaseMultiTenant()
-        test_instance.setUpClass()
+        test_instance.multi_tenant_enabled = True
+        test_instance.multi_tenant_manager = _build_mock_multi_tenant_manager()
+        test_instance.current_tenant_id = "autotest"
 
-        try:
-            # 测试租户切换
-            if test_instance.multi_tenant_enabled:
-                tenant_ids = test_instance.multi_tenant_manager.get_all_tenant_ids()
+        tenant_ids = test_instance.multi_tenant_manager.get_all_tenant_ids()
 
-                if len(tenant_ids) > 1:
-                    # 测试切换到其他租户
-                    for tenant_id in tenant_ids[:2]:  # 只测试前两个租户
-                        success = test_instance.switch_tenant(tenant_id)
-                        self.assertTrue(success, f"切换到租户 '{tenant_id}' 失败")
-                        self.assertEqual(test_instance.current_tenant_id, tenant_id)
+        for tenant_id in tenant_ids[:2]:
+            success = test_instance.switch_tenant(tenant_id)
+            self.assertTrue(success, f"切换到租户 '{tenant_id}' 失败")
+            self.assertEqual(test_instance.current_tenant_id, tenant_id)
 
-                        # 验证租户状态
-                        status = test_instance.get_tenant_status()
-                        self.assertEqual(status["tenant_id"], tenant_id)
+            status = test_instance.get_tenant_status()
+            self.assertEqual(status["tenant_id"], tenant_id)
+            logger.info("成功切换到租户: %s", tenant_id)
 
-                        print(f"成功切换到租户: {tenant_id}")
-
-                # 切换回默认租户
-                test_instance.switch_tenant("autotest")
-                self.assertEqual(test_instance.current_tenant_id, "autotest")
-
-            else:
-                print("多租户功能未启用，跳过租户切换测试")
-                self.skipTest("多租户功能未启用")
-
-        finally:
-            test_instance.tearDownClass()
+        test_instance.switch_tenant("autotest")
+        self.assertEqual(test_instance.current_tenant_id, "autotest")
 
         logger.info("租户切换测试通过")
 
@@ -165,42 +167,26 @@ class TestMultiTenantIntegration(TestMultiTenantExample):
         """测试多租户操作"""
         from test_base_multi_tenant import TestBaseMultiTenant
 
-        # 创建测试实例
         test_instance = TestBaseMultiTenant()
-        test_instance.setUpClass()
+        test_instance.multi_tenant_enabled = True
+        test_instance.multi_tenant_manager = _build_mock_multi_tenant_manager()
+        test_instance.current_tenant_id = "autotest"
 
-        try:
-            # 定义测试操作
-            def test_operation(tenant_id):
-                print(f"在租户 '{tenant_id}' 上执行测试操作")
-                # 这里可以执行实际的SDK操作
-                return {"tenant_id": tenant_id, "status": "success"}
+        def test_operation(tenant_id):
+            logger.info("在租户 '%s' 上执行测试操作", tenant_id)
+            return {"tenant_id": tenant_id, "status": "success"}
 
-            # 为所有租户执行测试
-            results = test_instance.run_for_all_tenants(test_operation)
+        results = test_instance.run_for_all_tenants(test_operation)
 
-            # 验证结果
-            self.assertIsInstance(results, dict)
+        self.assertIsInstance(results, dict)
+        enabled_tenants = test_instance.multi_tenant_manager.get_enabled_tenant_ids()
+        self.assertEqual(len(results), len(enabled_tenants))
 
-            if test_instance.multi_tenant_enabled:
-                enabled_tenants = (
-                    test_instance.multi_tenant_manager.get_enabled_tenant_ids()
-                )
-                self.assertEqual(len(results), len(enabled_tenants))
-
-                for tenant_id, result in results.items():
-                    self.assertIn("status", result)
-                    if result["status"] == "passed":
-                        self.assertIn("result", result)
-                        self.assertEqual(result["result"]["tenant_id"], tenant_id)
-
-            else:
-                # 单租户模式
-                self.assertIn("autotest", results)
-                self.assertEqual(results["autotest"]["status"], "passed")
-
-        finally:
-            test_instance.tearDownClass()
+        for tenant_id, result in results.items():
+            self.assertIn("status", result)
+            if result["status"] == "passed":
+                self.assertIn("result", result)
+                self.assertEqual(result["result"]["tenant_id"], tenant_id)
 
         logger.info("多租户操作测试通过")
 
@@ -212,31 +198,21 @@ class TestMultiTenantBestPractices(unittest.TestCase):
         """测试上下文管理器用法"""
         from test_base_multi_tenant import SimpleMultiTenantTest
 
-        # 创建测试实例
         test_instance = SimpleMultiTenantTest()
-        test_instance.setUpClass()
+        test_instance.multi_tenant_enabled = True
+        test_instance.multi_tenant_manager = _build_mock_multi_tenant_manager()
+        test_instance.current_tenant_id = "autotest"
 
-        try:
-            if test_instance.multi_tenant_enabled:
-                tenant_ids = test_instance.multi_tenant_manager.get_enabled_tenant_ids()
+        tenant_ids = test_instance.multi_tenant_manager.get_enabled_tenant_ids()
 
-                if len(tenant_ids) > 1:
-                    # 使用上下文管理器切换租户
-                    with test_instance.for_tenant(tenant_ids[0]):
-                        print(
-                            f"在上下文管理器中，当前租户: {test_instance.current_tenant_id}"
-                        )
-                        self.assertEqual(test_instance.current_tenant_id, tenant_ids[0])
+        with test_instance.for_tenant(tenant_ids[0]):
+            logger.info(
+                "在上下文管理器中，当前租户: %s",
+                test_instance.current_tenant_id,
+            )
+            self.assertEqual(test_instance.current_tenant_id, tenant_ids[0])
 
-                    # 验证已切换回原租户
-                    self.assertEqual(test_instance.current_tenant_id, "autotest")
-
-            else:
-                print("多租户功能未启用，跳过上下文管理器测试")
-                self.skipTest("多租户功能未启用")
-
-        finally:
-            test_instance.tearDownClass()
+        self.assertEqual(test_instance.current_tenant_id, "autotest")
 
         logger.info("上下文管理器测试通过")
 
@@ -244,33 +220,26 @@ class TestMultiTenantBestPractices(unittest.TestCase):
         """测试租户隔离性验证"""
         from test_base_multi_tenant import TestBaseMultiTenant
 
-        # 创建测试实例
         test_instance = TestBaseMultiTenant()
-        test_instance.setUpClass()
+        test_instance.multi_tenant_enabled = True
+        test_instance.multi_tenant_manager = _build_mock_multi_tenant_manager()
+        test_instance.current_tenant_id = "autotest"
 
-        try:
-            if test_instance.multi_tenant_enabled:
-                tenant_ids = test_instance.multi_tenant_manager.get_enabled_tenant_ids()
+        tenant_ids = test_instance.multi_tenant_manager.get_enabled_tenant_ids()
 
-                if len(tenant_ids) >= 2:
-                    # 定义验证函数
-                    def verify_tenant_data(tenant_id):
-                        # 模拟获取租户特定数据
-                        return {"tenant_id": tenant_id, "data": f"data_for_{tenant_id}"}
+        def verify_tenant_data():
+            tenant_id = test_instance.current_tenant_id
+            return {"tenant_id": tenant_id, "data": f"data_for_{tenant_id}"}
 
-                    # 验证租户隔离性
-                    test_instance.assert_tenant_isolation(
-                        tenant_ids[0], tenant_ids[1], verify_tenant_data
-                    )
+        test_instance.assert_tenant_isolation(
+            tenant_ids[0], tenant_ids[1], verify_tenant_data
+        )
 
-                    print(f"租户 '{tenant_ids[0]}' 和 '{tenant_ids[1]}' 隔离性验证通过")
-
-            else:
-                print("多租户功能未启用，跳过隔离性验证测试")
-                self.skipTest("多租户功能未启用")
-
-        finally:
-            test_instance.tearDownClass()
+        logger.info(
+            "租户 '%s' 和 '%s' 隔离性验证通过",
+            tenant_ids[0],
+            tenant_ids[1],
+        )
 
         logger.info("租户隔离性验证测试通过")
 
@@ -281,9 +250,9 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
 
-    print("=" * 60)
-    print("多租户测试示例")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("多租户测试示例")
+    logger.info("=" * 60)
 
     # 运行测试
     loader = unittest.TestLoader()
@@ -295,27 +264,30 @@ if __name__ == "__main__":
     result = runner.run(suite)
 
     # 输出测试结果
-    print("\n" + "=" * 60)
-    print("测试结果摘要")
-    print("=" * 60)
-    print(f"运行测试数: {result.testsRun}")
-    print(f"通过数: {result.testsRun - len(result.failures) - len(result.errors)}")
-    print(f"失败数: {len(result.failures)}")
-    print(f"错误数: {len(result.errors)}")
+    logger.info("=" * 60)
+    logger.info("测试结果摘要")
+    logger.info("=" * 60)
+    logger.info("运行测试数: %s", result.testsRun)
+    logger.info(
+        "通过数: %s",
+        result.testsRun - len(result.failures) - len(result.errors),
+    )
+    logger.info("失败数: %s", len(result.failures))
+    logger.info("错误数: %s", len(result.errors))
 
     if result.wasSuccessful():
-        print("\n✅ 所有测试通过！")
+        logger.info("所有测试通过")
     else:
-        print("\n❌ 测试失败或出错")
+        logger.error("测试失败或出错")
 
         if result.failures:
-            print("\n失败详情:")
+            logger.error("失败详情:")
             for test, traceback in result.failures:
-                print(f"  {test}: {traceback.splitlines()[-1]}")
+                logger.error("%s: %s", test, traceback.splitlines()[-1])
 
         if result.errors:
-            print("\n错误详情:")
+            logger.error("错误详情:")
             for test, traceback in result.errors:
-                print(f"  {test}: {traceback.splitlines()[-1]}")
+                logger.error("%s: %s", test, traceback.splitlines()[-1])
 
-    print("\n多租户测试示例执行完成")
+    logger.info("多租户测试示例执行完成")

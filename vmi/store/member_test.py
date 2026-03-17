@@ -1,26 +1,4 @@
 """
-import os
-import sys
-
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-project_root = os.path.dirname(parent_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
 Member 测试用例
 
 基于 magicProjectRepo/vmi/VMI实体定义和使用说明.md:219-228 中的 member 实体定义编写。
@@ -71,246 +49,76 @@ Member 测试用例
 最后更新：2026-01-26
 """
 
-import os
-import sys
+from test_bootstrap import ensure_test_paths
 
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
+ensure_test_paths(__file__)
 
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-if session_path not in sys.path:
-    sys.path.insert(0, session_path)
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-if cas_dir not in sys.path:
-    sys.path.insert(0, cas_dir)
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-if mock_dir not in sys.path:
-    sys.path.insert(0, mock_dir)
-
-# 确保vmi目录在路径中（用于导入sdk模块）
-vmi_dir = os.path.join(project_root, "vmi")
-if vmi_dir not in sys.path:
-    sys.path.insert(0, vmi_dir)
-
-
-
-# 添加项目根目录到Python路径
-# 根据文件所在位置向上查找项目根目录
-file_dir = os.path.dirname(os.path.abspath(__file__))
-# session模块在 /home/rangh/codespace/magicTest/session
-# 测试文件可能在 vmi/ 或 vmi/subdir/ 下
-# 需要向上找到 magicTest 目录
-project_root = file_dir
-while project_root and not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    parent = os.path.dirname(project_root)
-    if parent == project_root:  # 到达根目录
-        break
-    project_root = parent
-
-# 如果没找到，使用默认路径
-if not os.path.exists(os.path.join(project_root, 'session', 'session.py')):
-    # 根据文件位置确定项目根目录
-    if os.path.basename(file_dir) in ['credit', 'order', 'partner', 'product', 'status', 'store', 'warehouse']:
-        # 在子目录下，向上两级
-        project_root = os.path.dirname(os.path.dirname(file_dir))
-    else:
-        # 在vmi目录下，向上一级
-        project_root = os.path.dirname(file_dir)
-
-# 确保session模块在路径中
-session_path = os.path.join(project_root, "session")
-
-# 确保cas模块在路径中
-cas_dir = os.path.join(project_root, "cas")
-
-# 确保mock模块在路径中
-mock_dir = os.path.join(project_root, "mock")
-
-
-from session import MagicSession
-from cas.cas import Cas
 from mock import common as mock
 import logging
 import unittest
-import warnings
-
 
 from sdk import MemberSDK, StoreSDK
+from test_dependency_helper import prepare_store_dependency
+from test_vmi_base import VMITestCase
 
 # 配置日志
 logger = logging.getLogger(__name__)
 
 
-class MemberTestCase(unittest.TestCase):
+class MemberTestCase(VMITestCase):
     """Member 测试用例类"""
 
     namespace = ""
 
     @classmethod
     def setUpClass(cls):
-        # 从config_helper获取配置
-
-        # 从config_helper获取配置
-        from config_helper import get_credentials, get_server_url
-
-        cls.server_url = get_server_url()
-        cls.credentials = get_credentials()
-
-        """测试类初始化"""
-        warnings.simplefilter("ignore", ResourceWarning)
-        cls.work_session = MagicSession(cls.server_url, cls.namespace)
-        cls.cas_session = Cas(cls.work_session)
-        if not cls.cas_session.login(
-            cls.credentials["username"], cls.credentials["password"]
-        ):
-            logger.error("CAS登录失败")
-            raise Exception("CAS登录失败")
-        cls.work_session.bind_token(cls.cas_session.get_session_token())
-        cls.member_sdk = MemberSDK(cls.work_session)
-        cls.store_sdk = StoreSDK(cls.work_session)
+        super().setUpClass()
 
         # 类级别的数据清理记录
         cls._class_cleanup_ids = {"member": [], "store": []}
 
-        # 记录测试开始前的初始状态（可选）
-        cls._initial_member_count = cls._get_member_count()
-        logger.info(f"测试开始前店铺成员数量: {cls._initial_member_count}")
+        cls.record_initial_count(
+            "_initial_member_count", cls._get_member_count, entity_name="店铺成员"
+        )
+
+    @classmethod
+    def _init_sdk(cls):
+        cls.member_sdk = MemberSDK(cls.work_session)
+        cls.store_sdk = StoreSDK(cls.work_session)
 
     @classmethod
     def _get_member_count(cls):
         """获取当前店铺成员数量"""
-        try:
-            # 尝试使用count方法
-            count = cls.member_sdk.count_member({})
-            if count is not None:
-                return count
-        except Exception as e:
-            logger.warning(f"获取店铺成员数量失败: {e}")
-
-        # 如果count方法不可用，尝试通过过滤空条件获取列表
-        try:
-            members = cls.member_sdk.filter_member({})
-            if members is not None:
-                return len(members)
-        except Exception as e:
-            logger.warning(f"通过过滤获取店铺成员数量失败: {e}")
-
-        return 0
+        return cls.get_entity_count(
+            "member_sdk",
+            "count_member",
+            "filter_member",
+            entity_name="店铺成员",
+            count_args=({},),
+            filter_args=({},),
+        )
 
     @classmethod
     def tearDownClass(cls):
         """测试类结束后的清理"""
-        # 记录类级别清理列表的状态
         original_member_count = len(cls._class_cleanup_ids["member"])
         original_store_count = len(cls._class_cleanup_ids["store"])
         logger.info(
             f"测试类清理开始: 需要清理 {original_member_count} 个成员, {original_store_count} 个店铺"
         )
 
-        # 清理类级别记录的所有数据
-        cls._cleanup_members(cls._class_cleanup_ids["member"])
-        cls._cleanup_stores(cls._class_cleanup_ids["store"])
+        cls.cleanup_registry_entries(
+            cls._class_cleanup_ids,
+            [
+                ("member", "member_sdk", "店铺成员"),
+                ("store", "store_sdk", "店铺"),
+            ],
+        )
+        cls.verify_cleanup_count(
+            "_initial_member_count", cls._get_member_count, entity_name="店铺成员"
+        )
 
-        # 验证数据清理
-        final_member_count = cls._get_member_count()
-        logger.info(f"测试类清理完成: 最终店铺成员数量: {final_member_count}")
-
-        # 检查是否有数据残留（可选，根据业务需求）
-        if hasattr(cls, "_initial_member_count"):
-            expected_count = cls._initial_member_count
-            if final_member_count > expected_count:
-                logger.warning(
-                    f"可能存在数据残留: 期望数量 {expected_count}, 实际数量 {final_member_count}"
-                )
-
-    @classmethod
-    def _cleanup_members(cls, member_ids):
-        """清理指定的店铺成员列表"""
-        if not member_ids:
-            logger.debug("清理店铺成员列表为空，无需清理")
-            return
-
-        logger.info(f"开始清理 {len(member_ids)} 个店铺成员: {member_ids}")
-        deleted_count = 0
-        failed_ids = []
-
-        for member_id in member_ids:
-            try:
-                logger.debug(f"尝试删除店铺成员 ID: {member_id}")
-                result = cls.member_sdk.delete_member(member_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(f"成功删除店铺成员 {member_id}")
-                else:
-                    logger.debug(f"清理店铺成员 {member_id} 返回None，视为已不存在")
-            except Exception as e:
-                error_msg = f"清理店铺成员 {member_id} 失败: {e}"
-                logger.error(error_msg)
-                failed_ids.append(member_id)
-
-        if deleted_count > 0:
-            logger.info(f"成功清理 {deleted_count} 个店铺成员")
-
-        if failed_ids:
-            logger.warning(f"清理店铺成员异常ID: {failed_ids}")
-
-    @classmethod
-    def _cleanup_stores(cls, store_ids):
-        """清理指定的店铺列表"""
-        if not store_ids:
-            logger.debug("清理店铺列表为空，无需清理")
-            return
-
-        logger.info(f"开始清理 {len(store_ids)} 个店铺: {store_ids}")
-        deleted_count = 0
-        failed_ids = []
-
-        for store_id in store_ids:
-            try:
-                logger.debug(f"尝试删除店铺 ID: {store_id}")
-                result = cls.store_sdk.delete_store(store_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(f"成功删除店铺 {store_id}")
-                else:
-                    logger.debug(f"清理店铺 {store_id} 返回None，视为已不存在")
-            except Exception as e:
-                error_msg = f"清理店铺 {store_id} 失败: {e}"
-                logger.error(error_msg)
-                failed_ids.append(store_id)
-
-        if deleted_count > 0:
-            logger.info(f"成功清理 {deleted_count} 个店铺")
-
-        if failed_ids:
-            logger.warning(f"清理店铺异常ID: {failed_ids}")
+        super().tearDownClass()
 
     def setUp(self):
         """每个测试用例前的准备"""
@@ -323,16 +131,12 @@ class MemberTestCase(unittest.TestCase):
 
     def _setup_dependencies(self):
         """创建测试依赖的实体（店铺）"""
-        # 创建店铺
-        store_param = {"name": "STORE_" + mock.name(), "description": mock.sentence()}
-        new_store = self.store_sdk.create_store(store_param)
-        self.assertIsNotNone(new_store, "创建店铺失败")
-        if new_store and "id" in new_store:
-            self.created_store_ids.append(new_store["id"])
-            self._class_cleanup_ids["store"].append(new_store["id"])
-
-        # 保存依赖实体ID
-        self.store_id = new_store["id"] if new_store else None
+        deps = prepare_store_dependency(
+            store_sdk=self.store_sdk,
+            created_ids={"store": self.created_store_ids},
+            class_cleanup_ids=self._class_cleanup_ids,
+        )
+        self.store_id = deps["store_id"]
 
     def tearDown(self):
         """每个测试用例后的清理"""
@@ -349,110 +153,19 @@ class MemberTestCase(unittest.TestCase):
 
     def _cleanup_test_entities(self):
         """清理本测试创建的实体"""
-        # 清理成员
-        self._cleanup_test_members()
-        # 清理店铺
-        self._cleanup_test_stores()
-
-    def _cleanup_test_members(self):
-        """清理本测试创建的店铺成员"""
-        if not self.created_member_ids:
-            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的店铺成员")
-            return
-
-        logger.info(
-            f"测试 {self._testMethodName}: 开始清理 {len(self.created_member_ids)} 个店铺成员: {self.created_member_ids}"
+        self.cleanup_registry_entries(
+            {
+                "member": self.created_member_ids,
+                "store": self.created_store_ids,
+            },
+            [
+                ("member", "member_sdk", "店铺成员"),
+                ("store", "store_sdk", "店铺"),
+            ],
+            owner=self,
+            remove_from=self.__class__._class_cleanup_ids,
+            log_prefix=f"测试 {self._testMethodName}",
         )
-        deleted_count = 0
-        failed_ids = []
-
-        for member_id in self.created_member_ids:
-            try:
-                logger.debug(
-                    f"测试 {self._testMethodName}: 尝试删除店铺成员 ID: {member_id}"
-                )
-                result = self.member_sdk.delete_member(member_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 成功删除店铺成员 {member_id}"
-                    )
-                    # 从类级别清理列表中移除（如果存在）
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_ids")
-                        and member_id in self.__class__._class_cleanup_ids["member"]
-                    ):
-                        self.__class__._class_cleanup_ids["member"].remove(member_id)
-                else:
-                    error_msg = f"测试 {self._testMethodName}: 删除店铺成员 {member_id} 返回None"
-                    logger.error(error_msg)
-                    failed_ids.append(member_id)
-            except Exception as e:
-                error_msg = (
-                    f"测试 {self._testMethodName}: 删除店铺成员 {member_id} 失败: {e}"
-                )
-                logger.error(error_msg)
-                failed_ids.append(member_id)
-
-        if deleted_count > 0:
-            logger.info(
-                f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个店铺成员"
-            )
-
-        if failed_ids:
-            logger.error(
-                f"测试 {self._testMethodName}: 清理失败的店铺成员ID: {failed_ids}"
-            )
-
-    def _cleanup_test_stores(self):
-        """清理本测试创建的店铺"""
-        if not self.created_store_ids:
-            logger.debug(f"测试 {self._testMethodName}: 没有需要清理的店铺")
-            return
-
-        logger.info(
-            f"测试 {self._testMethodName}: 开始清理 {len(self.created_store_ids)} 个店铺: {self.created_store_ids}"
-        )
-        deleted_count = 0
-        failed_ids = []
-
-        for store_id in self.created_store_ids:
-            try:
-                logger.debug(
-                    f"测试 {self._testMethodName}: 尝试删除店铺 ID: {store_id}"
-                )
-                result = self.store_sdk.delete_store(store_id)
-
-                if result is not None:
-                    deleted_count += 1
-                    logger.debug(
-                        f"测试 {self._testMethodName}: 成功删除店铺 {store_id}"
-                    )
-                    # 从类级别清理列表中移除（如果存在）
-                    if (
-                        hasattr(self.__class__, "_class_cleanup_ids")
-                        and store_id in self.__class__._class_cleanup_ids["store"]
-                    ):
-                        self.__class__._class_cleanup_ids["store"].remove(store_id)
-                else:
-                    error_msg = (
-                        f"测试 {self._testMethodName}: 删除店铺 {store_id} 返回None"
-                    )
-                    logger.error(error_msg)
-                    failed_ids.append(store_id)
-            except Exception as e:
-                error_msg = (
-                    f"测试 {self._testMethodName}: 删除店铺 {store_id} 失败: {e}"
-                )
-                logger.error(error_msg)
-                failed_ids.append(store_id)
-
-        if deleted_count > 0:
-            logger.info(f"测试 {self._testMethodName}: 成功清理 {deleted_count} 个店铺")
-
-        if failed_ids:
-            logger.error(f"测试 {self._testMethodName}: 清理失败的店铺ID: {failed_ids}")
 
     def _record_member_for_cleanup(self, member_id):
         """记录店铺成员ID以便清理"""

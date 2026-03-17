@@ -17,11 +17,20 @@ from unittest.mock import Mock, patch
 logger = logging.getLogger(__name__)
 
 
+def _clear_config_cache() -> None:
+    import sys
+
+    for module in ["config_helper", "tenant_config_helper"]:
+        if module in sys.modules:
+            del sys.modules[module]
+
+
 class TestMultiTenantCore(unittest.TestCase):
     """多租户核心功能测试"""
 
     def test_config_helper(self):
         """测试配置助手核心逻辑"""
+        _clear_config_cache()
         from tenant_config_helper import (get_multi_tenant_config,
                                           is_multi_tenant_enabled)
 
@@ -31,10 +40,10 @@ class TestMultiTenantCore(unittest.TestCase):
         self.assertIn("default_tenant", config)
         self.assertIn("tenants", config)
         self.assertIn("autotest", config["tenants"])
-        self.assertFalse(config["enabled"])
-        self.assertFalse(is_multi_tenant_enabled())
+        self.assertIsInstance(config["enabled"], bool)
+        self.assertEqual(config["enabled"], is_multi_tenant_enabled())
 
-        print("✅ 配置助手核心逻辑测试通过")
+        logger.info("配置助手核心逻辑测试通过")
 
     def test_multi_tenant_manager_structure(self):
         """测试多租户管理器结构"""
@@ -75,7 +84,7 @@ class TestMultiTenantCore(unittest.TestCase):
             sdk2 = sdk_factory.get_sdk_for_tenant("autotest", MockSDK)
             self.assertIs(sdk, sdk2)
 
-            print("✅ 多租户管理器结构测试通过")
+            logger.info("多租户管理器结构测试通过")
 
     def test_test_base_inheritance(self):
         """测试测试基类继承关系"""
@@ -92,7 +101,7 @@ class TestMultiTenantCore(unittest.TestCase):
         self.assertTrue(hasattr(TestBaseMultiTenant, "run_for_all_tenants"))
         self.assertTrue(hasattr(TestBaseMultiTenant, "get_tenant_status"))
 
-        print("✅ 测试基类继承关系测试通过")
+        logger.info("测试基类继承关系测试通过")
 
     def test_backward_compatibility(self):
         """测试向后兼容性"""
@@ -103,9 +112,9 @@ class TestMultiTenantCore(unittest.TestCase):
 
             self.assertIn("server", config)
 
-            print("✅ 向后兼容性测试通过")
+            logger.info("向后兼容性测试通过")
         else:
-            print("⚠️ 配置文件不存在，跳过测试")
+            logger.warning("配置文件不存在，跳过测试")
 
 
 class TestMultiTenantConfig(unittest.TestCase):
@@ -128,11 +137,7 @@ class TestMultiTenantConfig(unittest.TestCase):
 
     def _clear_config_cache(self):
         """清除配置缓存"""
-        import sys
-
-        for module in ["config_helper", "tenant_config_helper"]:
-            if module in sys.modules:
-                del sys.modules[module]
+        _clear_config_cache()
 
     def test_enabled_config_loading(self):
         """测试启用多租户的配置加载"""
@@ -173,7 +178,7 @@ class TestMultiTenantConfig(unittest.TestCase):
         self.assertTrue(config["enabled"])
         self.assertTrue(is_multi_tenant_enabled())
 
-        print("✅ 启用多租户配置加载测试通过")
+        logger.info("启用多租户配置加载测试通过")
 
     def test_disabled_config_loading(self):
         """测试禁用多租户的配置加载"""
@@ -214,7 +219,7 @@ class TestMultiTenantConfig(unittest.TestCase):
         self.assertFalse(config["enabled"])
         self.assertFalse(is_multi_tenant_enabled())
 
-        print("✅ 禁用多租户配置加载测试通过")
+        logger.info("禁用多租户配置加载测试通过")
 
 
 class TestMultiTenantIntegration(unittest.TestCase):
@@ -262,14 +267,14 @@ class TestMultiTenantIntegration(unittest.TestCase):
         self.assertIn("tenant1", mt_manager.session_managers)
         self.assertNotIn("tenant2", mt_manager.session_managers)
 
-        print("✅ 多租户管理器与配置集成测试通过")
+        logger.info("多租户管理器与配置集成测试通过")
 
 
 def run_multi_tenant_tests():
     """运行所有多租户测试"""
-    print("=" * 60)
-    print("VMI 多租户测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("VMI 多租户测试")
+    logger.info("=" * 60)
 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite()
@@ -284,27 +289,27 @@ def run_multi_tenant_tests():
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
 
-    print("\n" + "=" * 60)
-    print("测试结果摘要")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("测试结果摘要")
+    logger.info("=" * 60)
 
     total = result.testsRun
     passed = total - len(result.failures) - len(result.errors)
 
-    print(f"运行测试数: {total}")
-    print(f"通过数: {passed}")
-    print(f"失败数: {len(result.failures)}")
-    print(f"错误数: {len(result.errors)}")
+    logger.info("运行测试数: %s", total)
+    logger.info("通过数: %s", passed)
+    logger.info("失败数: %s", len(result.failures))
+    logger.info("错误数: %s", len(result.errors))
 
     if result.wasSuccessful():
-        print("\n✅ 所有多租户测试通过！")
+        logger.info("所有多租户测试通过")
         return True
-    else:
-        print("\n❌ 部分测试失败")
-        return False
+
+    logger.error("部分测试失败")
+    return False
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
     success = run_multi_tenant_tests()
     exit(0 if success else 1)

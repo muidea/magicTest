@@ -1,163 +1,255 @@
-# VMI测试框架 - 详细使用指南
+# VMI 测试指南
 
-## 📋 概述
-VMI测试框架是一个完整的测试解决方案，用于验证VMI系统的功能、性能和稳定性。
+本文档面向日常使用和后续维护，目标是说明当前测试套件如何运行、如何扩展，以及哪些行为是刻意保持宽松的。
 
-## 🏗️ 架构设计
-### 测试框架架构
-```
-测试框架架构
-├── 测试运行器 (test_runner.py)
-│   ├── 基础功能测试 (198个测试)
-│   ├── 并发压力测试 (5个测试)
-│   └── 业务场景测试 (6个测试)
-├── 测试基类 (base_test_case.py)
-├── 测试配置 (test_config.py)
-├── 测试适配器 (test_adapter.py)
-└── 实体测试模块
-    ├── product/      # 产品相关测试
-    ├── store/        # 店铺相关测试
-    ├── warehouse/    # 仓库相关测试
-    ├── credit/       # 信用相关测试
-    ├── order/        # 订单相关测试
-    └── partner/      # 合作伙伴测试
-```
+## 1. 运行前提
 
-## 🚀 快速参考
-### 常用命令速查
-#### 环境设置
+- Python 虚拟环境：`/home/rangh/codespace/venv`
+- 默认目标服务：`https://autotest.local.vpc`
+- 默认账号：`administrator / administrator`
+- 默认命名空间：`autotest`
+
+准备命令：
+
 ```bash
-source ~/codespace/venv/bin/activate
-python setup_env.py
-./verify_setup.sh
+cd /home/rangh/codespace/magicTest/vmi
+source /home/rangh/codespace/venv/bin/activate
 ```
 
-#### 测试执行
+如果环境中设置了代理，建议回归前显式清空：
+
 ```bash
-python test_runner.py
-python test_runner.py --mode basic
-python test_runner.py --mode concurrent
-python test_runner.py --mode scenario
+HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
+NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
+python3 -m unittest discover -s . -p '*_test.py' -v
 ```
 
-#### 部署验证
+## 2. 入口说明
+
+统一入口是 [run_tests.py](/home/rangh/codespace/magicTest/vmi/run_tests.py)。
+
+支持的主命令：
+
 ```bash
-python deploy_verification.py
+python3 run_tests.py --check-config
+python3 run_tests.py --quick
+python3 run_tests.py --validation
+python3 run_tests.py --multi-tenant
+python3 run_tests.py --concurrent
+python3 run_tests.py --scenario
+python3 run_tests.py --module
+python3 run_tests.py --aging 30
+python3 run_tests.py --all
+python3 run_tests.py --pytest --all
 ```
 
-## 🧪 测试套件说明
-### 1. 基础功能测试 (198个测试)
-- **productInfo**: 12个测试
-- **goodsInfo**: 10个测试
-- **shelf**: 16个测试
-- **其他实体**: 160个测试
+行为说明：
 
-### 2. 并发压力测试 (5个测试)
-- 并发店铺创建
-- 并发商品操作
-- 并发仓库操作
-- 数据完整性验证
+- `--quick`
+  只跑框架验证，适合部署后快速检查。
+- `--validation`
+  跑配置、导入、基类和多租户基础验证。
+- `--multi-tenant`
+  跑多租户配置和管理器测试。
+- `--concurrent`
+  跑并发测试。
+- `--scenario`
+  跑业务场景测试。
+- `--module`
+  跑所有模块级实体测试。
+- `--aging N`
+  跑 `N` 分钟老化测试，内部会转换为小时传给 `aging_test_simple.py`。
+- `--all`
+  组合执行验证、多租户、并发、场景和模块测试。
 
-### 3. 业务场景测试 (6个测试)
-- 单租户完整业务流程
-- 数据规模: 5万产品, 15万SKU
+## 3. 测试结构
 
-## 🔧 测试框架使用
-### 测试执行流程
+### 3.1 基础层
+
+- [test_bootstrap.py](/home/rangh/codespace/magicTest/vmi/test_bootstrap.py)
+  统一补齐路径和告警抑制。
+- [config_helper.py](/home/rangh/codespace/magicTest/vmi/config_helper.py)
+  读取统一配置。
+- [tenant_config_helper.py](/home/rangh/codespace/magicTest/vmi/tenant_config_helper.py)
+  读取和展开多租户配置。
+- [session_manager.py](/home/rangh/codespace/magicTest/vmi/session_manager.py)
+  会话创建、自动刷新、失效恢复。
+
+### 3.2 测试基础设施层
+
+- [test_vmi_base.py](/home/rangh/codespace/magicTest/vmi/test_vmi_base.py)
+  为实体测试提供通用日志、清理和数量统计能力。
+- [test_dependency_helper.py](/home/rangh/codespace/magicTest/vmi/test_dependency_helper.py)
+  为库存相关测试构造依赖实体。
+- [test_base_with_session_manager.py](/home/rangh/codespace/magicTest/vmi/test_base_with_session_manager.py)
+  旧的通用会话测试基类，仍被多租户和部分场景使用。
+- [test_base_multi_tenant.py](/home/rangh/codespace/magicTest/vmi/test_base_multi_tenant.py)
+  多租户测试基类。
+
+### 3.3 用例层
+
+- `credit/`
+- `order/`
+- `partner/`
+- `product/`
+- `status/`
+- `store/`
+- `warehouse/`
+- [scenario_test.py](/home/rangh/codespace/magicTest/vmi/scenario_test.py)
+- [concurrent_test_v2.py](/home/rangh/codespace/magicTest/vmi/concurrent_test_v2.py)
+- [aging_test_simple.py](/home/rangh/codespace/magicTest/vmi/aging_test_simple.py)
+
+## 4. 配置说明
+
+### 4.1 单租户配置
+
+当前标准配置文件是 [test_config.json](/home/rangh/codespace/magicTest/vmi/test_config.json)：
+
+```json
+{
+  "server": {
+    "url": "https://autotest.local.vpc",
+    "namespace": "autotest",
+    "environment": "local"
+  },
+  "credentials": {
+    "username": "administrator",
+    "password": "administrator"
+  },
+  "session": {
+    "refresh_interval": 540,
+    "timeout": 1800
+  },
+  "concurrent": {
+    "max_workers": 10,
+    "timeout": 30,
+    "retry_count": 3
+  },
+  "aging": {
+    "duration_hours": 0.5,
+    "concurrent_threads": 10,
+    "operation_interval": 1.0,
+    "max_data_count": 1000,
+    "performance_degradation_threshold": 20.0,
+    "report_interval_minutes": 5
+  }
+}
+```
+
+### 4.2 多租户配置
+
+如果启用多租户，需要追加 `multi_tenant`：
+
+```json
+{
+  "multi_tenant": {
+    "enabled": true,
+    "default_tenant": "autotest",
+    "tenants": [
+      {
+        "id": "autotest",
+        "server_url": "https://autotest.local.vpc",
+        "username": "administrator",
+        "password": "administrator",
+        "namespace": "autotest",
+        "enabled": true
+      },
+      {
+        "id": "tenant2",
+        "server_url": "https://tenant2.local.vpc",
+        "username": "administrator",
+        "password": "administrator",
+        "namespace": "tenant2",
+        "enabled": true
+      }
+    ]
+  }
+}
+```
+
+注意：
+
+- 当前 `tenant_config_helper.py` 始终会补一个默认 `autotest` 租户
+- 多租户关闭时，测试只对 `autotest` 生效
+- 多租户验证测试默认使用 mock，避免依赖真实多租户环境
+
+## 5. 如何新增测试
+
+### 5.1 新增实体测试
+
+推荐模式：
+
+1. 继承 [VMITestCase](/home/rangh/codespace/magicTest/vmi/test_vmi_base.py)
+2. 使用 `build_cleanup_registry` 维护清理列表
+3. 依赖实体优先走 [test_dependency_helper.py](/home/rangh/codespace/magicTest/vmi/test_dependency_helper.py)
+4. 允许记录“当前系统行为观察”，但不要把未经确认的业务约束直接写死为失败断言
+
+### 5.2 新增离线/框架测试
+
+推荐放在根目录并使用：
+
+- mock 替代真实登录和真实网络
+- `_clear_config_cache()` 清理配置缓存
+- 只断言接口契约和当前配置结构，不硬编码环境状态
+
+## 6. 当前测试哲学
+
+本套件不是纯单元测试，更接近“真实服务集成回归”。因此断言遵循以下原则：
+
+- 真实业务约束明确时，使用严格断言
+- 服务当前允许但设计上未最终收敛的行为，记录为 observation，不直接判失败
+- 对偶发网络抖动保持容忍，避免把环境噪声误判成产品缺陷
+
+当前已知保留项：
+
+- 同一会员允许存在多条 `credit report`
+- `productInfo.sku` 当前允许重复
+- 某些接口创建或更新后不会返回完整关联字段
+- 某些更新接口不会返回 `modifyTime`
+
+## 7. 推荐回归顺序
+
+日常开发后：
+
 ```bash
-# 1. 环境准备
-source ~/codespace/venv/bin/activate
-python setup_env.py
-
-# 2. 测试执行
-python test_runner.py --mode all --env test
-
-# 3. 结果分析
-cat test_report_*.json | jq '.summary'
+python3 run_tests.py --quick
+python3 run_tests.py --module
 ```
 
-## 🐛 故障排除指南
-### 常见问题
-1. **测试执行失败**: 检查环境配置和服务器连接
-2. **实体创建失败**: 验证实体定义和依赖关系
-3. **并发测试失败**: 降低并发级别或增加超时时间
-4. **性能问题**: 优化测试数据规模
+改动会话、多租户或基础设施后：
 
-### 调试工具
 ```bash
-./verify_setup.sh
-./verify_real_server.sh
-python performance_report.py
+python3 run_tests.py --validation
+python3 run_tests.py --multi-tenant
+python3 run_tests.py --module
 ```
 
-## 🔄 扩展和定制
-### 添加新测试
-```python
-# example_test.py
-import unittest
-from base_test_case import BaseTestCase
+改动并发、性能或清理逻辑后：
 
-class ExampleTest(BaseTestCase):
-    def test_example_function(self):
-        result = self.create_entity('example', {'name': 'test'})
-        self.assertIsNotNone(result)
-        self.assertIn('id', result)
+```bash
+python3 run_tests.py --concurrent
+python3 run_tests.py --scenario
+python3 run_tests.py --aging 30
 ```
 
-## 📊 测试指标和监控
-### 关键性能指标
-- **测试通过率**: 目标 100%
-- **测试执行时间**: 目标 < 60秒
-- **API响应时间**: P95 < 500ms
-- **并发处理能力**: > 1000 请求/秒
+上线前完整回归：
 
-## 📁 文件结构说明
-### 核心文件
-```
-vmi/
-├── DEPLOYMENT.md                 # 部署与使用指南
-├── TEST_GUIDE.md                # 测试框架详细指南
-├── README.md                    # 项目概述
-├── VMI实体定义和使用说明.md     # 实体定义文档
-├── NEXT_STEPS_SUMMARY.md        # 下一步工作指南
-├── test_runner.py              # 主测试运行器
-├── deploy_verification.py      # 部署验证脚本
-├── scenario_test.py            # 业务场景测试
-├── concurrent_test.py          # 并发测试
-├── base_test_case.py           # 测试基类
-├── test_config.py              # 测试配置
-├── test_base.py                # 测试基础模块
-├── test_adapter.py             # 测试适配器
-├── setup_env.py                # 环境设置
-├── performance_report.py       # 性能报告
-├── session_mock.py             # 会话模拟
-├── verify_real_server.sh       # 服务器验证脚本
-├── verify_setup.sh             # 环境验证脚本
-└── [实体模块目录]/
-    └── *_test.py               # 各实体测试文件
+```bash
+python3 run_tests.py --all
+python3 -m unittest discover -s . -p '*_test.py' -v
 ```
 
----
+## 8. 结果判断
 
-## 🔄 近期重要修复 (2026-01-29)
+优先关注：
 
-### 1. modifyTime字段自动更新问题
-- **问题**: 服务器端`modifyTime`字段在实体更新后未自动刷新
-- **解决**: 服务器团队已修复自动更新逻辑
-- **验证**: 3个关键测试全部通过
-  - product_info: ✓ 时间戳变化验证成功
-  - order: ✓ 时间戳变化验证成功  
-  - credit_report: ✓ 时间戳变化验证成功
+- 测试是否真正失败
+- 是否出现大面积会话失效
+- 是否出现依赖实体构造失败
+- 是否出现清理不完整导致的级联失败
 
-### 2. 测试导入问题修复
-- **问题**: 相对导入导致测试运行失败
-- **解决**: 将`from ..sdk import`改为`from sdk import`
-- **影响文件**: 5个测试文件已修复
+次级关注：
 
-### 3. 错误处理改进
-- **改进**: 在异常处理中添加测试数据清理逻辑
-- **文件**: credit_reward_test.py, goods_item_test.py
-
-**最后更新**: 2026-01-29  
-**测试状态**: ✅ 所有测试通过 (198/198)  
-**文档状态**: ✅ 已更新和清理
+- observation 类警告
+- 偶发单次超时但整体仍通过
+- 个别接口返回字段不完整

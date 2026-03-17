@@ -22,6 +22,21 @@ import pytest
 logger = logging.getLogger(__name__)
 
 
+def _pick_status_ref(statuses) -> Dict[str, Any]:
+    """从状态列表中选择优先可用状态。"""
+    preferred_names = {"启用", "已启用", "正常", "active", "enabled"}
+    preferred_names_lower = {value.lower() for value in preferred_names}
+    for item in statuses:
+        name = str(item.get("name", "")).strip().lower()
+        if name in preferred_names_lower and item.get("id"):
+            return {"id": int(item["id"]), "name": item.get("name", "")}
+
+    if statuses and statuses[0].get("id"):
+        return {"id": int(statuses[0]["id"]), "name": statuses[0].get("name", "")}
+
+    return {}
+
+
 @pytest.fixture(scope="session")
 def test_config() -> Dict[str, Any]:
     """测试配置fixture - 从统一配置文件读取"""
@@ -109,16 +124,20 @@ def sdk_clients(work_session) -> Dict[str, Any]:
     返回所有SDK客户端的字典
     """
     try:
-        from sdk import (GoodsSDK, PartnerSDK, ProductSDK, ShelfSDK,
-                         StockinSDK, StockoutSDK, StoreSDK, WarehouseSDK)
+        from sdk import (GoodsInfoSDK, GoodsSDK, PartnerSDK, ProductInfoSDK,
+                         ProductSDK, ShelfSDK, StatusSDK, StockinSDK,
+                         StockoutSDK, StoreSDK, WarehouseSDK)
 
         clients = {
+            "status": StatusSDK(work_session),
             "warehouse": WarehouseSDK(work_session),
             "shelf": ShelfSDK(work_session),
             "store": StoreSDK(work_session),
             "product": ProductSDK(work_session),
+            "product_info": ProductInfoSDK(work_session),
             "partner": PartnerSDK(work_session),
             "goods": GoodsSDK(work_session),
+            "goods_info": GoodsInfoSDK(work_session),
             "stockin": StockinSDK(work_session),
             "stockout": StockoutSDK(work_session),
         }
@@ -130,6 +149,137 @@ def sdk_clients(work_session) -> Dict[str, Any]:
         pytest.fail(f"导入SDK失败: {e}")
     except Exception as e:
         pytest.fail(f"初始化SDK客户端失败: {e}")
+
+
+@pytest.fixture(scope="session")
+def resource_context(sdk_clients) -> Generator[Dict[str, Any], None, None]:
+    """为公共测试数据工厂准备真实依赖资源。"""
+    created_entities = {
+        "goods_info": [],
+        "product_info": [],
+        "product": [],
+        "store": [],
+        "shelf": [],
+        "warehouse": [],
+    }
+
+    status_list = sdk_clients["status"].filter_status({"page": 1, "size": 100}) or []
+    status_ref = _pick_status_ref(
+        [item for item in status_list if isinstance(item, dict) and item.get("id")]
+    )
+    if not status_ref:
+        pytest.fail("无法获取可用状态，公共测试资源初始化失败")
+
+    suffix = uuid.uuid4().hex[:8]
+
+    warehouse = sdk_clients["warehouse"].create_warehouse(
+        {
+            "name": f"PYTEST_WH_{suffix}",
+            "description": f"pytest公共仓库_{suffix}",
+        }
+    )
+    if not warehouse or "id" not in warehouse:
+        pytest.fail("创建公共仓库失败")
+    created_entities["warehouse"].append(int(warehouse["id"]))
+
+    shelf = sdk_clients["shelf"].create_shelf(
+        {
+            "description": f"pytest公共货架_{suffix}",
+            "capacity": 200,
+            "warehouse": {"id": int(warehouse["id"])},
+            "status": {"id": int(status_ref["id"])},
+        }
+    )
+    if not shelf or "id" not in shelf:
+        pytest.fail("创建公共货架失败")
+    created_entities["shelf"].append(int(shelf["id"]))
+
+    store = sdk_clients["store"].create_store(
+        {
+            "name": f"PYTEST_STORE_{suffix}",
+            "description": f"pytest公共店铺_{suffix}",
+        }
+    )
+    if not store or "id" not in store:
+        pytest.fail("创建公共店铺失败")
+    created_entities["store"].append(int(store["id"]))
+
+    product = sdk_clients["product"].create_product(
+        {
+            "name": f"PYTEST_PRODUCT_{suffix}",
+            "description": f"pytest公共产品_{suffix}",
+            "image": [],
+            "expire": 180,
+            "tags": ["pytest", "shared"],
+            "status": {"id": int(status_ref["id"])},
+        }
+    )
+    if not product or "id" not in product:
+        pytest.fail("创建公共产品失败")
+    created_entities["product"].append(int(product["id"]))
+
+    product_info = sdk_clients["product_info"].create_product_info(
+        {
+            "sku": f"9{int(time.time() * 1000) % 100000000}{random.randint(10, 99)}",
+            "description": f"pytest公共产品SKU_{suffix}",
+            "product": {"id": int(product["id"])},
+        }
+    )
+    if not product_info or "id" not in product_info:
+        pytest.fail("创建公共产品SKU失败")
+    created_entities["product_info"].append(int(product_info["id"]))
+
+    goods_info = sdk_clients["goods_info"].create_goods_info(
+        {
+            "sku": f"8{int(time.time() * 1000) % 100000000}{random.randint(10, 99)}",
+            "product": {"id": int(product_info["id"])},
+            "type": 1,
+            "count": 100,
+            "price": 99.99,
+            "shelf": [{"id": int(shelf["id"])}],
+        }
+    )
+    if not goods_info or "id" not in goods_info:
+        pytest.fail("创建公共商品SKU失败")
+    created_entities["goods_info"].append(int(goods_info["id"]))
+
+    context = {
+        "status": {"id": int(status_ref["id"])},
+        "warehouse": {"id": int(warehouse["id"])},
+        "shelf": {"id": int(shelf["id"])},
+        "store": {"id": int(store["id"])},
+        "product": {"id": int(product["id"])},
+        "product_info": {"id": int(product_info["id"])},
+        "goods_info": {
+            "id": int(goods_info["id"]),
+            "sku": goods_info.get("sku", ""),
+            "product": {"id": int(product_info["id"])},
+            "type": int(goods_info.get("type", 1)),
+            "count": int(goods_info.get("count", 100)),
+            "price": float(goods_info.get("price", 99.99)),
+            "shelf": goods_info.get("shelf") or [{"id": int(shelf["id"])}],
+        },
+    }
+
+    yield context
+
+    cleanup_plan = [
+        ("goods_info", "delete_goods_info"),
+        ("product_info", "delete_product_info"),
+        ("product", "delete_product"),
+        ("store", "delete_store"),
+        ("shelf", "delete_shelf"),
+        ("warehouse", "delete_warehouse"),
+    ]
+    for entity_type, method_name in cleanup_plan:
+        sdk = sdk_clients.get(entity_type)
+        if not sdk:
+            continue
+        for entity_id in reversed(created_entities[entity_type]):
+            try:
+                getattr(sdk, method_name)(int(entity_id))
+            except Exception as exc:
+                logger.warning("清理公共资源 %s(%s) 失败: %s", entity_type, entity_id, exc)
 
 
 @pytest.fixture
@@ -213,7 +363,7 @@ def execute_with_session_check(session_manager, ensure_session_valid):
 
 # 测试数据工厂fixtures
 @pytest.fixture
-def random_partner_data() -> Dict[str, Any]:
+def random_partner_data(resource_context) -> Dict[str, Any]:
     """随机合作伙伴数据工厂"""
     timestamp = int(time.time())
     random_id = random.randint(1000, 9999)
@@ -223,96 +373,78 @@ def random_partner_data() -> Dict[str, Any]:
         "telephone": f"138{random.randint(10000000, 99999999)}",
         "wechat": f"wechat_{random_id}",
         "description": f"测试合作伙伴描述_{timestamp}",
-        "status": {"id": 3},
+        "status": resource_context["status"],
     }
 
 
 @pytest.fixture
-def random_product_data() -> Dict[str, Any]:
+def random_product_data(resource_context) -> Dict[str, Any]:
     """随机产品数据工厂"""
     timestamp = int(time.time())
     random_id = random.randint(1000, 9999)
 
     return {
         "name": f"测试产品_{timestamp}_{random_id}",
-        "code": f"PROD_{random_id:04d}",
-        "price": round(random.uniform(10.0, 1000.0), 2),
         "description": f"测试产品描述_{timestamp}",
-        "status": {"id": 1},
+        "image": [],
+        "expire": random.randint(30, 365),
+        "tags": ["pytest", f"tag-{random_id}"],
+        "status": resource_context["status"],
     }
 
 
 @pytest.fixture
-def random_goods_data(random_product_data) -> Dict[str, Any]:
+def random_goods_data(resource_context) -> Dict[str, Any]:
     """随机商品数据工厂"""
     timestamp = int(time.time())
     random_id = random.randint(1000, 9999)
 
     return {
         "name": f"测试商品_{timestamp}_{random_id}",
-        "code": f"GOODS_{random_id:04d}",
         "sku": f"SKU_{random_id:04d}_{timestamp}",
         "price": round(random.uniform(5.0, 500.0), 2),
         "count": random.randint(1, 1000),
         "description": f"测试商品描述_{timestamp}",
-        "status": {"id": 1},
-        "product": {"id": 1},  # 默认产品ID
-        "shelf": [{"id": 1}],  # shelf应该是数组
-        "store": {"id": 1},  # 需要store字段
+        "parameter": f"参数_{random_id}",
+        "serviceInfo": f"服务信息_{timestamp}",
+        "status": resource_context["status"],
+        "product": resource_context["product_info"],
+        "shelf": [resource_context["shelf"]],
+        "store": resource_context["store"],
     }
 
 
 @pytest.fixture
-def random_stockin_data(random_goods_data) -> Dict[str, Any]:
+def random_stockin_data(resource_context) -> Dict[str, Any]:
     """随机入库数据工厂"""
     timestamp = int(time.time())
+    goods_info_ref = dict(resource_context["goods_info"])
+    goods_info_ref["count"] = random.randint(1, 100)
+    goods_info_ref["price"] = round(random.uniform(5.0, 500.0), 2)
+    goods_info_ref["type"] = 1
 
     return {
-        "warehouse": {"id": 1},
-        "goodsInfo": [
-            {
-                "id": 1,
-                "sku": f"SKU_{random.randint(1000, 9999):04d}_{timestamp}",
-                "product": {"id": 1},
-                "type": 1,
-                "count": random.randint(1, 100),
-                "price": round(random.uniform(5.0, 500.0), 2),
-                "shelf": [{"id": 1}],
-            }
-        ],
-        "quantity": random.randint(1, 100),
-        "type": "in",
-        "remark": f"测试入库_{timestamp}",
-        "operator": f"operator_{random.randint(1, 100)}",
-        "status": {"id": 1},
-        "store": {"id": 1},
+        "goodsInfo": [goods_info_ref],
+        "description": f"测试入库_{timestamp}",
+        "status": resource_context["status"],
+        "store": resource_context["store"],
     }
 
 
 @pytest.fixture
-def random_stockout_data(random_goods_data) -> Dict[str, Any]:
+def random_stockout_data(resource_context) -> Dict[str, Any]:
     """随机出库数据工厂"""
     timestamp = int(time.time())
+    goods_info_ref = dict(resource_context["goods_info"])
+    goods_info_ref["count"] = random.randint(1, 50)
+    goods_info_ref["price"] = round(random.uniform(5.0, 500.0), 2)
+    goods_info_ref["type"] = 2
 
     return {
-        "warehouse": {"id": 1},
-        "goodsInfo": [
-            {
-                "id": 1,
-                "sku": f"SKU_{random.randint(1000, 9999):04d}_{timestamp}",
-                "product": {"id": 1},
-                "type": 2,
-                "count": random.randint(1, 50),
-                "price": round(random.uniform(5.0, 500.0), 2),
-                "shelf": [{"id": 1}],
-            }
-        ],
-        "quantity": random.randint(1, 50),
-        "type": "out",
-        "remark": f"测试出库_{timestamp}",
-        "operator": f"operator_{random.randint(1, 100)}",
-        "status": {"id": 1},
-        "store": {"id": 1},
+        "goodsInfo": [goods_info_ref],
+        "description": f"测试出库_{timestamp}",
+        "status": resource_context["status"],
+        "store": resource_context["store"],
     }
 
 
@@ -325,7 +457,12 @@ def entity_cleanup(sdk_clients) -> Generator:
     created_entities = {
         "partner": [],
         "product": [],
+        "product_info": [],
         "goods": [],
+        "goods_info": [],
+        "store": [],
+        "shelf": [],
+        "warehouse": [],
         "stockin": [],
         "stockout": [],
     }
@@ -335,7 +472,20 @@ def entity_cleanup(sdk_clients) -> Generator:
     # 测试结束后清理实体
     logger.info("清理测试创建的实体")
 
-    for entity_type, entity_ids in created_entities.items():
+    cleanup_order = [
+        "stockin",
+        "stockout",
+        "goods",
+        "goods_info",
+        "product_info",
+        "product",
+        "store",
+        "shelf",
+        "warehouse",
+        "partner",
+    ]
+    for entity_type in cleanup_order:
+        entity_ids = created_entities.get(entity_type) or []
         if not entity_ids:
             continue
 
@@ -349,8 +499,18 @@ def entity_cleanup(sdk_clients) -> Generator:
                     sdk_client.delete_partner(int(entity_id))
                 elif entity_type == "product":
                     sdk_client.delete_product(int(entity_id))
+                elif entity_type == "product_info":
+                    sdk_client.delete_product_info(int(entity_id))
                 elif entity_type == "goods":
                     sdk_client.delete_goods(int(entity_id))
+                elif entity_type == "goods_info":
+                    sdk_client.delete_goods_info(int(entity_id))
+                elif entity_type == "store":
+                    sdk_client.delete_store(int(entity_id))
+                elif entity_type == "shelf":
+                    sdk_client.delete_shelf(int(entity_id))
+                elif entity_type == "warehouse":
+                    sdk_client.delete_warehouse(int(entity_id))
                 elif entity_type == "stockin":
                     sdk_client.delete_stockin(int(entity_id))
                 elif entity_type == "stockout":
