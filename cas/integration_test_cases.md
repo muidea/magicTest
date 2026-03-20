@@ -1,131 +1,81 @@
-# 集成测试用例分类整理
+# CAS E2E 集成用例
 
-## 1. 集成测试概述
+## 已落地场景
 
-集成测试验证多个实体间的依赖关系、数据一致性和业务流程完整性。CAS系统中的核心实体依赖关系为：
-```
-Role (基础) → Account (依赖 Role) → Endpoint (依赖 Account & Role)
-Namespace 为独立管理实体，但在权限校验逻辑中常与 Scope 字段关联。
-```
+### IT-001 命名空间治理边界
 
-## 2. 集成测试场景
+- panel 默认 namespace 的治理 scope 为 `*`
+- 新建 namespace 未显式指定 scope 时，默认回填为 namespace 自身名称
+- 被纳入 `Namespace.Scope` 的超级 namespace 可以更新、删除目标 namespace
+- scope 外 namespace 不能越权管理其他 namespace
 
-### 场景 IT1: 完整依赖链测试
-- **测试类型**: 正向流程集成
-- **前置条件**: 无
-- **测试步骤**:
-  1. 创建 Role
-  2. 创建关联该 Role 的 Account
-  3. 创建关联该 Account 和 Role 的 Endpoint
-  4. 验证整个依赖链的完整性
-  5. 删除 Endpoint → Account → Role（反向删除）
-- **预期结果**: 依赖链正确处理，删除顺序正确
-- **涉及实体**: Role, Account, Endpoint
-- **测试用例ID**: IT-TC-001
+对应测试：
+- [namespace_test.py](/home/rangh/codespace/magicTest/cas/namespace/namespace_test.py)
 
-### 场景 IT2: 跨实体过滤测试
-- **测试类型**: 查询集成
-- **前置条件**: 创建多个关联实体
-- **测试步骤**:
-  1. 创建多个 Role、Account、Endpoint
-  2. 使用复杂过滤条件跨实体查询
-  3. 验证过滤结果的正确性
-  4. 测试分页和排序
-- **预期结果**: 跨实体过滤功能正常
-- **涉及实体**: Role, Account, Endpoint, Namespace
-- **测试用例ID**: IT-TC-002
+### IT-002 Role 与 Account 绑定
 
-### 场景 IT3: 并发操作测试
-- **测试类型**: 并发集成
-- **前置条件**: 基础数据已创建
-- **测试步骤**:
-  1. 并发创建关联实体
-  2. 并发更新同一实体
-  3. 并发删除和查询
-  4. 验证数据一致性和锁机制
-- **预期结果**: 并发操作正确处理，数据一致
-- **涉及实体**: 所有实体
-- **测试用例ID**: IT-TC-003
+- `Account` 创建必须绑定有效 `Role`
+- 绑定禁用 `Role` 的 `Account` 不允许创建
+- `Role` 被禁用后，关联 `Account` 登录应失败
+- `Account` 更新后应保留既有 `Role` 绑定
+- 重复 `Role` 名称在同 namespace 下应被拒绝，不再走隐式 update
 
-## 3. 详细测试用例
+对应测试：
+- [account_test.py](/home/rangh/codespace/magicTest/cas/account/account_test.py)
+- [role_test.py](/home/rangh/codespace/magicTest/cas/role/role_test.py)
 
-### 3.1 依赖关系测试用例
+### IT-003 Endpoint 显式授权对象
 
-| 用例ID | 测试类型 | 描述 | 测试步骤 | 预期结果 |
-|--------|----------|------|----------|----------|
-| IT-TC-101 | 正向依赖 | Role→Account依赖 | 1. 创建Role<br>2. 创建关联该Role的Account<br>3. 验证关联正确性 | Account正确关联Role |
-| IT-TC-102 | 正向依赖 | Account→Endpoint依赖 | 1. 创建Account<br>2. 创建关联该Account的Endpoint<br>3. 验证关联正确性 | Endpoint正确关联Account |
-| IT-TC-103 | 反向删除 | 删除被依赖实体 | 1. 删除被Account依赖的Role<br>2. 验证级联删除或错误处理 | 正确处理依赖约束 |
-| IT-TC-104 | 反向删除 | 删除被Endpoint依赖的Account | 1. 删除被Endpoint依赖的Account<br>2. 验证级联删除或错误处理 | 正确处理依赖约束 |
+- `Endpoint` 创建时必须显式绑定 `Account`、`Role`、`Scope`
+- `Endpoint.Scope` 作为运行态数据访问边界被原样保留
+- 禁用 `Role` 不允许作为 `Endpoint` 绑定对象
+- 禁用 `Account` 不允许作为 `Endpoint` 绑定对象
+- 未显式提供 `Scope` 的 `Endpoint` 创建应失败
 
-### 3.2 数据一致性测试用例
+对应测试：
+- [endpoint_test.py](/home/rangh/codespace/magicTest/cas/endpoint/endpoint_test.py)
 
-| 用例ID | 测试类型 | 描述 | 测试步骤 | 预期结果 |
-|--------|----------|------|----------|----------|
-| IT-TC-201 | 一致性 | 实体状态同步 | 1. 更新Role状态为禁用<br>2. 验证关联Account的访问权限 | 状态变更正确传播 |
-| IT-TC-202 | 一致性 | 时间范围一致性 | 1. 创建有时间范围的Namespace<br>2. 在该Namespace内创建Endpoint<br>3. 验证时间范围约束 | 时间约束正确应用 |
-| IT-TC-203 | 一致性 | 作用域一致性 | 1. 创建特定作用域的Namespace<br>2. 在该Namespace内创建实体<br>3. 验证作用域隔离 | 作用域隔离正确 |
+### IT-004 AuthSecret 凭证签发与外部授信访问
 
-### 3.3 业务流程测试用例
+- `AllocateAuthSecret` 以 `Account` 实体为输入时，可生成新的 endpoint 凭证
+- `AllocateAuthSecret` 以 `Account` 实体为输入时，显式 `Role` 覆盖应生效
+- `AllocateAuthSecret` 以 `Endpoint` 实体为输入时，会沿用源 endpoint 的账号与 role 绑定，且不允许显式 `Role` 覆盖
+- `AllocateAuthSecret` 只允许对当前请求 namespace 下的实体签发，跨 namespace 实体必须拒绝
+- 生成的 `AuthSecret` 可被 `MagicSession.bind_auth_secret()` 作为 endpoint 凭证使用
+- endpoint 删除、endpoint 失效、绑定 account 失效、绑定 role 失效后，运行态 `AuthSecret` 应被拒绝
 
-| 用例ID | 测试类型 | 描述 | 测试步骤 | 预期结果 |
-|--------|----------|------|----------|----------|
-| IT-TC-301 | 流程 | 用户注册流程 | 1. 创建Namespace<br>2. 创建Role<br>3. 创建Account<br>4. 创建Endpoint | 完整流程成功 |
-| IT-TC-302 | 流程 | 权限变更流程 | 1. 更新Role权限<br>2. 验证关联Endpoint的权限变更 | 权限变更正确传播 |
-| IT-TC-303 | 流程 | 命名空间迁移 | 1. 将Account从一个Namespace迁移到另一个<br>2. 验证关联实体的命名空间更新 | 迁移流程正确 |
+对应测试：
+- [endpoint_test.py](/home/rangh/codespace/magicTest/cas/endpoint/endpoint_test.py)
+- [cas_api_test.py](/home/rangh/codespace/magicTest/cas/cas_api_test.py)
 
-## 4. 性能测试场景
+### IT-005 基础链路冒烟
 
-### 场景 PT1: 大数据量性能测试
-- **测试类型**: 性能集成
-- **前置条件**: 无
-- **测试步骤**:
-  1. 批量创建大量实体（1000+）
-  2. 测试查询性能
-  3. 测试过滤性能
-  4. 测试更新性能
-- **预期结果**: 性能指标符合要求
-- **测试用例ID**: PT-TC-001
+- 默认 `panel` namespace 启动后应具备默认 role / account / endpoint 初始化链
+- `namespace -> role -> account -> endpoint` 基础开通链路
+- `account login -> refresh -> logout` 会话链路
 
-### 场景 PT2: 高并发性能测试
-- **测试类型**: 并发性能
-- **前置条件**: 基础数据已创建
-- **测试步骤**:
-  1. 模拟多用户并发操作
-  2. 测试系统吞吐量
-  3. 测试响应时间
-  4. 测试错误率
-- **预期结果**: 系统稳定，性能达标
-- **测试用例ID**: PT-TC-002
+对应测试：
+- [basic_scenario_test.py](/home/rangh/codespace/magicTest/cas/basic_scenario_test.py)
 
-## 5. 测试统计
+### IT-006 CAS 运行态接口语义
 
-| 测试类型 | 场景数量 | 用例数量 | 完成状态 |
-|----------|----------|----------|----------|
-| 集成场景 | 3 | 3 | 待实现 |
-| 依赖关系 | - | 4 | 待实现 |
-| 数据一致性 | - | 3 | 待实现 |
-| 业务流程 | - | 3 | 待实现 |
-| 性能测试 | 2 | 2 | 待实现 |
-| **总计** | **5** | **15** | **待实现** |
+- `verifyAccount` 仅接受正确账号密码
+- `updateAccountPassword` 必须校验旧密码，且只能由当前绑定 account 本人 session 修改
+- endpoint session 不允许代改绑定 account 密码
+- `queryEntity/queryEntityRole` 同时覆盖 `Account` 与 `Endpoint` 实体
+- 无 `ReadPermission` / `WritePermission` 的低权限角色不应访问 `filterEntity`、`queryEntity`、`queryEntityRole`、`updateAccountPassword`
+- `verifySessionNamespace` 同时覆盖普通 namespace 拒绝越权和 `panel` 全局 scope 放行
+- `verifySessionEntity/verifySessionEntityRole` 覆盖 JWT 与 endpoint 两条会话路径
+- `verifySessionEntity/verifySessionEntityRole` 对错误 `entityID` 必须拒绝
+- `refresh` 必须把 namespace 最新 scope 写入新 JWT，而不是沿用旧 token scope
+- 绑定 `Role` 已失效时，已登录 JWT 的 `refresh` 必须拒绝
 
-## 6. 测试优先级
+对应测试：
+- [cas_api_test.py](/home/rangh/codespace/magicTest/cas/cas_api_test.py)
 
-1. **P0 (高优先级)**: IT-TC-001, IT-TC-101, IT-TC-102 (核心依赖链)
-2. **P1 (中优先级)**: IT-TC-002, IT-TC-201, IT-TC-202, IT-TC-301 (常用集成场景)
-3. **P2 (低优先级)**: IT-TC-003, IT-TC-103, IT-TC-104, PT-TC-001, PT-TC-002 (高级场景)
+## 当前执行约定
 
-## 7. 测试环境要求
-
-- **数据库**: 需要支持事务和并发控制
-- **测试数据**: 需要预置基础测试数据
-- **监控工具**: 需要性能监控和日志记录
-- **并发工具**: 需要支持并发测试的工具
-
-## 8. 测试执行指南
-
-1. **准备阶段**: 创建测试数据库，初始化测试环境
-2. **单元测试**: 先完成各实体的单元测试
-3. **集成测试**: 按照依赖顺序执行集成测试
-4. **性能测试**: 在集成测试通过后执行性能测试
-5. **验证阶段**: 验证测试结果，生成测试报告
+- 默认入口：`MAGICTEST_CAS_BASE_URL`，缺省为 `https://panel.local.vpc`
+- 默认治理 namespace：`panel`
+- 环境不可达时测试直接 `skip`
+- 这组用例优先验证设计一致性，不做性能和高并发场景

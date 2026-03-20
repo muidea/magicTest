@@ -2,7 +2,7 @@
 
 ## 概述
 
-`Endpoint` 类是一个用于管理 CAS (Central Authentication Service) 端点的 Python 客户端。它提供了端点的完整 CRUD 操作（创建、读取、更新、删除）以及过滤查询功能，通过 HTTP 请求与后端 CAS API 通信。端点用于定义 API 访问路径及其关联的权限控制。
+`Endpoint` 类是一个用于管理 CAS (Central Authentication Service) 显式授权对象的 Python 客户端。它提供端点的 CRUD 操作（创建、读取、更新、删除）以及过滤查询功能，通过 HTTP 请求与后端 CAS API 通信。当前 `Endpoint` 的业务语义是“绑定 `Account`、`Role`、`Scope` 的访问授权对象”，不是旧版“API 路径对象”。
 
 **文件位置**: [`magicTest/cas/endpoint/endpoint.py`](magicTest/cas/endpoint/endpoint.py)
 
@@ -32,7 +32,7 @@ class Endpoint:
 
 **参数**:
 
-- `param`: `dict` - 过滤条件参数，支持按端点路径、状态、作用域、时间范围等字段过滤
+- `param`: `dict` - 过滤条件参数，支持按名称、状态、作用域、时间范围等字段过滤
 
 **返回**: `list` 或 `None` - 匹配的端点列表，失败返回 `None`
 
@@ -48,7 +48,7 @@ class Endpoint:
 **示例**:
 
 ```python
-filter_param = {'endpoint': '/api/v1/test', 'status': 2}
+filter_param = {'name': 'users', 'status': 2}
 endpoints = endpoint_app.filter_endpoint(filter_param)
 ```
 
@@ -89,7 +89,7 @@ endpoint_info = endpoint_app.query_endpoint(endpoint_id)
   - `description`: `str` - 端点描述
   - `account`: `dict` - 关联的账户信息（AccountLite 对象）
   - `role`: `dict` - 关联的角色信息（RoleLite 对象）
-  - `scope`: `str` - 作用域（如 "\*" 表示全局，"n1,n2" 表示多作用域）
+  - `scope`: `str` - 运行态数据访问范围（例如 `tenant-a:orders(r)`）
   - `status`: `int` - 状态（1=禁用，2=启用）
   - `startTime`: `int` - 开始时间（UTC 毫秒时间戳）
   - `expireTime`: `int` - 过期时间（UTC 毫秒时间戳）
@@ -113,7 +113,7 @@ param = {
     'description': '用户管理端点',
     'account': {'id': 1, 'account': 'admin', 'status': 2},
     'role': {'id': 1, 'name': 'administrator', 'status': 2},
-    'scope': '*',
+    'scope': 'tenant-a:users(r);tenant-a:users(w)',
     'status': 2,
     'startTime': 1672531200000,
     'expireTime': 1675123200000
@@ -147,7 +147,7 @@ update_param = {
     'id': '1234567890abcdef',
     'name': 'users',
     'description': '更新后的用户管理端点',
-    'scope': 'n1,n2',
+    'scope': 'tenant-a:reports(r)',
     'status': 1,
     'startTime': 1672531200000,
     'expireTime': 1675123200000
@@ -192,7 +192,7 @@ deleted_endpoint = endpoint_app.delete_endpoint(endpoint_id)
 **参数说明**:
 
 - 自动生成当前时间戳和未来30天的时间戳
-- 使用 `mock.common` 模块生成随机端点路径和描述
+- 使用 `mock.common` 模块生成随机 endpoint 名称和描述
 - 创建模拟的 AccountLite 和 RoleLite 对象
 - 默认状态为启用（2）
 - 默认作用域为全局（"\*"）
@@ -248,7 +248,7 @@ param = mock_endpoint_param()
 | `description` | `str`  | 端点描述                    | `"用户管理端点"`                                  |
 | `account`     | `dict` | 关联账户信息（AccountLite） | `{'id': 1, 'account': 'admin', 'status': 2}`      |
 | `role`        | `dict` | 关联角色信息（RoleLite）    | `{'id': 1, 'name': 'administrator', 'status': 2}` |
-| `scope`       | `str`  | 作用域定义                  | `"*"`, `"n1,n2"`, `""`                            |
+| `scope`       | `str`  | 运行态数据范围定义          | `"tenant-a:orders(r)"`, `"tenant-a:orders(w)"`   |
 | `status`      | `int`  | 状态（1=禁用，2=启用）      | `2`                                               |
 | `startTime`   | `int`  | 开始时间（UTC 毫秒时间戳）  | `1672531200000`                                   |
 | `expireTime`  | `int`  | 过期时间（UTC 毫秒时间戳）  | `1675123200000`                                   |
@@ -271,9 +271,9 @@ param = mock_endpoint_param()
 
 ### 作用域说明
 
-- `"*"`: 全局作用域，可访问所有命名空间
-- `"n1,n2,n3"`: 多作用域，可访问指定的命名空间列表
-- `""`: 空作用域，仅限自身访问
+- `Endpoint.Scope` 是运行态数据范围，不是 namespace 管理范围。
+- 当前推荐写法是业务数据范围表达式，例如 `tenant-a:orders(r)`、`tenant-a:inventory(w)`。
+- 创建和更新时都必须显式提供 `scope`，空值应视为非法输入。
 
 ### 状态说明
 
@@ -326,7 +326,7 @@ from endpoint.endpoint import mock_endpoint_param
 param = mock_endpoint_param()
 new_endpoint = endpoint_app.create_endpoint(param)
 if new_endpoint:
-    print(f"创建成功: {new_endpoint['endpoint']} (ID: {new_endpoint['id']})")
+    print(f"创建成功: {new_endpoint['name']} (ID: {new_endpoint['id']})")
 
     # 查询端点
     queried_endpoint = endpoint_app.query_endpoint(new_endpoint['id'])
@@ -335,18 +335,18 @@ if new_endpoint:
     # 更新端点
     update_param = new_endpoint.copy()
     update_param['description'] = '更新后的描述'
-    update_param['scope'] = 'n1,n2'
+    update_param['scope'] = 'tenant-a:reports(r)'
     update_param['status'] = 1
     updated_endpoint = endpoint_app.update_endpoint(update_param)
 
     # 过滤端点
-    filter_param = {'endpoint': new_endpoint['endpoint']}
+    filter_param = {'name': new_endpoint['name']}
     filtered_endpoints = endpoint_app.filter_endpoint(filter_param)
     print(f"过滤结果: {len(filtered_endpoints)} 个端点")
 
     # 删除端点
     deleted_endpoint = endpoint_app.delete_endpoint(new_endpoint['id'])
-    print(f"删除成功: {deleted_endpoint['endpoint']}")
+    print(f"删除成功: {deleted_endpoint['name']}")
 ```
 
 ### 测试场景示例
@@ -391,7 +391,7 @@ def test_endpoint_timeliness():
 1. **认证要求**: 所有操作需要有效的 CAS 会话令牌
 2. **关联对象验证**: 创建端点时需要有效的 Account 和 Role 对象
 3. **时间逻辑**: `startTime` 必须小于 `expireTime`，否则创建会失败
-4. **端点路径唯一性**: 同一路径的端点不能重复创建
+4. **端点名称唯一性**: 同 namespace 下同名 endpoint 不能重复创建
 5. **作用域逻辑**: 作用域字段影响端点的访问权限
 6. **错误处理**: 调用方需要检查每个方法的返回值
 7. **日志配置**: 需要预先配置 Python logging 以查看日志输出
@@ -404,8 +404,8 @@ def test_endpoint_timeliness():
 4. **添加类型提示**: 为方法参数和返回值添加类型提示
 5. **完善验证逻辑**: 增加输入参数验证和业务规则验证
 6. **支持异步操作**: 添加异步 API 支持以提高性能
-7. **添加端点权限验证**: 增加端点访问权限验证功能
-8. **支持端点分组**: 添加端点分组管理功能
+7. **补充 `AuthSecret` 联动样例**: 演示 endpoint 与 `AllocateAuthSecret` 的配合关系
+8. **补充运行态验证样例**: 演示 endpoint 失效、绑定 account/role 失效后的校验结果
 
 ## 相关文件
 
@@ -417,3 +417,9 @@ def test_endpoint_timeliness():
 - [`magicTest/mock/common.py`](magicTest/mock/common.py): 模拟数据生成工具
 - [`magicTest/cas/account/account.py`](magicTest/cas/account/account.py): Account 客户端（依赖）
 - [`magicTest/cas/role/role.py`](magicTest/cas/role/role.py): Role 客户端（依赖）
+# 当前说明
+
+> 本文包含历史样例，当前以 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [magicTest/cas/integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+> 当前有效口径：
+> `Endpoint` 是显式授权对象，必须绑定有效 `Account`、有效 `Role`、显式 `Scope`。
+> `Endpoint.Scope` 是运行态数据访问边界，不再按旧版“全局/逗号列表”口径理解。

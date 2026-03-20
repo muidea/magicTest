@@ -93,7 +93,7 @@ namespace_info = namespace_app.query_namespace(namespace_id)
   - `status`: `int` - 状态（1=禁用，2=启用）
   - `startTime`: `int` - 开始时间（UTC 毫秒时间戳）
   - `expireTime`: `int` - 过期时间（UTC 毫秒时间戳）
-  - `scope`: `str` - 作用域（如 "\*" 表示全局，"n1,n2" 表示多作用域）
+  - `scope`: `str` - namespace 管理范围（如 `*` 或 `manager;child:*`）
 
 **返回**: `dict` 或 `None` - 创建的命名空间信息，失败返回 `None`
 
@@ -147,7 +147,7 @@ update_param = {
     'name': 'updated-namespace',
     'description': '更新后的描述',
     'status': 1,
-    'scope': 'n1,n2'
+    'scope': 'manager;child:*'
 }
 updated_namespace = namespace_app.update_namespace(update_param)
 ```
@@ -243,13 +243,14 @@ param = mock_namespace_param()
 | `status`      | `int` | 状态（1=禁用，2=启用）     | `2`                    |
 | `startTime`   | `int` | 开始时间（UTC 毫秒时间戳） | `1672531200000`        |
 | `expireTime`  | `int` | 过期时间（UTC 毫秒时间戳） | `1675123200000`        |
-| `scope`       | `str` | 作用域定义                 | `"*"`, `"n1,n2"`, `""` |
+| `scope`       | `str` | namespace 管理范围定义     | `"*"`, `"manager;child:*"` |
 
 ### 作用域说明
 
-- `"*"`: 全局作用域，可访问所有命名空间
-- `"n1,n2,n3"`: 多作用域，可访问指定的命名空间列表
-- `""`: 空作用域，仅限自身访问
+- `Namespace.Scope` 是 namespace 的治理范围。
+- `*` 表示全局治理范围。
+- `manager;child:*` 表示 `manager` namespace 可以管理 `child` namespace。
+- 新建 namespace 未显式指定 `scope` 时，当前实现会默认回填为 namespace 自身名称。
 
 ## 依赖关系
 
@@ -340,3 +341,9 @@ if new_ns:
 - [`magicTest/session/session.py`](magicTest/session/session.py): HTTP 会话管理
 - [`magicTest/cas/cas/cas.py`](magicTest/cas/cas/cas.py): CAS 认证客户端
 - [`magicTest/mock/common.py`](magicTest/mock/common.py): 模拟数据生成工具
+# 当前说明
+
+> 本文包含历史样例，当前以 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [magicTest/cas/integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+> 当前有效口径：
+> `Namespace.Scope` 是治理范围，不是旧版“逗号分隔访问列表”语义。
+> 新建 namespace 未显式传入 `scope` 时，应默认回填为 namespace 自身名称。

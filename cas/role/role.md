@@ -2,7 +2,7 @@
 
 ## 概述
 
-`Role` 类是一个用于管理 CAS (Central Authentication Service) 角色的 Python 客户端。它提供了角色的完整 CRUD 操作（创建、读取、更新、删除）以及过滤查询功能，通过 HTTP 请求与后端 CAS API 通信。角色是权限的集合，用于定义用户的访问权限。
+`Role` 类是 `magicTest/cas` 中用于管理 CAS 角色的轻量客户端。它提供角色的 CRUD 与过滤查询，供 e2e 用例验证当前 `magicCas` 设计语义。
 
 **文件位置**: [`magicTest/cas/role/role.py`](magicTest/cas/role/role.py)
 
@@ -89,10 +89,9 @@ role_info = role_app.query_role(role_id)
   - `description`: `str` - 角色描述
   - `group`: `str` - 角色所属组别（如 "admin"、"user"）
   - `privilege`: `list` - 权限列表，每个权限包含以下字段：
-    - `id`: `int` - 权限ID
     - `module`: `str` - 模块名称
     - `uriPath`: `str` - URI路径
-    - `value`: `int` - 权限值（1=读，2=写，3=执行等）
+    - `value`: `int` - 权限值
     - `description`: `str` - 权限描述
   - `status`: `int` - 状态（1=禁用，2=启用）
 
@@ -226,7 +225,7 @@ param = mock_role_param("test-namespace")
 1. 创建会话并登录 CAS
 2. 生成模拟参数并创建角色
 3. 验证创建结果
-4. 创建重复角色（测试重复名称处理）
+4. 创建重复角色（验证当前服务端拒绝重复名称）
 5. 过滤查询角色
 6. 查询单个角色
 7. 更新角色
@@ -243,6 +242,12 @@ param = mock_role_param("test-namespace")
    - `logger.error()`: 记录错误详情，包括错误代码和消息
    - `logger.info()`: 记录成功操作
 4. **错误返回类型**: 所有方法在失败时返回 `None`
+
+## 当前语义补充
+
+- `Role` 是功能与操作权限集合。
+- 当前 e2e 重点只验证 privilege 是否被显式保留，不在这里扩展权限语义推导。
+- 同 namespace 下重复创建同名 role，当前实现会直接拒绝，不再走 update 语义。
 
 ## 角色数据结构
 

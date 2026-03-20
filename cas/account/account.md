@@ -2,7 +2,7 @@
 
 ## 概述
 
-`Account` 类是一个用于管理 CAS (Central Authentication Service) 账户的 Python 客户端。它提供了账户的完整 CRUD 操作（创建、读取、更新、删除）以及过滤查询功能，通过 HTTP 请求与后端 CAS API 通信。账户是系统用户的基本实体，可以关联角色和命名空间。
+`Account` 类是一个用于管理 CAS (Central Authentication Service) 账户的 Python 客户端。它提供账户的 CRUD 操作（创建、读取、更新、删除）以及过滤查询功能，通过 HTTP 请求与后端 CAS API 通信。`Account` 是归属主体，必须绑定有效 `Role`。
 
 **文件位置**: [`magicTest/cas/account/account.py`](magicTest/cas/account/account.py)
 
@@ -89,8 +89,7 @@ account_info = account_app.query_account(account_id)
   - `password`: `str` - 账户密码
   - `email`: `str` - 邮箱地址
   - `description`: `str` - 账户描述
-  - `namespace`: `str` - 命名空间标识符
-  - `roleLite`: `dict` - 可选的角色关联信息，包含：
+  - `role`: `dict` - 必填的角色关联信息，包含：
     - `id`: `int` - 角色ID
     - `name`: `str` - 角色名称
 
@@ -113,8 +112,7 @@ param = {
     'password': 'SecurePass123',
     'email': 'test@example.com',
     'description': '测试账户',
-    'namespace': 'default',
-    'roleLite': {
+    'role': {
         'id': 1,
         'name': '管理员'
     }
@@ -149,7 +147,6 @@ update_param = {
     'account': 'updateduser',
     'email': 'updated@example.com',
     'description': '更新后的描述',
-    'namespace': 'new-namespace'
 }
 updated_account = account_app.update_account(update_param)
 ```
@@ -196,7 +193,7 @@ deleted_account = account_app.delete_account(account_id)
 
 - 使用 `mock.common` 模块生成随机账户名、邮箱和描述
 - 默认密码为 "123"
-- 使用传入的命名空间参数
+- 命名空间由 `MagicSession` 上下文决定，不在 `Account` 请求体中单独传递
 
 **示例**:
 
@@ -247,8 +244,7 @@ param = mock_account_param("test-namespace")
 | `account`     | `str`  | 账户名称               | `"testuser"`                  |
 | `email`       | `str`  | 邮箱地址               | `"test@example.com"`          |
 | `description` | `str`  | 账户描述               | `"测试账户"`                  |
-| `namespace`   | `str`  | 命名空间标识符         | `"default"`                   |
-| `roleLite`    | `dict` | 关联的角色信息（可选） | `{"id": 1, "name": "管理员"}` |
+| `role`        | `dict` | 关联的角色信息（必填） | `{"id": 1, "name": "管理员"}` |
 
 ### 角色关联对象结构
 
@@ -339,9 +335,9 @@ if new_account:
 
 1. **认证要求**: 所有操作需要有效的 CAS 会话令牌
 2. **命名空间隔离**: 账户受命名空间隔离，不同命名空间的账户可以同名
-3. **角色关联**: 角色关联是可选的，但关联的角色必须存在
+3. **角色关联**: 角色关联是必填的，且关联的角色必须存在并有效
 4. **密码安全**: 密码在传输和存储时会被加密，返回的账户信息中不包含明文密码
-5. **邮箱唯一性**: 邮箱地址在系统中应该是唯一的（除非有命名空间隔离）
+5. **邮箱唯一性**: 当前设计不依赖邮箱唯一性，主约束是同 namespace 下 `account` 名称唯一
 6. **错误处理**: 调用方需要检查每个方法的返回值
 7. **日志配置**: 需要预先配置 Python logging 以查看日志输出
 
@@ -367,3 +363,9 @@ if new_account:
 - [`magicTest/cas/role/role.py`](magicTest/cas/role/role.py): Role 模块（账户可能关联角色）
 - [`magicTest/cas/namespace/namespace_documentation.md`](magicTest/cas/namespace/namespace_documentation.md): Namespace 模块文档
 - [`magicTest/cas/role/role_documentation.md`](magicTest/cas/role/role_documentation.md): Role 模块文档
+# 当前说明
+
+> 本文包含历史样例，当前以 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [magicTest/cas/integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+> 当前有效口径：
+> 当前请求体中的角色绑定字段为 `role`。
+> namespace 由当前会话上下文决定，不在 `Account` 请求体中单独传递。

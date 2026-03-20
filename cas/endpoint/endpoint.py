@@ -1,4 +1,4 @@
-"""Account"""
+"""Endpoint"""
 
 import logging
 from session import session
@@ -78,29 +78,13 @@ def mock_endpoint_param():
     # 生成未来30天的 UTC 毫秒时间戳作为过期时间
     expire_time_ms = current_time_ms + 30 * 24 * 60 * 60 * 1000
     
-    # 创建 AccountLite 对象
-    account_lite = {
-        'id': 1,
-        'account': 'admin',
-        'status': 2  # 启用状态
-    }
-    
-    # 创建 RoleLite 对象
-    role_lite = {
-        'id': 1,
-        'name': 'administrator',
-        'status': 2  # 启用状态
-    }
-    
     return {
         'name': common.word(),
         'description': common.sentence(),
-        'account': account_lite,
-        'role': role_lite,
-        'scope': '*',  # 全局作用域
-        'status': 2,  # 启用状态
-        'startTime': current_time_ms,  # UTC 毫秒时间戳
-        'expireTime': expire_time_ms,  # UTC 毫秒时间戳
+        'scope': f'{common.word()}:*',
+        'status': 2,
+        'startTime': current_time_ms,
+        'expireTime': expire_time_ms,
     }
 
 
@@ -113,8 +97,38 @@ def main(server_url, namespace):
         return False
 
     work_session.bind_token(cas_session.get_session_token())
+    from role.role import Role
+    from account.account import Account
+
+    role_app = Role(work_session)
+    role = role_app.create_role({
+        'name': f"role_{common.word()}",
+        'description': 'endpoint smoke role',
+        'group': 'smoke',
+        'privilege': [{'module': '*', 'uriPath': '*', 'value': 5, 'description': 'all'}],
+        'status': 2,
+    })
+    if not role:
+        logger.error('创建角色失败')
+        return False
+
+    account_app = Account(work_session)
+    account = account_app.create_account({
+        'account': f"account_{common.word()}",
+        'password': '123',
+        'email': common.email(),
+        'description': 'endpoint smoke account',
+        'role': {'id': role['id'], 'name': role['name'], 'status': role['status']},
+    })
+    if not account:
+        logger.error('创建账户失败')
+        role_app.delete_role(role['id'])
+        return False
+
     app = Endpoint(work_session)
     param = mock_endpoint_param()
+    param['account'] = {'id': account['id'], 'account': account['account'], 'status': account['status']}
+    param['role'] = {'id': role['id'], 'name': role['name'], 'status': role['status']}
     
     # 保存原始参数用于验证
     original_param = param.copy()
@@ -165,6 +179,8 @@ def main(server_url, namespace):
     duplicate_endpoint = app.create_endpoint(new_endpoint)
     if duplicate_endpoint:
         logger.error('创建重复端点应该失败但成功了')
+        account_app.delete_account(account['id'])
+        role_app.delete_role(role['id'])
         return False
 
     filter_value = {
@@ -198,7 +214,7 @@ def main(server_url, namespace):
 
     # 更新端点 - 修改多个字段
     cur_endpoint["description"] = common.sentence()
-    cur_endpoint['scope'] = 'n1,n2'  # 修改作用域
+    cur_endpoint['scope'] = f"{param['name']}:reports(r)"
     cur_endpoint['status'] = 1  # 改为禁用状态
     
     # 修改时间字段
@@ -249,14 +265,22 @@ def main(server_url, namespace):
     old_endpoint = app.delete_endpoint(new_endpoint['id'])
     if not old_endpoint:
         logger.error('删除端点失败')
+        account_app.delete_account(account['id'])
+        role_app.delete_role(role['id'])
         return False
     if old_endpoint['id'] != cur_endpoint['id']:
         logger.error('删除端点失败, 端点ID不匹配')
+        account_app.delete_account(account['id'])
+        role_app.delete_role(role['id'])
         return False
     
     # 验证删除的端点包含必要字段
     if 'id' not in old_endpoint or 'name' not in old_endpoint:
         logger.error('删除端点失败, 返回数据不完整')
+        account_app.delete_account(account['id'])
+        role_app.delete_role(role['id'])
         return False
-        
+
+    account_app.delete_account(account['id'])
+    role_app.delete_role(role['id'])
     return True

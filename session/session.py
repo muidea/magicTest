@@ -56,13 +56,16 @@ class MagicSession:
         """
         return MagicSession(self.base_url, self.namespace)
 
-    def bind_token(self, token: str) -> None:
+    def bind_token(self, token: Optional[str]) -> None:
         """Bind bearer token for authentication.
         
         Args:
             token: Bearer token string
         """
         self.session_token = token
+        if token:
+            self.session_auth_endpoint = None
+            self.session_auth_token = None
 
     def bind_auth_secret(self, endpoint: str, auth_token: str) -> None:
         """Bind signature authentication credentials.
@@ -73,6 +76,8 @@ class MagicSession:
         """
         self.session_auth_endpoint = endpoint
         self.session_auth_token = auth_token
+        if endpoint and auth_token:
+            self.session_token = None
 
     def bind_application(self, application: str) -> None:
         """Bind application identifier.

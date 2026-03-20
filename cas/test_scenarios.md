@@ -1,169 +1,33 @@
-# CAS 系统测试场景与用例索引
+# CAS 测试索引
 
-## 1. 测试概述
+## 说明
 
-基于 `data_struct.md` 中定义的数据结构依赖关系，本文档提供测试场景和测试用例的索引，用于指导后续测试代码编写。
+这份索引只保留当前有效入口，不再维护历史统计数字。详细场景以各模块 `*_test.py` 和 [integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
 
-### 1.1 核心实体依赖关系
-```
-Role (基础) → Account (依赖 Role) → Endpoint (依赖 Account & Role)
-Namespace 为独立管理实体，但在权限校验逻辑中常与 Scope 字段关联。
-```
+## 当前测试文件
 
-### 1.2 测试策略
-- **单元测试**: 针对每个实体的 CRUD 操作
-- **集成测试**: 验证实体间的依赖关系
-- **边界测试**: 测试字段的边界值和约束条件
-- **异常测试**: 测试错误处理和异常场景
+- [namespace_test.py](/home/rangh/codespace/magicTest/cas/namespace/namespace_test.py)
+  覆盖 `Namespace.Scope` 的默认回填、治理边界、超级 namespace 管理、越权拒绝
+- [role_test.py](/home/rangh/codespace/magicTest/cas/role/role_test.py)
+  覆盖 role 状态、privilege 保留、更新语义、重复创建拒绝
+- [account_test.py](/home/rangh/codespace/magicTest/cas/account/account_test.py)
+  覆盖 account 绑定有效 role、更新保留绑定、禁用 role 后登录失败、namespace 隔离
+- [endpoint_test.py](/home/rangh/codespace/magicTest/cas/endpoint/endpoint_test.py)
+  覆盖 endpoint 显式绑定、`Scope` 必填、`AllocateAuthSecret`、role override
+- [basic_scenario_test.py](/home/rangh/codespace/magicTest/cas/basic_scenario_test.py)
+  覆盖默认 `panel` 启动链，以及 `namespace -> role -> account -> endpoint` 基础链路
+- [cas_api_test.py](/home/rangh/codespace/magicTest/cas/cas_api_test.py)
+  覆盖 `verifyAccount`、`updateAccountPassword`、`queryEntity`、`verifySession*`、`refresh`、endpoint token 失效路径
 
-### 1.3 测试文件结构
-```
-magicTest/cas/
-├── test_scenarios.md          # 本文件 - 测试索引
-├── data_struct.md            # 数据结构定义
-├── role/test_cases.md        # Role实体测试用例
-├── account/test_cases.md     # Account实体测试用例
-├── endpoint/test_cases.md    # Endpoint实体测试用例
-├── namespace/test_cases.md   # Namespace实体测试用例
-└── integration_test_cases.md # 集成测试用例
-```
+## 当前重点
 
----
+- `Namespace.Scope` 和 `Endpoint.Scope` 已按两层语义拆开
+- `Endpoint` 是显式授权对象
+- `AuthSecret` 是 endpoint 凭证表现形式
+- 运行态授权必须回源校验当前实体、role、scope
 
-## 2. 各实体测试用例索引
+## 环境约定
 
-### 2.1 Role (角色) 测试用例
-- **文件位置**: [`role/test_cases.md`](role/test_cases.md)
-- **测试类型**: 基础CURD、异常、边界、功能场景
-- **用例数量**: 20个
-- **核心测试场景**:
-  - R1: 角色创建与验证
-  - R2: 角色状态管理  
-  - R3: 角色依赖关系测试
-
-### 2.2 Account (账户) 测试用例
-- **文件位置**: [`account/test_cases.md`](account/test_cases.md)
-- **测试类型**: 基础CURD、异常、边界、功能场景
-- **用例数量**: 19个
-- **核心测试场景**:
-  - A1: 账户创建与角色关联
-  - A2: 账户命名空间隔离
-  - A3: 账户密码安全
-
-### 2.3 Endpoint (端点) 测试用例
-- **文件位置**: [`endpoint/test_cases.md`](endpoint/test_cases.md)
-- **测试类型**: 基础CURD、异常、边界、功能场景
-- **用例数量**: 19个
-- **核心测试场景**:
-  - E1: 端点时效性验证
-  - E2: 端点权限关联
-  - E3: 端点作用域控制
-
-### 2.4 Namespace (命名空间) 测试用例
-- **文件位置**: [`namespace/test_cases.md`](namespace/test_cases.md)
-- **测试类型**: 基础CURD、异常、边界、功能场景
-- **用例数量**: 18个
-- **核心测试场景**:
-  - N1: 命名空间作用域逻辑
-  - N2: 命名空间时间管理
-  - N3: 命名空间层级关系
-
----
-
-## 3. 集成测试索引
-
-### 3.1 集成测试用例
-- **文件位置**: [`integration_test_cases.md`](integration_test_cases.md)
-- **测试类型**: 依赖关系、数据一致性、业务流程、性能测试
-- **用例数量**: 15个
-- **核心测试场景**:
-  - IT1: 完整依赖链测试
-  - IT2: 跨实体过滤测试
-  - IT3: 并发操作测试
-  - PT1: 大数据量性能测试
-  - PT2: 高并发性能测试
-
-### 3.2 集成测试分类
-1. **依赖关系测试**: 验证实体间的依赖约束
-2. **数据一致性测试**: 验证跨实体的数据同步
-3. **业务流程测试**: 验证完整业务场景
-4. **性能测试**: 验证系统性能和稳定性
-
----
-
-## 4. 测试用例分类统计
-
-| 实体 | 基础CURD | 异常测试 | 边界测试 | 功能场景 | 总计 |
-|------|----------|----------|----------|----------|------|
-| Role | 9 | 6 | 2 | 3 | 20 |
-| Account | 9 | 5 | 2 | 3 | 19 |
-| Endpoint | 11 | 3 | 2 | 3 | 19 |
-| Namespace | 11 | 2 | 2 | 3 | 18 |
-| 集成测试 | - | - | - | 15 | 15 |
-| **合计** | **40** | **16** | **8** | **27** | **91** |
-
----
-
-## 5. 测试执行指南
-
-### 5.1 测试优先级
-1. **P0 (高优先级)**: 各实体的基础CURD操作
-2. **P1 (中优先级)**: 常用功能场景和过滤查询
-3. **P2 (低优先级)**: 异常测试、边界测试、性能测试
-
-### 5.2 测试执行顺序
-1. 先执行各实体的单元测试
-2. 按照依赖关系执行集成测试
-   - 先测试 Role
-   - 再测试 Account（依赖 Role）
-   - 然后测试 Endpoint（依赖 Account 和 Role）
-   - 最后测试 Namespace 和集成场景
-3. 执行性能测试和并发测试
-
-### 5.3 测试环境要求
-- **数据库**: 支持事务和并发控制
-- **测试数据**: 预置基础测试数据
-- **监控工具**: 性能监控和日志记录
-- **并发工具**: 支持并发测试的工具
-
----
-
-## 6. 测试用例ID规范
-
-### 6.1 单元测试ID格式
-- **Role**: `R-TC-XXX`
-- **Account**: `A-TC-XXX`  
-- **Endpoint**: `E-TC-XXX`
-- **Namespace**: `N-TC-XXX`
-
-### 6.2 集成测试ID格式
-- **集成测试**: `IT-TC-XXX`
-- **性能测试**: `PT-TC-XXX`
-
-### 6.3 测试类型标识
-- **正常**: 正常功能测试
-- **异常**: 错误处理和异常场景
-- **边界**: 边界值和约束条件测试
-- **集成**: 跨实体集成测试
-- **性能**: 性能和并发测试
-
----
-
-## 7. 快速导航
-
-- [Role测试用例详情](role/test_cases.md)
-- [Account测试用例详情](account/test_cases.md)  
-- [Endpoint测试用例详情](endpoint/test_cases.md)
-- [Namespace测试用例详情](namespace/test_cases.md)
-- [集成测试用例详情](integration_test_cases.md)
-
----
-
-## 8. 更新记录
-
-| 版本 | 日期 | 更新内容 |
-|------|------|----------|
-| 2.0 | 2026-01-11 | 重构为索引文件，拆分各实体测试用例 |
-| 1.0 | 初始版本 | 包含所有测试场景和用例 |
-
-> **注意**: 详细的测试用例请查看对应的独立文件。本文件仅作为索引和概览使用。
+- 默认入口：`MAGICTEST_CAS_BASE_URL`
+- 默认治理 namespace：`MAGICTEST_CAS_PANEL_NAMESPACE`
+- 环境不可达时，e2e 直接 `skip`

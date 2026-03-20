@@ -1,5 +1,6 @@
 import unittest
 import warnings
+import os
 
 from account import account
 from endpoint import endpoint
@@ -13,8 +14,8 @@ class MyTestCase(unittest.TestCase):
 
     def setUp(self):
         warnings.simplefilter('ignore', ResourceWarning)
-        self.namespace = ''
-        self.server_url = 'https://autotest.local.vpc'
+        self.namespace = os.getenv("MAGICTEST_CAS_PANEL_NAMESPACE", "panel")
+        self.server_url = os.getenv("MAGICTEST_CAS_BASE_URL", "https://panel.local.vpc")
 
     def test_account(self):
         self.assertEqual(True, account.main(self.server_url, self.namespace))

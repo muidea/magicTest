@@ -121,12 +121,13 @@ def mock_account_param(namespace: str) -> Dict[str, Any]:
     Returns:
         账户参数字典
     """
+    _ = namespace
+
     return {
         'account': common.word(),
         'password': '123',
         'email': common.email(),
         'description': common.sentence(),
-        'namespace': namespace
     }
 
 
@@ -147,10 +148,27 @@ def main(server_url: str, namespace: str) -> bool:
         return False
 
     work_session.bind_token(cas_session.get_session_token())
+    from role.role import Role
+
+    role_app = Role(work_session)
+    role = role_app.create_role({
+        'name': f"role_{common.word()}",
+        'description': 'account smoke role',
+        'group': 'smoke',
+        'privilege': [{'module': '*', 'uriPath': '*', 'value': 5, 'description': 'all'}],
+        'status': 2,
+    })
+    if not role:
+        logger.error('创建角色失败')
+        return False
+
     app = Account(work_session)
-    new_account = app.create_account(mock_account_param(namespace))
+    account_param = mock_account_param(namespace)
+    account_param['role'] = {'id': role['id'], 'name': role['name'], 'status': role['status']}
+    new_account = app.create_account(account_param)
     if not new_account:
         logger.error('创建账户失败')
+        role_app.delete_role(role['id'])
         return False
 
     filter_value = {
@@ -188,9 +206,12 @@ def main(server_url: str, namespace: str) -> bool:
     old_account = app.delete_account(new_account['id'])
     if not old_account:
         logger.error('删除账户失败')
+        role_app.delete_role(role['id'])
         return False
     if old_account['id'] != cur_account['id']:
         logger.error('删除账户失败, 账户ID不匹配')
+        role_app.delete_role(role['id'])
         return False
 
+    role_app.delete_role(role['id'])
     return True

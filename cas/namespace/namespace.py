@@ -85,7 +85,6 @@ def mock_namespace_param():
         'status': 2,  # 启用状态
         'startTime': current_time_ms,  # UTC 毫秒时间戳
         'expireTime': expire_time_ms,  # UTC 毫秒时间戳
-        'scope': '*'  # 全局作用域
     }
 
 
@@ -98,7 +97,7 @@ def main(server_url, namespace):
         return False
 
     work_session.bind_token(cas_session.get_session_token())
-    app = Namespace(work_session, "super")
+    app = Namespace(work_session, "panel")
     param = mock_namespace_param()
     
     # 保存原始参数用于验证
@@ -126,8 +125,8 @@ def main(server_url, namespace):
     if new_namespace['status'] != original_param['status']:
         logger.error('创建命名空间失败, 状态不匹配')
         return False
-    if new_namespace['scope'] != original_param['scope']:
-        logger.error('创建命名空间失败, 作用域不匹配')
+    if new_namespace['scope'] != new_namespace['name']:
+        logger.error('创建命名空间失败, 默认 scope 应回填为 namespace 名称')
         return False
 
     filter_value = {
@@ -159,7 +158,7 @@ def main(server_url, namespace):
     # 更新命名空间 - 修改多个字段
     param["description"] = common.sentence()
     param['status'] = 1  # 改为禁用状态
-    param['scope'] = 'n1,n2'  # 修改作用域
+    param['scope'] = f"{new_namespace['name']};managed:*"
     param['id'] = cur_namespace['id']
     
     new_namespace = app.update_namespace(param)
@@ -208,4 +207,3 @@ def main(server_url, namespace):
         return False
         
     return True
-
