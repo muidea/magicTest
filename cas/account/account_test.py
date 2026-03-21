@@ -51,7 +51,7 @@ class AccountTestCase(CasE2EBase):
         self.assertIsNotNone(disabled_role)
         self.assertEqual(disabled_role["status"], STATUS_DISABLE)
 
-        account_login_session = self.bind_namespace_apps(self.tenant["name"])["cas"]
+        account_login_session = self.bind_namespace_cas(self.tenant["name"], token=None)
         login_ok = account_login_session.login(account["account"], password)
         self.assertFalse(login_ok, "绑定禁用 role 的 account 不应能登录")
 

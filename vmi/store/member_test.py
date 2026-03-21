@@ -75,7 +75,7 @@ class MemberTestCase(VMITestCase):
         super().setUpClass()
 
         # 类级别的数据清理记录
-        cls._class_cleanup_ids = {"member": [], "store": []}
+        cls._class_cleanup_ids = cls.build_cleanup_registry("member", "store")
 
         cls.record_initial_count(
             "_initial_member_count", cls._get_member_count, entity_name="店铺成员"
@@ -123,8 +123,7 @@ class MemberTestCase(VMITestCase):
     def setUp(self):
         """每个测试用例前的准备"""
         # 记录测试创建的实体ID以便清理
-        self.created_member_ids = []
-        self.created_store_ids = []
+        self.created_ids = self.build_cleanup_registry("member", "store")
 
         # 创建必要的依赖实体（店铺）
         self._setup_dependencies()
@@ -133,31 +132,21 @@ class MemberTestCase(VMITestCase):
         """创建测试依赖的实体（店铺）"""
         deps = prepare_store_dependency(
             store_sdk=self.store_sdk,
-            created_ids={"store": self.created_store_ids},
+            created_ids=self.created_ids,
             class_cleanup_ids=self._class_cleanup_ids,
         )
         self.store_id = deps["store_id"]
 
     def tearDown(self):
         """每个测试用例后的清理"""
-        # 将本测试创建的实体ID添加到类级别清理列表
-        if hasattr(self.__class__, "_class_cleanup_ids"):
-            self.__class__._class_cleanup_ids["member"].extend(self.created_member_ids)
-            self.__class__._class_cleanup_ids["store"].extend(self.created_store_ids)
-
-        # 尝试立即清理本测试创建的数据
+        self.merge_cleanup_registry(self.__class__._class_cleanup_ids, self.created_ids)
         self._cleanup_test_entities()
-
-        self.created_member_ids.clear()
-        self.created_store_ids.clear()
+        self.clear_cleanup_registry(self.created_ids)
 
     def _cleanup_test_entities(self):
         """清理本测试创建的实体"""
         self.cleanup_registry_entries(
-            {
-                "member": self.created_member_ids,
-                "store": self.created_store_ids,
-            },
+            self.created_ids,
             [
                 ("member", "member_sdk", "店铺成员"),
                 ("store", "store_sdk", "店铺"),
@@ -170,7 +159,7 @@ class MemberTestCase(VMITestCase):
     def _record_member_for_cleanup(self, member_id):
         """记录店铺成员ID以便清理"""
         if member_id is not None:
-            self.created_member_ids.append(member_id)
+            self.created_ids["member"].append(member_id)
             logger.debug(
                 f"记录店铺成员 {member_id} 到清理列表 (测试: {self._testMethodName})"
             )
@@ -271,8 +260,8 @@ class MemberTestCase(VMITestCase):
         )
 
         # 从清理列表中移除，因为已经成功删除
-        if new_member["id"] in self.created_member_ids:
-            self.created_member_ids.remove(new_member["id"])
+        if new_member["id"] in self.created_ids["member"]:
+            self.created_ids["member"].remove(new_member["id"])
 
         # 验证店铺成员已被删除（查询应该失败）
         queried_member = self.member_sdk.query_member(new_member["id"])

@@ -173,17 +173,28 @@ class CasE2EBase(unittest.TestCase):
         self.cleanup_delete(self.namespace_app, namespace["id"], "delete_namespace")
         return namespace
 
-    def bind_namespace_apps(self, namespace_name):
+    def bind_namespace_session(self, namespace_name, token=UNSET):
         work_session = MagicSession(self.server_url, namespace_name)
-        work_session.bind_token(self.panel_cas.get_session_token())
+        session_token = self.panel_cas.get_session_token() if token is UNSET else token
+        if session_token:
+            work_session.bind_token(session_token)
+        return work_session
+
+    def bind_namespace_apps(self, namespace_name):
+        def new_session():
+            return self.bind_namespace_session(namespace_name)
+
         return {
-            "session": work_session,
-            "cas": Cas(work_session),
-            "namespace": NamespaceApp(work_session),
-            "role": RoleApp(work_session),
-            "account": AccountApp(work_session),
-            "endpoint": EndpointApp(work_session),
+            "session": new_session(),
+            "cas": Cas(new_session()),
+            "namespace": NamespaceApp(new_session()),
+            "role": RoleApp(new_session()),
+            "account": AccountApp(new_session()),
+            "endpoint": EndpointApp(new_session()),
         }
+
+    def bind_namespace_cas(self, namespace_name, token=UNSET):
+        return Cas(self.bind_namespace_session(namespace_name, token=token))
 
     def create_role(self, app, name=None, status=STATUS_ENABLE, privilege=None):
         role_name = name or unique_name("role")

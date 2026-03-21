@@ -180,7 +180,7 @@ python3 run_tests.py --pytest --all
 推荐模式：
 
 1. 继承 [VMITestCase](/home/rangh/codespace/magicTest/vmi/test_vmi_base.py)
-2. 使用 `build_cleanup_registry` 维护清理列表
+2. 统一使用 `build_cleanup_registry`、`merge_cleanup_registry` 和 `clear_cleanup_registry` 维护清理记录，避免重复清理
 3. 依赖实体优先走 [test_dependency_helper.py](/home/rangh/codespace/magicTest/vmi/test_dependency_helper.py)
 4. 允许记录“当前系统行为观察”，但不要把未经确认的业务约束直接写死为失败断言
 

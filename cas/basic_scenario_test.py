@@ -1,3 +1,4 @@
+import time
 import unittest
 
 from session import MagicSession
@@ -53,13 +54,31 @@ class BasicScenarioTestCase(CasE2EBase):
         self.assertEqual(endpoint["scope"], f"{tenant['name']}:inventory(r);{tenant['name']}:orders(w)")
         self.assertTrue(endpoint.get("authToken"))
 
+    def test_new_namespace_default_bootstrap_endpoint_uses_namespace_scope(self):
+        tenant = self.create_namespace(scope=UNSET)
+        tenant_apps = self.bind_namespace_apps(tenant["name"])
+
+        default_endpoint = None
+        for _ in range(10):
+            endpoints = tenant_apps["endpoint"].filter_endpoint({"name": "defaultEndpoint"})
+            if endpoints:
+                default_endpoint = endpoints[0]
+                break
+            time.sleep(0.5)
+
+        self.assertIsNotNone(default_endpoint, "新 namespace 应自动拉起 defaultEndpoint")
+        self.assertEqual(default_endpoint["scope"], tenant["name"])
+        self.assertEqual(default_endpoint["account"]["account"], "administrator")
+        self.assertEqual(default_endpoint["role"]["name"], "superRole")
+        self.assertTrue(default_endpoint.get("authToken"))
+
     def test_account_login_refresh_and_logout_flow(self):
         tenant = self.create_namespace(scope=UNSET)
         tenant_apps = self.bind_namespace_apps(tenant["name"])
         role = self.create_role(tenant_apps["role"])
         account = self.create_account(tenant_apps["account"], role, password="Test@123")
 
-        account_session = tenant_apps["cas"]
+        account_session = self.bind_namespace_cas(tenant["name"], token=None)
         self.assertTrue(account_session.login(account["account"], "Test@123"), "account 登录失败")
         self.assertIsNotNone(account_session.get_current_entity())
 

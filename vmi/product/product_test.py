@@ -81,7 +81,7 @@ class ProductTestCase(VMITestCase):
             raise Exception("无法获取可用状态ID")
 
         # 类级别的数据清理记录
-        cls._class_cleanup_ids = []
+        cls._class_cleanup_ids = cls.build_cleanup_registry("product")
 
         cls.record_initial_count(
             "_initial_product_count", cls._get_product_count, entity_name="产品"
@@ -107,12 +107,15 @@ class ProductTestCase(VMITestCase):
     @classmethod
     def tearDownClass(cls):
         """测试类结束后的清理"""
-        original_count = len(cls._class_cleanup_ids)
+        original_count = len(cls._class_cleanup_ids["product"])
         logger.info(
-            f"测试类清理开始: 需要清理 {original_count} 个产品: {cls._class_cleanup_ids}"
+            f"测试类清理开始: 需要清理 {original_count} 个产品: {cls._class_cleanup_ids['product']}"
         )
 
-        cls.cleanup_id_list(cls._class_cleanup_ids, "product_sdk", "产品")
+        cls.cleanup_registry_entries(
+            cls._class_cleanup_ids,
+            [("product", "product_sdk", "产品")],
+        )
         cls.verify_cleanup_count(
             "_initial_product_count",
             cls._get_product_count,
@@ -134,18 +137,13 @@ class ProductTestCase(VMITestCase):
     def setUp(self):
         """每个测试用例前的准备"""
         # 记录测试创建的产品ID以便清理
-        self.created_product_ids = []
+        self.created_ids = self.build_cleanup_registry("product")
 
     def tearDown(self):
         """每个测试用例后的清理"""
-        # 将本测试创建的产品ID添加到类级别清理列表
-        if hasattr(self.__class__, "_class_cleanup_ids"):
-            self.__class__._class_cleanup_ids.extend(self.created_product_ids)
-
-        # 尝试立即清理本测试创建的数据
+        self.merge_cleanup_registry(self.__class__._class_cleanup_ids, self.created_ids)
         self._cleanup_test_products()
-
-        self.created_product_ids.clear()
+        self.clear_cleanup_registry(self.created_ids)
 
     def _cleanup_test_products(self):
         """清理本测试创建的产品
@@ -153,10 +151,9 @@ class ProductTestCase(VMITestCase):
         注意：系统支持删除操作，如果删除失败应该抛出异常，
         以便测试失败并排查server错误。
         """
-        self.cleanup_id_list(
-            self.created_product_ids,
-            "product_sdk",
-            "产品",
+        self.cleanup_registry_entries(
+            self.created_ids,
+            [("product", "product_sdk", "产品")],
             owner=self,
             remove_from=self.__class__._class_cleanup_ids,
             log_prefix=f"测试 {self._testMethodName}",
@@ -165,7 +162,7 @@ class ProductTestCase(VMITestCase):
     def _record_product_for_cleanup(self, product_id):
         """记录产品ID以便清理"""
         if product_id is not None:
-            self.created_product_ids.append(product_id)
+            self.created_ids["product"].append(product_id)
             logger.debug(
                 f"记录产品 {product_id} 到清理列表 (测试: {self._testMethodName})"
             )
@@ -290,8 +287,8 @@ class ProductTestCase(VMITestCase):
         self.assertEqual(deleted_product["id"], new_product["id"], "删除的产品ID不匹配")
 
         # 从清理列表中移除，因为已经成功删除
-        if new_product["id"] in self.created_product_ids:
-            self.created_product_ids.remove(new_product["id"])
+        if new_product["id"] in self.created_ids["product"]:
+            self.created_ids["product"].remove(new_product["id"])
 
         # 验证产品已被删除（查询应该失败）
         queried_product = self.product_sdk.query_product(new_product["id"])

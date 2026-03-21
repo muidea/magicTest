@@ -22,12 +22,10 @@ class EndpointTestCase(CasE2EBase):
         self.account = self.create_account(self.tenant_apps["account"], self.role)
 
     def _find_entity(self, eid, etype):
-        entity_list = self.tenant_apps["cas"].filter_entity()
+        entity_list = self.tenant_apps["cas"].filter_entity({"eID": eid, "eType": etype})
         self.assertIsNotNone(entity_list, "查询实体列表失败")
-        for entity in entity_list:
-            if entity.get("eID") == eid and entity.get("eType") == etype:
-                return entity
-        self.fail(f"entity not found, eid={eid}, etype={etype}")
+        self.assertEqual(len(entity_list), 1, f"entity lookup mismatch, eid={eid}, etype={etype}, values={entity_list}")
+        return entity_list[0]
 
     def test_endpoint_is_explicit_auth_object(self):
         scope = f"{self.tenant['name']}:orders(r);{self.tenant['name']}:inventory(w)"
@@ -61,7 +59,9 @@ class EndpointTestCase(CasE2EBase):
         ))
         self.assertIsNone(endpoint, "绑定禁用 role 的 endpoint 不应创建成功")
 
-        disabled_account_payload = dict(self.account)
+        valid_role = self.create_role(self.tenant_apps["role"], name=unique_name("endpoint_role"))
+        valid_account = self.create_account(self.tenant_apps["account"], valid_role)
+        disabled_account_payload = dict(valid_account)
         disabled_account_payload["status"] = STATUS_DISABLE
         disabled_account = self.tenant_apps["account"].update_account(disabled_account_payload)
         self.assertIsNotNone(disabled_account)
@@ -69,13 +69,13 @@ class EndpointTestCase(CasE2EBase):
         account_blocked_endpoint = self.tenant_apps["endpoint"].create_endpoint(endpoint_param(
             unique_name("endpoint"),
             disabled_account,
-            self.role,
+            valid_role,
             f"{self.tenant['name']}:orders(r)",
         ))
         self.assertIsNone(account_blocked_endpoint, "绑定禁用 account 的 endpoint 不应创建成功")
 
     def test_allocate_auth_secret_from_account_entity_creates_endpoint(self):
-        account_login = self.bind_namespace_apps(self.tenant["name"])["cas"]
+        account_login = self.bind_namespace_cas(self.tenant["name"], token=None)
         self.assertTrue(account_login.login(self.account["account"], "Test@123"), "account 登录失败")
         account_entity = account_login.get_current_entity()
         self.assertIsNotNone(account_entity)
@@ -136,7 +136,7 @@ class EndpointTestCase(CasE2EBase):
     def test_allocate_auth_secret_from_account_entity_allows_role_override(self):
         override_role = self.create_role(self.tenant_apps["role"], name=unique_name("override_role"))
 
-        account_login = self.bind_namespace_apps(self.tenant["name"])["cas"]
+        account_login = self.bind_namespace_cas(self.tenant["name"], token=None)
         self.assertTrue(account_login.login(self.account["account"], "Test@123"), "account 登录失败")
         account_entity = account_login.get_current_entity()
         self.assertIsNotNone(account_entity)

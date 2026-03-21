@@ -79,9 +79,9 @@ class StoreTestCase(VMITestCase):
             raise Exception("无法获取可用状态ID")
 
         # 类级别的数据清理记录
-        cls._class_cleanup_ids = []
-        cls._class_cleanup_shelf_ids = []
-        cls._class_cleanup_warehouse_ids = []
+        cls._class_cleanup_ids = cls.build_cleanup_registry(
+            "store", "shelf", "warehouse"
+        )
 
         cls.record_initial_count(
             "_initial_store_count", cls._get_store_count, entity_name="店铺"
@@ -109,16 +109,21 @@ class StoreTestCase(VMITestCase):
     @classmethod
     def tearDownClass(cls):
         """测试类结束后的清理"""
-        original_store_count = len(cls._class_cleanup_ids)
-        original_shelf_count = len(cls._class_cleanup_shelf_ids)
-        original_warehouse_count = len(cls._class_cleanup_warehouse_ids)
+        original_store_count = len(cls._class_cleanup_ids["store"])
+        original_shelf_count = len(cls._class_cleanup_ids["shelf"])
+        original_warehouse_count = len(cls._class_cleanup_ids["warehouse"])
         logger.info(
             f"测试类清理开始: 需要清理 {original_store_count} 个店铺、{original_shelf_count} 个货架和 {original_warehouse_count} 个仓库"
         )
 
-        cls.cleanup_id_list(cls._class_cleanup_ids, "store_sdk", "店铺")
-        cls.cleanup_id_list(cls._class_cleanup_shelf_ids, "shelf_sdk", "货架")
-        cls.cleanup_id_list(cls._class_cleanup_warehouse_ids, "warehouse_sdk", "仓库")
+        cls.cleanup_registry_entries(
+            cls._class_cleanup_ids,
+            [
+                ("store", "store_sdk", "店铺"),
+                ("shelf", "shelf_sdk", "货架"),
+                ("warehouse", "warehouse_sdk", "仓库"),
+            ],
+        )
         cls.verify_cleanup_count(
             "_initial_store_count",
             cls._get_store_count,
@@ -140,58 +145,31 @@ class StoreTestCase(VMITestCase):
     def setUp(self):
         """每个测试用例前的准备"""
         # 记录测试创建的店铺ID和货架ID以便清理
-        self.created_store_ids = []
-        self.created_shelf_ids = []
-        self.created_warehouse_ids = []
+        self.created_ids = self.build_cleanup_registry("store", "shelf", "warehouse")
 
     def tearDown(self):
         """每个测试用例后的清理"""
-        # 将本测试创建的店铺ID添加到类级别清理列表
-        if hasattr(self.__class__, "_class_cleanup_ids"):
-            self.__class__._class_cleanup_ids.extend(self.created_store_ids)
-
-        # 将本测试创建的货架ID添加到类级别清理列表
-        if hasattr(self.__class__, "_class_cleanup_shelf_ids"):
-            self.__class__._class_cleanup_shelf_ids.extend(self.created_shelf_ids)
-        if hasattr(self.__class__, "_class_cleanup_warehouse_ids"):
-            self.__class__._class_cleanup_warehouse_ids.extend(self.created_warehouse_ids)
-
+        self.merge_cleanup_registry(self.__class__._class_cleanup_ids, self.created_ids)
         self._cleanup_test_entities()
-
-        self.created_store_ids.clear()
-        self.created_shelf_ids.clear()
-        self.created_warehouse_ids.clear()
+        self.clear_cleanup_registry(self.created_ids)
 
     def _cleanup_test_entities(self):
-        self.cleanup_id_list(
-            self.created_store_ids,
-            "store_sdk",
-            "店铺",
+        self.cleanup_registry_entries(
+            self.created_ids,
+            [
+                ("store", "store_sdk", "店铺"),
+                ("shelf", "shelf_sdk", "货架"),
+                ("warehouse", "warehouse_sdk", "仓库"),
+            ],
             owner=self,
             remove_from=self.__class__._class_cleanup_ids,
-            log_prefix=f"测试 {self._testMethodName}",
-        )
-        self.cleanup_id_list(
-            self.created_shelf_ids,
-            "shelf_sdk",
-            "货架",
-            owner=self,
-            remove_from=self.__class__._class_cleanup_shelf_ids,
-            log_prefix=f"测试 {self._testMethodName}",
-        )
-        self.cleanup_id_list(
-            self.created_warehouse_ids,
-            "warehouse_sdk",
-            "仓库",
-            owner=self,
-            remove_from=self.__class__._class_cleanup_warehouse_ids,
             log_prefix=f"测试 {self._testMethodName}",
         )
 
     def _record_store_for_cleanup(self, store_id):
         """记录店铺ID以便清理"""
         if store_id is not None:
-            self.created_store_ids.append(store_id)
+            self.created_ids["store"].append(store_id)
             logger.debug(
                 f"记录店铺 {store_id} 到清理列表 (测试: {self._testMethodName})"
             )
@@ -199,7 +177,7 @@ class StoreTestCase(VMITestCase):
     def _record_shelf_for_cleanup(self, shelf_id):
         """记录货架ID以便清理"""
         if shelf_id is not None:
-            self.created_shelf_ids.append(shelf_id)
+            self.created_ids["shelf"].append(shelf_id)
             logger.debug(
                 f"记录货架 {shelf_id} 到清理列表 (测试: {self._testMethodName})"
             )
@@ -207,7 +185,7 @@ class StoreTestCase(VMITestCase):
     def _record_warehouse_for_cleanup(self, warehouse_id):
         """记录仓库ID以便清理"""
         if warehouse_id is not None:
-            self.created_warehouse_ids.append(warehouse_id)
+            self.created_ids["warehouse"].append(warehouse_id)
             logger.debug(
                 f"记录仓库 {warehouse_id} 到清理列表 (测试: {self._testMethodName})"
             )
@@ -353,8 +331,8 @@ class StoreTestCase(VMITestCase):
         self.assertEqual(deleted_store["id"], new_store["id"], "删除的店铺ID不匹配")
 
         # 从清理列表中移除，因为已经成功删除
-        if new_store["id"] in self.created_store_ids:
-            self.created_store_ids.remove(new_store["id"])
+        if new_store["id"] in self.created_ids["store"]:
+            self.created_ids["store"].remove(new_store["id"])
 
         # 验证店铺已被删除（查询应该失败）
         queried_store = self.store_sdk.query_store(new_store["id"])

@@ -1,6 +1,6 @@
 # VMI 测试架构说明
 
-本文档面向维护者，描述 `magicTest/vmi` 当前测试基础设施的分层、职责边界和约束，便于后续继续演进。
+本文档面向维护者，描述 `magicTest/vmi` 当前测试基础设施的分层、职责边界和稳定基线，便于维护与回归。
 
 ## 1. 设计目标
 
@@ -73,17 +73,15 @@
 - `test_dependency_helper.py`
   负责构造库存、商品、状态等复合依赖数据
 - `test_base_with_session_manager.py`
-  提供旧风格会话测试基类与性能监视辅助
+  提供会话测试基类与性能监视辅助
 - `test_base_multi_tenant.py`
-  在旧基类之上扩展多租户能力
+  在会话测试基类之上扩展多租户能力
 
-当前现实：
+当前结构：
 
-- 代码中同时存在两套基类风格
-- 新整理后的实体测试更偏向 `test_vmi_base.py`
-- 多租户与部分旧脚本仍依赖 `test_base_with_session_manager.py`
-
-这说明基础设施还处于“并存迁移态”，不是完全统一态。
+- 实体测试统一通过 `test_vmi_base.py` 管理日志、清理注册表和数量统计
+- 依赖构造统一通过 `test_dependency_helper.py` 组织
+- 多租户与会话管理测试通过 `test_base_with_session_manager.py` 和 `test_base_multi_tenant.py` 组织
 
 ## 3. 用例层分类
 
@@ -138,15 +136,10 @@
 3. 通过 `subprocess.run` 调用具体脚本或 `pytest`
 4. 汇总每个测试套件的成功状态和耗时
 
-当前优点：
+执行特征：
 
 - 使用统一入口方便日常操作
-- 汇总结果比直接手动拼命令更稳定
-
-当前限制：
-
-- 入口本身仍是“脚本编排器”，不是测试调度框架
-- 套件间结果共享有限，报告粒度较粗
+- 统一汇总各测试套件的成功状态和耗时
 
 ## 5. 当前断言策略
 
@@ -170,16 +163,8 @@
 - 统一引导逻辑收敛到 `test_bootstrap.py`
 - 依赖构造收敛到 `test_dependency_helper.py`
 - 清理和统计逻辑收敛到 `test_vmi_base.py`
+- 现有实体测试已统一切换到清理注册表模式，不再保留分散的类级/用例级清理记录写法
+- 2026-03-20 已通过 `run_tests.py --all` 全量回归，验证、多租户、并发、场景和模块测试全部通过
 - 大量测试文件去掉非结构化 `print`
 - 多租户离线测试改成更稳定的 mock 驱动
 - `run_tests.py`、`concurrent_test_v2.py`、`cas_mock/cas.py` 统一改为日志输出
-
-## 7. 后续建议
-
-仍值得继续做的事情：
-
-- 逐步把 `test_base_with_session_manager.py` 的通用能力收敛到 `test_vmi_base.py`
-- 为 `run_tests.py` 增加更稳定的 machine-readable 报告输出
-- 把老化测试产物单独输出到固定目录，避免污染工作区
-- 为 observation 类行为建立单独文档或标记体系，减少散落在测试日志中的隐性知识
-- 为真实远端回归增加失败分类，区分网络噪声、会话故障、业务回归和清理残留

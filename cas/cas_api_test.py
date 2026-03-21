@@ -27,12 +27,10 @@ class CasAPITestCase(CasE2EBase):
         )
 
     def _find_entity(self, eid, etype):
-        entity_list = self.tenant_apps["cas"].filter_entity()
+        entity_list = self.tenant_apps["cas"].filter_entity({"eID": eid, "eType": etype})
         self.assertIsNotNone(entity_list, "查询实体列表失败")
-        return next(
-            (item for item in entity_list if item.get("eID") == eid and item.get("eType") == etype),
-            None,
-        )
+        self.assertEqual(len(entity_list), 1, f"entity lookup mismatch, eid={eid}, etype={etype}, values={entity_list}")
+        return entity_list[0]
 
     def _issue_runtime_endpoint_secret(self, name_prefix, scope):
         source_entity = self._find_entity(self.endpoint["id"], "endpoint")
@@ -56,7 +54,7 @@ class CasAPITestCase(CasE2EBase):
         return secret, runtime_endpoint, runtime_entity
 
     def _jwt_verify_param(self):
-        account_login = self.bind_namespace_apps(self.tenant["name"])["cas"]
+        account_login = self.bind_namespace_cas(self.tenant["name"], token=None)
         self.assertTrue(account_login.login(self.account["account"], "Test@123"), "account 登录失败")
         session_id = account_login.get_session_id()
         self.assertIsNotNone(session_id, "无法从 session token 提取 sessionID")
@@ -81,7 +79,7 @@ class CasAPITestCase(CasE2EBase):
             "错误密码不应通过 verifyAccount",
         )
 
-        account_login = self.bind_namespace_apps(self.tenant["name"])["cas"]
+        account_login = self.bind_namespace_cas(self.tenant["name"], token=None)
         self.assertTrue(account_login.login(self.account["account"], "Test@123"), "account 登录失败")
 
         self.assertIsNone(
@@ -101,10 +99,10 @@ class CasAPITestCase(CasE2EBase):
         self.assertIsNotNone(updated, "更新密码失败")
         self.assertEqual(updated["id"], self.account["id"])
 
-        old_login = self.bind_namespace_apps(self.tenant["name"])["cas"].login(self.account["account"], "Test@123")
+        old_login = self.bind_namespace_cas(self.tenant["name"], token=None).login(self.account["account"], "Test@123")
         self.assertFalse(old_login, "旧密码不应继续可用")
 
-        new_login = self.bind_namespace_apps(self.tenant["name"])["cas"].login(self.account["account"], "NewPass@123")
+        new_login = self.bind_namespace_cas(self.tenant["name"], token=None).login(self.account["account"], "NewPass@123")
         self.assertTrue(new_login, "新密码应可用于登录")
 
     def test_update_account_password_requires_bound_account_session(self):
@@ -121,7 +119,7 @@ class CasAPITestCase(CasE2EBase):
             "非当前 account 本人 session 不应修改该 account 密码",
         )
 
-        tenant_login = self.bind_namespace_apps(self.tenant["name"])["cas"]
+        tenant_login = self.bind_namespace_cas(self.tenant["name"], token=None)
         self.assertTrue(tenant_login.login(self.account["account"], "Test@123"), "account 登录失败")
         self.assertIsNotNone(
             tenant_login.update_account_password({
@@ -159,7 +157,7 @@ class CasAPITestCase(CasE2EBase):
             password="Restricted@123",
         )
 
-        restricted_login = self.bind_namespace_apps(self.tenant["name"])["cas"]
+        restricted_login = self.bind_namespace_cas(self.tenant["name"], token=None)
         self.assertTrue(restricted_login.login(restricted_account["account"], "Restricted@123"), "低权限 account 登录失败")
 
         current_entity = restricted_login.get_current_entity()
@@ -303,9 +301,9 @@ class CasAPITestCase(CasE2EBase):
         updated_tenant = self.namespace_app.update_namespace(tenant_payload)
         self.assertIsNotNone(updated_tenant, "更新 tenant namespace scope 失败")
 
-        self.assertTrue(
+        self.assertFalse(
             target_cas.verify_session_namespace(),
-            "运行态鉴权应回源使用最新 namespace scope，而不是继续信任旧 token claim",
+            "旧 JWT 在 refresh 前仍应按旧 scope claim 校验 namespace 访问",
         )
         self.assertEqual(
             account_login.get_session_scope(),

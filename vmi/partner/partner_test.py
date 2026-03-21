@@ -86,7 +86,7 @@ class PartnerTestCase(VMITestCase):
             raise Exception("无法获取可用状态ID")
 
         # 类级别的数据清理记录
-        cls._class_cleanup_ids = []
+        cls._class_cleanup_ids = cls.build_cleanup_registry("partner")
 
         cls.record_initial_count(
             "_initial_partner_count", cls._get_partner_count, entity_name="合作伙伴"
@@ -111,12 +111,15 @@ class PartnerTestCase(VMITestCase):
     @classmethod
     def tearDownClass(cls):
         """测试类结束后的清理"""
-        original_count = len(cls._class_cleanup_ids)
+        original_count = len(cls._class_cleanup_ids["partner"])
         logger.info(
-            f"测试类清理开始: 需要清理 {original_count} 个合作伙伴: {cls._class_cleanup_ids}"
+            f"测试类清理开始: 需要清理 {original_count} 个合作伙伴: {cls._class_cleanup_ids['partner']}"
         )
 
-        cls.cleanup_id_list(cls._class_cleanup_ids, "partner_sdk", "合作伙伴")
+        cls.cleanup_registry_entries(
+            cls._class_cleanup_ids,
+            [("partner", "partner_sdk", "合作伙伴")],
+        )
         cls.verify_cleanup_count(
             "_initial_partner_count",
             cls._get_partner_count,
@@ -138,18 +141,13 @@ class PartnerTestCase(VMITestCase):
     def setUp(self):
         """每个测试用例前的准备"""
         # 记录测试创建的合作伙伴ID以便清理
-        self.created_partner_ids = []
+        self.created_ids = self.build_cleanup_registry("partner")
 
     def tearDown(self):
         """每个测试用例后的清理"""
-        # 将本测试创建的合作伙伴ID添加到类级别清理列表
-        if hasattr(self.__class__, "_class_cleanup_ids"):
-            self.__class__._class_cleanup_ids.extend(self.created_partner_ids)
-
-        # 尝试立即清理本测试创建的数据
+        self.merge_cleanup_registry(self.__class__._class_cleanup_ids, self.created_ids)
         self._cleanup_test_partners()
-
-        self.created_partner_ids.clear()
+        self.clear_cleanup_registry(self.created_ids)
 
     def _cleanup_test_partners(self):
         """清理本测试创建的合作伙伴
@@ -157,10 +155,9 @@ class PartnerTestCase(VMITestCase):
         注意：系统支持删除操作，如果删除失败应该抛出异常，
         以便测试失败并排查server错误。
         """
-        self.cleanup_id_list(
-            self.created_partner_ids,
-            "partner_sdk",
-            "合作伙伴",
+        self.cleanup_registry_entries(
+            self.created_ids,
+            [("partner", "partner_sdk", "合作伙伴")],
             owner=self,
             remove_from=self.__class__._class_cleanup_ids,
             log_prefix=f"测试 {self._testMethodName}",
@@ -169,7 +166,7 @@ class PartnerTestCase(VMITestCase):
     def _record_partner_for_cleanup(self, partner_id):
         """记录合作伙伴ID以便清理"""
         if partner_id is not None:
-            self.created_partner_ids.append(partner_id)
+            self.created_ids["partner"].append(partner_id)
             logger.debug(
                 f"记录合作伙伴 {partner_id} 到清理列表 (测试: {self._testMethodName})"
             )
@@ -295,8 +292,8 @@ class PartnerTestCase(VMITestCase):
         )
 
         # 从清理列表中移除，因为已经成功删除
-        if new_partner["id"] in self.created_partner_ids:
-            self.created_partner_ids.remove(new_partner["id"])
+        if new_partner["id"] in self.created_ids["partner"]:
+            self.created_ids["partner"].remove(new_partner["id"])
 
         # 验证合作伙伴已被删除（查询应该失败）
         queried_partner = self.partner_sdk.query_partner(new_partner["id"])
