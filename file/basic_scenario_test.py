@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 class FileTestCase(unittest.TestCase):
     """File 测试用例类"""
-    
-    server_url = 'https://panel.local.vpc'
-    namespace = ''
+
+    server_url = os.getenv('MAGICTEST_FILE_BASE_URL', 'https://autotest.local.vpc')
+    namespace = os.getenv('MAGICTEST_FILE_NAMESPACE', '')
     
     @classmethod
     def setUpClass(cls):
@@ -137,7 +137,7 @@ class FileTestCase(unittest.TestCase):
         file_token = new_file['token']
         
         # 提交文件以确保文件可下载
-        committed_file = public_app.commit_file(file_id, 3600)
+        committed_file = public_app.commit_file(file_id, 30)
         # 提交可能不是必需的，但如果需要则尝试
         
         # 下载文件到临时路径
@@ -180,7 +180,7 @@ class FileTestCase(unittest.TestCase):
         file_token = new_file['token']
         
         # 提交文件以确保文件可下载
-        committed_file = private_app.commit_file(file_id, 3600)
+        committed_file = private_app.commit_file(file_id, 30)
         # 提交可能不是必需的，但如果需要则尝试
         
         # 下载文件到临时路径
@@ -233,14 +233,14 @@ class FileTestCase(unittest.TestCase):
         new_file = self.file_app.upload_file(self.test_file_path)
         self.assertIsNotNone(new_file, "文件上传失败")
         
-        if new_file and 'id' in new_file:
-            self.created_file_ids.append(new_file['id'])
         if new_file and 'token' in new_file:
             self.created_file_tokens.append(new_file['token'])
         
         # 查看文件
         viewed_file = self.file_app.view_file(new_file['token'])
         self.assertIsNotNone(viewed_file, "文件查看失败")
+        if viewed_file and 'id' in viewed_file:
+            self.created_file_ids.append(viewed_file['id'])
         self.assertIn('path', viewed_file, "查看文件缺少path字段")
     
     def test_filter_file(self):
@@ -280,16 +280,17 @@ class FileTestCase(unittest.TestCase):
         self.assertIsNotNone(root_result, "根目录浏览失败")
         
         # 2. 检查根目录结构（应该包含dirs和files）
-        # 由于filter_file只返回files列表，我们需要直接调用Client的filter_file来获取完整响应
-        # 这里我们使用Client来获取更详细的信息
+        # 这里直接调用 Client.explorer_file 获取完整响应
         from .file.file import Client
         client = Client(self.server_url, self.work_session)
         client.bind_source("test_source")
         client.bind_scope("test_scope")
         
         # 获取根目录的完整响应
-        root_response = client.filter_file({})
+        root_response = client.explorer_file({})
         self.assertIsNotNone(root_response, "根目录浏览失败")
+        self.assertIn('dirs', root_response, "根目录响应缺少dirs字段")
+        self.assertIn('files', root_response, "根目录响应缺少files字段")
         
         # 3. 上传几个测试文件
         test_files = []
@@ -314,18 +315,18 @@ class FileTestCase(unittest.TestCase):
                     os.remove(test_file_path)
         
         # 4. 再次浏览根目录，应该能看到文件
-        root_response_after = client.filter_file({})
+        root_response_after = client.explorer_file({})
         self.assertIsNotNone(root_response_after, "上传后根目录浏览失败")
         
         # 5. 测试带不同参数的浏览
         # 浏览特定source的文件
         source_params = {'source': 'test_source'}
-        source_result = client.filter_file(source_params)
+        source_result = client.explorer_file(source_params)
         self.assertIsNotNone(source_result, "按source过滤失败")
         
         # 浏览特定scope的文件
         scope_params = {'scope': 'test_scope'}
-        scope_result = client.filter_file(scope_params)
+        scope_result = client.explorer_file(scope_params)
         self.assertIsNotNone(scope_result, "按scope过滤失败")
         
         # 6. 如果文件有路径信息，测试按路径浏览
@@ -335,14 +336,14 @@ class FileTestCase(unittest.TestCase):
             
             # 浏览文件所在目录
             path_params = {'path': dir_path}
-            path_result = client.filter_file(path_params)
+            path_result = client.explorer_file(path_params)
             self.assertIsNotNone(path_result, "按路径浏览失败")
             
             # 浏览父目录
             parent_dir = os.path.dirname(dir_path)
             if parent_dir and parent_dir != dir_path:  # 确保有父目录且不是当前目录
                 parent_params = {'path': parent_dir}
-                parent_result = client.filter_file(parent_params)
+                parent_result = client.explorer_file(parent_params)
                 self.assertIsNotNone(parent_result, "父目录浏览失败")
     
     def test_file_explorer_with_different_scopes(self):
@@ -446,8 +447,8 @@ class FileTestCase(unittest.TestCase):
         file_id = viewed_file['id']
         self.created_file_ids.append(file_id)
         
-        # 提交文件，设置TTL为1小时（3600秒）
-        ttl = 3600
+        # 提交文件，设置TTL为30天
+        ttl = 30
         committed_file = self.file_app.commit_file(file_id, ttl)
         self.assertIsNotNone(committed_file, "文件提交失败")
         self.assertEqual(committed_file['id'], file_id, "提交后文件ID不匹配")
@@ -497,7 +498,7 @@ class FileTestCase(unittest.TestCase):
         # 注意：服务器可能不返回tags字段，或者格式不同
         
         # 6. 提交文件（设置有效期）
-        ttl = 7200  # 2小时
+        ttl = 60  # 60天
         committed_file = self.file_app.commit_file(file_id, ttl)
         self.assertIsNotNone(committed_file, "文件提交失败")
         self.assertEqual(committed_file['id'], file_id, "提交后文件ID不匹配")
@@ -534,7 +535,24 @@ class FileTestCase(unittest.TestCase):
             self.created_file_ids.append(viewed_file['id'])
         if token:
             self.created_file_tokens.append(token)
-    
+
+    def test_wrapper_default_path_used_for_upload(self):
+        """测试兼容包装类会把 path 作为默认 filePath 传入上传流程"""
+        path_app = File("test_scope", "test_source", "nested/path", self.work_session)
+
+        new_file = path_app.upload_file(self.test_file_path)
+        self.assertIsNotNone(new_file, "带默认路径的文件上传失败")
+
+        viewed_file = path_app.view_file(new_file['token'])
+        self.assertIsNotNone(viewed_file, "查看文件失败")
+        self.assertIn('path', viewed_file, "查看文件缺少path字段")
+        self.assertIn("/nested/path/", viewed_file['path'], "默认路径未反映到上传结果")
+
+        if new_file and 'token' in new_file:
+            self.created_file_tokens.append(new_file['token'])
+        if viewed_file and 'id' in viewed_file:
+            self.created_file_ids.append(viewed_file['id'])
+
     def test_upload_large_file(self):
         """测试大文件上传（边界测试）"""
         # 创建大文件

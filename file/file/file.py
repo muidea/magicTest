@@ -51,7 +51,23 @@ class Client:
             self.base_client = session.MagicSession(server_url)
         self.file_source = ""
         self.file_scope = ""
+        self.file_path = ""
         self._assign_namespace = ""
+
+    def _extract_error_message(self, result: Any) -> str:
+        """提取统一错误消息，优先读取服务返回的 error.message。"""
+        if not result:
+            return '未知错误'
+
+        if isinstance(result, dict):
+            error_val = result.get('error')
+            if isinstance(error_val, dict):
+                return error_val.get('message') or error_val.get('reason') or result.get('reason') or '未知错误'
+            if isinstance(error_val, str) and error_val:
+                return error_val
+            return result.get('reason', '未知错误')
+
+        return '未知错误'
     
     def bind_source(self, source: str) -> None:
         """绑定文件来源"""
@@ -68,6 +84,14 @@ class Client:
     def unbind_scope(self) -> None:
         """解绑文件范围"""
         self.file_scope = ""
+
+    def bind_path(self, path: str) -> None:
+        """绑定默认文件路径"""
+        self.file_path = path
+
+    def unbind_path(self) -> None:
+        """解绑默认文件路径"""
+        self.file_path = ""
     
     def assign_namespace(self, namespace: str) -> None:
         """分配命名空间"""
@@ -90,10 +114,12 @@ class Client:
     
     def _add_query_params(self, params: Dict[str, str]) -> Dict[str, str]:
         """添加文件来源和范围到查询参数"""
-        if self.file_source:
+        if self.file_source and FILE_SOURCE_TAG not in params:
             params[FILE_SOURCE_TAG] = self.file_source
-        if self.file_scope:
+        if self.file_scope and FILE_SCOPE_TAG not in params:
             params[FILE_SCOPE_TAG] = self.file_scope
+        if self.file_path and FILE_PATH_TAG not in params:
+            params[FILE_PATH_TAG] = self.file_path
         return params
     
     def upload_file(self, file_path: str) -> Optional[Dict[str, Any]]:
@@ -106,7 +132,7 @@ class Client:
         - scope (fileScope): 可选，作用域，未指定时文件为共享，需通过 bind_scope() 提前设置
         - path (filePath): 可选，存储路径，未指定时默认以年月日作为路径
         - name: 必选，文件名，自动从上传的文件字段获取
-        - needCommit (needSubmit): 可选，是否需要 CommitFile，默认为 false
+        - needSubmit: 可选，是否按“上传后再 CommitFile”的临时文件流程处理，默认为 false
         
         Args:
             file_path: 本地文件路径
@@ -134,7 +160,7 @@ class Client:
                         if json_result and json_result.get('error') is None:
                             return json_result.get('value')
                         else:
-                            error_msg = json_result.get('reason', '未知错误') if json_result else '未知错误'
+                            error_msg = self._extract_error_message(json_result)
                             logger.error('上传文件失败: %s', error_msg)
                             return None
                     except Exception as e:
@@ -145,7 +171,7 @@ class Client:
                     if result and result.get('error') is None:
                         return result.get('value')
                     else:
-                        error_msg = result.get('reason', '未知错误') if result else '未知错误'
+                        error_msg = self._extract_error_message(result)
                         logger.error('上传文件失败: %s', error_msg)
                         return None
                 else:
@@ -218,7 +244,7 @@ class Client:
                                         token = value  # 直接是token字符串
                                     return token
                                 else:
-                                    error_msg = json_result.get('reason', '未知错误') if json_result else '未知错误'
+                                    error_msg = self._extract_error_message(json_result)
                                     logger.error('上传文件流失败: %s', error_msg)
                                     return None
                             else:
@@ -240,7 +266,7 @@ class Client:
                                 token = value  # 直接是token字符串
                             return token
                         else:
-                            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+                            error_msg = self._extract_error_message(result)
                             logger.error('上传文件流失败: %s', error_msg)
                             return None
                     elif isinstance(result, str):
@@ -313,7 +339,7 @@ class Client:
         if result and result.get('error') is None:
             return result.get('value')
         else:
-            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            error_msg = self._extract_error_message(result)
             logger.error('查看文件失败: %s', error_msg)
             return None
     
@@ -326,6 +352,7 @@ class Client:
         - id: 必选，文件 ID（通过 URL 路径传递）
         - source (fileSource): 必选，文件源，需通过 bind_source() 提前设置
         - 其他参数: 可选，通过 JSON Body 传递更新字段（如 name, description, ttl, tags 等）
+          其中 ttl 单位为天
         
         Args:
             file_id: 文件ID
@@ -350,7 +377,7 @@ class Client:
         if result and result.get('error') is None:
             return result.get('value')
         else:
-            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            error_msg = self._extract_error_message(result)
             logger.error('更新文件失败: %s', error_msg)
             return None
     
@@ -385,7 +412,7 @@ class Client:
         if result and result.get('error') is None:
             return result.get('value')
         else:
-            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            error_msg = self._extract_error_message(result)
             logger.error('删除文件失败: %s', error_msg)
             return None
     
@@ -420,7 +447,7 @@ class Client:
         if result and result.get('error') is None:
             return result.get('value')
         else:
-            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            error_msg = self._extract_error_message(result)
             logger.error('查询文件失败: %s', error_msg)
             return None
     
@@ -428,17 +455,17 @@ class Client:
         """提交文件（对应 CommitFile）
         
         确认文件上传完成，以便将临时文件转为正式文件。
-        该功能配合 UploadFile 使用，在 UploadFile 时可通过 needCommit 参数决定是否需要进行 CommitFile 操作。
-        UploadStream 不支持 CommitFile。
+        该功能配合 `needSubmit=true` 的上传流程使用；上传成功后，
+        调用方再根据返回的文件 ID 执行 CommitFile。
         
         参数说明：
         - id: 必选，文件 ID（通过 URL 路径传递）
         - source (fileSource): 必选，文件源，需通过 bind_source() 提前设置
-        - ttl: 可选，有效期（单位：秒），通过 JSON Body 传递
+        - ttl: 可选，有效期（单位：天），通过 JSON Body 传递
         
         Args:
             file_id: 文件ID
-            ttl: 有效期（单位：秒），0 表示永久
+            ttl: 有效期（单位：天），0 表示保留服务默认有效期
             
         Returns:
              提交后的文件信息，失败返回 None
@@ -461,7 +488,7 @@ class Client:
         if result and result.get('error') is None:
             return result.get('value')
         else:
-            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            error_msg = self._extract_error_message(result)
             logger.error('提交文件失败: %s', error_msg)
             return None
     
@@ -481,6 +508,13 @@ class Client:
         Returns:
             文件列表，失败返回 None
         """
+        result = self.explorer_file(params)
+        if result is None:
+            return None
+        return result.get('files', [])
+
+    def explorer_file(self, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """获取完整浏览结果（dirs/files/currentPath/total*）。"""
         if not params:
             params = {}
         
@@ -490,13 +524,12 @@ class Client:
         
         result = self.base_client.get(url, params)
         if result and result.get('error') is None:
-            # 服务器返回的是 {"error": null, "value": {"files": [...], "dirs": [...]}}
             value = result.get('value', {})
             if isinstance(value, dict):
-                return value.get('files', [])
-            return []
+                return value
+            return {}
         else:
-            error_msg = result.get('reason', '未知错误') if result else '未知错误'
+            error_msg = self._extract_error_message(result)
             logger.error('过滤文件失败: %s', error_msg)
             return None
 
@@ -522,6 +555,8 @@ class File:
         self.client = Client(work_session.base_url, work_session)
         self.client.bind_scope(scope)
         self.client.bind_source(source)
+        if path:
+            self.client.bind_path(path)
         # 设置命名空间
         if work_session.namespace:
             self.client.assign_namespace(work_session.namespace)
@@ -529,6 +564,10 @@ class File:
     def filter_file(self, params: Optional[Dict[str, Any]] = None) -> Optional[List[Dict[str, Any]]]:
         """过滤文件"""
         return self.client.filter_file(params)
+
+    def explorer_file(self, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """获取完整浏览结果"""
+        return self.client.explorer_file(params)
     
     def query_file(self, file_id: int, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """查询文件"""
@@ -640,7 +679,14 @@ def main(server_url: str, namespace: str) -> bool:
         logger.error('过滤文件失败, 文件不匹配')
         return False
 
-    cur_file = app.query_file(new_file['id'])
+    pre_file = app.view_file(new_file['token'])
+    if not pre_file:
+        logger.error('查看文件失败')
+        return False
+
+    file_id = pre_file['id']
+
+    cur_file = app.query_file(file_id)
     if not cur_file:
         logger.error('查询文件失败')
         return False
@@ -650,23 +696,18 @@ def main(server_url: str, namespace: str) -> bool:
     update_param = {
         'description': new_description
     }
-    updated_file = app.update_file(new_file['id'], update_param)
+    updated_file = app.update_file(file_id, update_param)
     if not updated_file:
         logger.error('更新文件失败')
         return False
 
     # 再次查询验证更新
-    cur_file = app.query_file(new_file['id'])
+    cur_file = app.query_file(file_id)
     if not cur_file:
         logger.error('查询文件失败')
         return False
     if cur_file.get('description') != new_description:
         logger.error("更新文件失败, 描述不匹配")
-        return False
-
-    pre_file = app.view_file(new_file['token'])
-    if not pre_file:
-        logger.error('查看文件失败')
         return False
 
     new_file_path = "/tmp/downloaded_file.txt"
@@ -676,7 +717,7 @@ def main(server_url: str, namespace: str) -> bool:
         return False
     os.remove(new_file_path)
 
-    old_file = app.delete_file(new_file['id'])
+    old_file = app.delete_file(file_id)
     if not old_file:
         logger.error('删除文件失败')
         return False
