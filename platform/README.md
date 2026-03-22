@@ -40,7 +40,7 @@ python3 -m unittest value.value_test -v
 
 - 平台 smoke 入口和 `application_test.py` 默认都指向 `MAGICTEST_PLATFORM_BASE_URL`
 - 默认 namespace 统一来自 `MAGICTEST_PLATFORM_NAMESPACE`
-- 若后续补 `block/entity/value` 的正式回归，优先继续沿用 `unittest` 结构，而不是再扩散独立脚本入口
+- 后续新增平台回归时，优先继续沿用 `unittest` 结构，而不是再扩散独立脚本入口
 - 由于目录名为 `platform`，运行 `unittest` 时不要使用 `platform.*` 模块路径，避免和 Python 标准库 `platform` 冲突
 
 ## 已知现状
