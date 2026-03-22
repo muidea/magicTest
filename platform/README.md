@@ -5,7 +5,7 @@
 ## 当前入口
 
 - `application/application_test.py`
-  - 当前唯一成体系的 `unittest` 用例入口
+  - 当前第一组正式 `unittest` 用例入口
   - 覆盖 create / query / update / filter / delete 以及部分边界场景
 - `block/block_test.py`
   - 当前第二个成体系的 `unittest` 用例入口
@@ -25,15 +25,15 @@
 ## 推荐命令
 
 ```bash
-cd ../magicTest
+cd ../magicTest/platform
 source ../venv/bin/activate
 HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
 NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
-PYTHONPATH=.:$PYTHONPATH \
-python3 -m unittest platform.application.application_test -v
-python3 -m unittest platform.block.block_test -v
-python3 -m unittest platform.entity.entity_test -v
-python3 -m unittest platform.value.value_test -v
+PYTHONPATH=..:.:$PYTHONPATH \
+python3 -m unittest application.application_test -v
+python3 -m unittest block.block_test -v
+python3 -m unittest entity.entity_test -v
+python3 -m unittest value.value_test -v
 ```
 
 ## 当前一致性约定
@@ -41,6 +41,7 @@ python3 -m unittest platform.value.value_test -v
 - 平台 smoke 入口和 `application_test.py` 默认都指向 `MAGICTEST_PLATFORM_BASE_URL`
 - 默认 namespace 统一来自 `MAGICTEST_PLATFORM_NAMESPACE`
 - 若后续补 `block/entity/value` 的正式回归，优先继续沿用 `unittest` 结构，而不是再扩散独立脚本入口
+- 由于目录名为 `platform`，运行 `unittest` 时不要使用 `platform.*` 模块路径，避免和 Python 标准库 `platform` 冲突
 
 ## 已知现状
 

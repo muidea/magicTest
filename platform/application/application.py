@@ -187,6 +187,13 @@ class Application:
             return None
         return val.get('value')
 
+    def delete_application(self, id: int) -> Optional[Dict[str, Any]]:
+        """删除应用
+
+        兼容旧测试入口，实际行为与 ``destroy_application`` 一致。
+        """
+        return self.destroy_application(id)
+
     def start_application(self, id: int) -> Optional[Dict[str, Any]]:
         """启动应用
         
