@@ -5,7 +5,7 @@
 ## 1. 运行前提
 
 - Python 虚拟环境：`/home/rangh/codespace/venv`
-- 默认目标服务：`https://autotest.local.vpc`
+- 本地验证默认目标服务：`https://autotest.local.vpc`
 - 默认账号：`administrator / administrator`
 - 默认命名空间：`autotest`
 
@@ -16,7 +16,7 @@ cd /home/rangh/codespace/magicTest/vmi
 source /home/rangh/codespace/venv/bin/activate
 ```
 
-如果环境中设置了代理，建议回归前显式清空：
+如果环境中设置了代理，建议回归前按实际目标域名显式清空，例如：
 
 ```bash
 HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
@@ -103,7 +103,7 @@ python3 run_tests.py --pytest --all
 
 ### 4.1 单租户配置
 
-当前标准配置文件是 [test_config.json](/home/rangh/codespace/magicTest/vmi/test_config.json)：
+本地验证时，标准配置通常会把 [test_config.json](/home/rangh/codespace/magicTest/vmi/test_config.json) 设为：
 
 ```json
 {
@@ -135,6 +135,8 @@ python3 run_tests.py --pytest --all
   }
 }
 ```
+
+如果当前工作区里的 `test_config.json` 已被切到其他环境，回归前先改回目标环境，再同步调整代理白名单。
 
 ### 4.2 多租户配置
 

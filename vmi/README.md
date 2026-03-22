@@ -21,7 +21,7 @@ source /home/rangh/codespace/venv/bin/activate
 python3 -m unittest discover -s . -p '*_test.py' -v
 ```
 
-远端环境回归时，建议显式关闭代理：
+远端环境回归时，建议按实际目标域名显式关闭代理，例如：
 
 ```bash
 source /home/rangh/codespace/venv/bin/activate
@@ -62,7 +62,7 @@ python3 -m unittest discover -s . -p '*_test.py' -v
 
 ## 配置文件
 
-默认配置文件是 `test_config.json`，当前结构如下：
+默认配置文件是 `test_config.json`。本地验证时，通常使用如下配置：
 
 ```json
 {
@@ -94,6 +94,8 @@ python3 -m unittest discover -s . -p '*_test.py' -v
   }
 }
 ```
+
+如果当前工作区已经切到其他环境，回归前先把 `test_config.json` 调整到目标环境，再同步调整 `NO_PROXY`。
 
 如果启用多租户，需要额外声明 `multi_tenant` 段，具体见 [TEST_GUIDE.md](/home/rangh/codespace/magicTest/vmi/TEST_GUIDE.md)。
 
@@ -145,3 +147,9 @@ python3 aging_test_simple.py --duration 0.5
 - 系统当前允许重复 `productInfo.sku`
 - 部分创建或更新接口不会返回完整关联字段或 `modifyTime`
 - 真实环境偶发会出现单次 `count` 请求超时，但通常不影响整轮回归
+
+当前回归状态补充：
+
+- 2026-03-22 对 `https://autotest.local.vpc` 的 `run_tests.py --all` 回归中，验证、多租户、场景、模块测试通过
+- 同日单独复跑 `concurrent_test_v2.py` 时，其余 4 个并发用例通过，仅 `test_concurrent_product_creation` 失败
+- 当前唯一剩余失败为产品并发创建场景的性能阈值断言，实测 `avg_response_time = 3.141s`，阈值为 `< 3.0s`

@@ -15,3 +15,5 @@ if dir_path not in sys.path:
 cas_sub_path = os.path.join(dir_path, 'cas')
 if cas_sub_path not in sys.path:
     sys.path.append(cas_sub_path)
+
+from .cas import Cas

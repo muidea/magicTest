@@ -164,7 +164,12 @@
 - 依赖构造收敛到 `test_dependency_helper.py`
 - 清理和统计逻辑收敛到 `test_vmi_base.py`
 - 现有实体测试已统一切换到清理注册表模式，不再保留分散的类级/用例级清理记录写法
-- 2026-03-20 已通过 `run_tests.py --all` 全量回归，验证、多租户、并发、场景和模块测试全部通过
 - 大量测试文件去掉非结构化 `print`
 - 多租户离线测试改成更稳定的 mock 驱动
 - `run_tests.py`、`concurrent_test_v2.py`、`cas_mock/cas.py` 统一改为日志输出
+
+最近一次对 `autotest.local.vpc` 的真实回归结果是：
+
+- 2026-03-22 `run_tests.py --all`：验证、多租户、场景、模块测试通过
+- 2026-03-22 单独复跑 `concurrent_test_v2.py`：5 个并发用例中 4 个通过，仅 `test_concurrent_product_creation` 失败
+- 当前唯一剩余失败为 `test_concurrent_product_creation` 的平均响应时间阈值断言 `avg_response_time < 3.0s`，实测值为 `3.141s`

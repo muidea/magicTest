@@ -6,7 +6,7 @@
 
 - 代码目录：`/home/rangh/codespace/magicTest/vmi`
 - Python 虚拟环境：`/home/rangh/codespace/venv`
-- 可访问目标服务：默认 `https://autotest.local.vpc`
+- 可访问目标服务：本地验证默认 `https://autotest.local.vpc`
 - CAS 认证可用
 - `test_config.json` 已按当前环境更新
 
@@ -17,7 +17,7 @@ cd /home/rangh/codespace/magicTest/vmi
 source /home/rangh/codespace/venv/bin/activate
 ```
 
-如果环境带有代理，建议先清空：
+如果环境带有代理，建议先按实际目标域名清空，例如：
 
 ```bash
 export HTTPS_PROXY=
@@ -44,6 +44,8 @@ python3 run_tests.py --check-config
 - `session.refresh_interval`
 - `session.timeout`
 - `aging.duration_hours`
+
+本地验证时，`server.url` 通常应为 `https://autotest.local.vpc`。
 
 ## 3. 部署后冒烟验证
 
@@ -93,7 +95,7 @@ python3 run_tests.py --all
 python3 -m unittest discover -s . -p '*_test.py' -v
 ```
 
-如果是远端真实环境，推荐显式禁用代理：
+如果是远端真实环境，推荐按目标域名显式禁用代理，例如：
 
 ```bash
 HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
