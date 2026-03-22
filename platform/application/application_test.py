@@ -3,6 +3,7 @@
 import unittest
 import warnings
 import logging
+import os
 from session import session
 from application import application
 from mock import common as mock
@@ -14,8 +15,8 @@ logger = logging.getLogger(__name__)
 class ApplicationTestCase(unittest.TestCase):
     """Application 测试用例类"""
     
-    server_url = 'https://autotest.local.vpc/api/v1'
-    namespace = ''
+    server_url = os.getenv('MAGICTEST_PLATFORM_BASE_URL', 'https://autotest.local.vpc/api/v1')
+    namespace = os.getenv('MAGICTEST_PLATFORM_NAMESPACE', '')
     
     @classmethod
     def setUpClass(cls):
