@@ -16,7 +16,7 @@
 
 ### 2.1 启动与路径层
 
-- [test_bootstrap.py](/home/rangh/codespace/magicTest/vmi/test_bootstrap.py)
+- [test_bootstrap.py](../test_bootstrap.py)
 
 职责：
 
@@ -26,9 +26,9 @@
 
 ### 2.2 配置层
 
-- [config_helper.py](/home/rangh/codespace/magicTest/vmi/config_helper.py)
-- [tenant_config_helper.py](/home/rangh/codespace/magicTest/vmi/tenant_config_helper.py)
-- [test_config.json](/home/rangh/codespace/magicTest/vmi/test_config.json)
+- [config_helper.py](../config_helper.py)
+- [tenant_config_helper.py](../tenant_config_helper.py)
+- [test_config.json](../test_config.json)
 
 职责：
 
@@ -44,7 +44,7 @@
 
 ### 2.3 会话层
 
-- [session_manager.py](/home/rangh/codespace/magicTest/vmi/session_manager.py)
+- [session_manager.py](../session_manager.py)
 
 职责：
 
@@ -61,10 +61,10 @@
 
 ### 2.4 测试基础设施层
 
-- [test_vmi_base.py](/home/rangh/codespace/magicTest/vmi/test_vmi_base.py)
-- [test_dependency_helper.py](/home/rangh/codespace/magicTest/vmi/test_dependency_helper.py)
-- [test_base_with_session_manager.py](/home/rangh/codespace/magicTest/vmi/test_base_with_session_manager.py)
-- [test_base_multi_tenant.py](/home/rangh/codespace/magicTest/vmi/test_base_multi_tenant.py)
+- [test_vmi_base.py](../test_vmi_base.py)
+- [test_dependency_helper.py](../test_dependency_helper.py)
+- [test_base_with_session_manager.py](../test_base_with_session_manager.py)
+- [test_base_multi_tenant.py](../test_base_multi_tenant.py)
 
 职责划分：
 
@@ -87,9 +87,9 @@
 
 ### 3.1 离线验证
 
-- [test_complete_validation.py](/home/rangh/codespace/magicTest/vmi/test_complete_validation.py)
-- [test_multi_tenant.py](/home/rangh/codespace/magicTest/vmi/test_multi_tenant.py)
-- [test_multi_tenant_example.py](/home/rangh/codespace/magicTest/vmi/test_multi_tenant_example.py)
+- [test_complete_validation.py](../test_complete_validation.py)
+- [test_multi_tenant.py](../test_multi_tenant.py)
+- [test_multi_tenant_example.py](../test_multi_tenant_example.py)
 
 特点：
 
@@ -115,9 +115,9 @@
 
 ### 3.3 场景与性能测试
 
-- [scenario_test.py](/home/rangh/codespace/magicTest/vmi/scenario_test.py)
-- [concurrent_test_v2.py](/home/rangh/codespace/magicTest/vmi/concurrent_test_v2.py)
-- [aging_test_simple.py](/home/rangh/codespace/magicTest/vmi/aging_test_simple.py)
+- [scenario_test.py](../scenario_test.py)
+- [concurrent_test_v2.py](../concurrent_test_v2.py)
+- [aging_test_simple.py](../aging_test_simple.py)
 
 特点：
 
@@ -127,7 +127,7 @@
 
 ## 4. 运行路径
 
-统一入口是 [run_tests.py](/home/rangh/codespace/magicTest/vmi/run_tests.py)。
+统一入口是 [run_tests.py](../run_tests.py)。
 
 执行模型：
 
@@ -172,4 +172,4 @@
 
 - 2026-03-22 `run_tests.py --all`：验证、多租户、场景、模块测试通过
 - 2026-03-22 单独复跑 `concurrent_test_v2.py`：5 个并发用例中 4 个通过，仅 `test_concurrent_product_creation` 失败
-- 当前唯一剩余失败为 `test_concurrent_product_creation` 的平均响应时间阈值断言 `avg_response_time < 3.0s`，实测值为 `3.141s`
+- 当前唯一剩余失败为 `test_concurrent_product_creation` 的平均响应时间阈值断言 `avg_response_time < 3.0s`，最近一次观测到平均响应时间略高于该阈值

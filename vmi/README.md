@@ -7,7 +7,7 @@
 推荐统一入口：
 
 ```bash
-source /home/rangh/codespace/venv/bin/activate
+source ../venv/bin/activate
 python3 run_tests.py --quick
 python3 run_tests.py --all
 python3 run_tests.py --module
@@ -17,14 +17,14 @@ python3 run_tests.py --aging 30
 直接运行 `unittest`：
 
 ```bash
-source /home/rangh/codespace/venv/bin/activate
+source ../venv/bin/activate
 python3 -m unittest discover -s . -p '*_test.py' -v
 ```
 
 远端环境回归时，建议按实际目标域名显式关闭代理，例如：
 
 ```bash
-source /home/rangh/codespace/venv/bin/activate
+source ../venv/bin/activate
 HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
 NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
 python3 -m unittest discover -s . -p '*_test.py' -v
@@ -97,7 +97,7 @@ python3 -m unittest discover -s . -p '*_test.py' -v
 
 如果当前工作区已经切到其他环境，回归前先把 `test_config.json` 调整到目标环境，再同步调整 `NO_PROXY`。
 
-如果启用多租户，需要额外声明 `multi_tenant` 段，具体见 [TEST_GUIDE.md](/home/rangh/codespace/magicTest/vmi/TEST_GUIDE.md)。
+如果启用多租户，需要额外声明 `multi_tenant` 段，具体见 [TEST_GUIDE.md](TEST_GUIDE.md)。
 
 ## 常用命令
 
@@ -132,11 +132,11 @@ python3 aging_test_simple.py --duration 0.5
 
 ## 文档索引
 
-- [TEST_GUIDE.md](/home/rangh/codespace/magicTest/vmi/TEST_GUIDE.md)
+- [TEST_GUIDE.md](TEST_GUIDE.md)
   面向使用者和维护者的测试说明。
-- [DEPLOYMENT.md](/home/rangh/codespace/magicTest/vmi/DEPLOYMENT.md)
+- [DEPLOYMENT.md](DEPLOYMENT.md)
   面向部署后验证的执行说明。
-- [TEST_ARCHITECTURE.md](/home/rangh/codespace/magicTest/vmi/docs/TEST_ARCHITECTURE.md)
+- [TEST_ARCHITECTURE.md](docs/TEST_ARCHITECTURE.md)
   面向维护者的测试架构与分层说明。
 
 ## 当前已知行为
@@ -152,4 +152,4 @@ python3 aging_test_simple.py --duration 0.5
 
 - 2026-03-22 对 `https://autotest.local.vpc` 的 `run_tests.py --all` 回归中，验证、多租户、场景、模块测试通过
 - 同日单独复跑 `concurrent_test_v2.py` 时，其余 4 个并发用例通过，仅 `test_concurrent_product_creation` 失败
-- 当前唯一剩余失败为产品并发创建场景的性能阈值断言，实测 `avg_response_time = 3.141s`，阈值为 `< 3.0s`
+- 当前唯一剩余失败为产品并发创建场景的性能阈值断言，最近一次观测到平均响应时间略高于 `< 3.0s` 的目标阈值

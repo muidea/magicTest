@@ -4,7 +4,7 @@
 
 ## 1. 运行前提
 
-- Python 虚拟环境：`/home/rangh/codespace/venv`
+- Python 虚拟环境：`../venv`
 - 本地验证默认目标服务：`https://autotest.local.vpc`
 - 默认账号：`administrator / administrator`
 - 默认命名空间：`autotest`
@@ -12,8 +12,8 @@
 准备命令：
 
 ```bash
-cd /home/rangh/codespace/magicTest/vmi
-source /home/rangh/codespace/venv/bin/activate
+cd ../magicTest/vmi
+source ../venv/bin/activate
 ```
 
 如果环境中设置了代理，建议回归前按实际目标域名显式清空，例如：
@@ -26,7 +26,7 @@ python3 -m unittest discover -s . -p '*_test.py' -v
 
 ## 2. 入口说明
 
-统一入口是 [run_tests.py](/home/rangh/codespace/magicTest/vmi/run_tests.py)。
+统一入口是 [run_tests.py](run_tests.py)。
 
 支持的主命令：
 
@@ -66,24 +66,24 @@ python3 run_tests.py --pytest --all
 
 ### 3.1 基础层
 
-- [test_bootstrap.py](/home/rangh/codespace/magicTest/vmi/test_bootstrap.py)
+- [test_bootstrap.py](test_bootstrap.py)
   统一补齐路径和告警抑制。
-- [config_helper.py](/home/rangh/codespace/magicTest/vmi/config_helper.py)
+- [config_helper.py](config_helper.py)
   读取统一配置。
-- [tenant_config_helper.py](/home/rangh/codespace/magicTest/vmi/tenant_config_helper.py)
+- [tenant_config_helper.py](tenant_config_helper.py)
   读取和展开多租户配置。
-- [session_manager.py](/home/rangh/codespace/magicTest/vmi/session_manager.py)
+- [session_manager.py](session_manager.py)
   会话创建、自动刷新、失效恢复。
 
 ### 3.2 测试基础设施层
 
-- [test_vmi_base.py](/home/rangh/codespace/magicTest/vmi/test_vmi_base.py)
+- [test_vmi_base.py](test_vmi_base.py)
   为实体测试提供通用日志、清理和数量统计能力。
-- [test_dependency_helper.py](/home/rangh/codespace/magicTest/vmi/test_dependency_helper.py)
+- [test_dependency_helper.py](test_dependency_helper.py)
   为库存相关测试构造依赖实体。
-- [test_base_with_session_manager.py](/home/rangh/codespace/magicTest/vmi/test_base_with_session_manager.py)
+- [test_base_with_session_manager.py](test_base_with_session_manager.py)
   旧的通用会话测试基类，仍被多租户和部分场景使用。
-- [test_base_multi_tenant.py](/home/rangh/codespace/magicTest/vmi/test_base_multi_tenant.py)
+- [test_base_multi_tenant.py](test_base_multi_tenant.py)
   多租户测试基类。
 
 ### 3.3 用例层
@@ -95,15 +95,15 @@ python3 run_tests.py --pytest --all
 - `status/`
 - `store/`
 - `warehouse/`
-- [scenario_test.py](/home/rangh/codespace/magicTest/vmi/scenario_test.py)
-- [concurrent_test_v2.py](/home/rangh/codespace/magicTest/vmi/concurrent_test_v2.py)
-- [aging_test_simple.py](/home/rangh/codespace/magicTest/vmi/aging_test_simple.py)
+- [scenario_test.py](scenario_test.py)
+- [concurrent_test_v2.py](concurrent_test_v2.py)
+- [aging_test_simple.py](aging_test_simple.py)
 
 ## 4. 配置说明
 
 ### 4.1 单租户配置
 
-本地验证时，标准配置通常会把 [test_config.json](/home/rangh/codespace/magicTest/vmi/test_config.json) 设为：
+本地验证时，标准配置通常会把 [test_config.json](test_config.json) 设为：
 
 ```json
 {
@@ -181,9 +181,9 @@ python3 run_tests.py --pytest --all
 
 推荐模式：
 
-1. 继承 [VMITestCase](/home/rangh/codespace/magicTest/vmi/test_vmi_base.py)
+1. 继承 [VMITestCase](test_vmi_base.py)
 2. 统一使用 `build_cleanup_registry`、`merge_cleanup_registry` 和 `clear_cleanup_registry` 维护清理记录，避免重复清理
-3. 依赖实体优先走 [test_dependency_helper.py](/home/rangh/codespace/magicTest/vmi/test_dependency_helper.py)
+3. 依赖实体优先走 [test_dependency_helper.py](test_dependency_helper.py)
 4. 允许记录“当前系统行为观察”，但不要把未经确认的业务约束直接写死为失败断言
 
 ### 5.2 新增离线/框架测试
