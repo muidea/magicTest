@@ -2,6 +2,16 @@
 
 `magicTest/platform` 用于回归 `magicBase` 的核心平台接口。当前默认目标环境是 `https://autotest.local.vpc/api/v1`，可通过 `MAGICTEST_PLATFORM_BASE_URL` / `MAGICTEST_PLATFORM_NAMESPACE` 覆盖。
 
+这里要特别区分两层：
+
+- 本目录覆盖的是 `magicBase` 自身的 `application/block/entity/value/access_log/operation_log/totalizator` 平台接口
+- 不覆盖 `magicPanel` 中那组 `artifact application / entity / subscription / feedback / notification` 运行期对象入口
+
+因此：
+
+- `magicTest/platform` 的通过，不能直接等价为 `magicPanel` 运行期对象接口已完成回归
+- `magicPanel` 对象语义应以 `magicRunner/docs/design-panel-runtime-objects.md` 为准
+
 ## 当前入口
 
 - `application/application_test.py`
