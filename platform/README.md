@@ -20,6 +20,9 @@
 - `block/__main__.py`
 - `entity/__main__.py`
 - `value/__main__.py`
+- `access_log/__main__.py`
+- `operation_log/__main__.py`
+- `totalizator/__main__.py`
   - 以上入口当前主要作为 smoke 脚本，适合人工联调，不等同于成体系回归
 
 ## 推荐命令
