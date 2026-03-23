@@ -1,0 +1,39 @@
+# panel
+
+`magicTest/panel` 用于回归 `magicPanel` 当前公开的运行期对象入口。默认目标环境是 `https://autotest.local.vpc/api/v1`，默认 namespace 是 `panel`。
+
+当前第一批已落地的是“应用生命周期组”的最小测试入口：
+
+- [application_lifecycle_test.py](application_lifecycle_test.py)
+  - `fetch running application` smoke
+  - 在显式提供 `MAGICTEST_PANEL_APP_UUID` 时执行可恢复的 `start/stop` 回归
+
+## 认证方式
+
+优先级如下：
+
+1. `MAGICTEST_PANEL_BEARER_TOKEN`
+2. `MAGICTEST_PANEL_AUTH_ENDPOINT` + `MAGICTEST_PANEL_AUTH_TOKEN`
+3. `MAGICTEST_PANEL_LOGIN_ACCOUNT` + `MAGICTEST_PANEL_LOGIN_PASSWORD`
+
+如果走账号密码方式，测试会自动调用 CAS 登录并把 session token 绑定到 panel session。
+
+## 推荐命令
+
+```bash
+cd ../magicTest/panel
+source ../venv/bin/activate
+HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
+NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
+PYTHONPATH=..:.:$PYTHONPATH \
+python3 -m unittest application_lifecycle_test -v
+```
+
+如果要执行 `start/stop` 回归，还需要额外提供：
+
+- `MAGICTEST_PANEL_APP_UUID`
+
+## 当前边界
+
+- 当前只落了生命周期组的安全入口，不默认执行安装/卸载
+- 安装/卸载、schema、subscription、artifact、feedback、notification 的专项回归分组设计见 `magicRunner/docs/design-panel-regression-plan.md`
