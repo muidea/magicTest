@@ -16,6 +16,10 @@
   - `filter entity artifact` smoke
   - 在显式提供 artifact id 时查询 application/entity artifact 与 `pkg tree`
   - 在额外允许变更时执行 application/entity artifact roundtrip
+- [profile_test.py](profile_test.py)
+  - `GetSystemNotification` smoke
+  - `Profile` smoke
+  - 校验 `summary` / `notification` 的返回结构
 
 ## 认证方式
 
@@ -59,4 +63,5 @@ python3 -m unittest application_lifecycle_test -v
 - 当前只落了生命周期组的安全入口，不默认执行安装/卸载
 - `subscription` 组默认只跑读路径；写路径只在显式提供可变更对象时执行
 - `artifact` 组默认只跑读路径；写路径只在显式提供允许变更时执行
+- `profile` 组当前全部为只读 smoke，不引入额外副作用
 - 安装/卸载、schema、subscription、artifact、feedback、notification 的专项回归分组设计见 `magicRunner/docs/design-panel-regression-plan.md`
