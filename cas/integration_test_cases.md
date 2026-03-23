@@ -10,7 +10,7 @@
 - scope 外 namespace 不能越权管理其他 namespace
 
 对应测试：
-- [namespace_test.py](/home/rangh/codespace/magicTest/cas/namespace/namespace_test.py)
+- [namespace_test.py](namespace/namespace_test.py)
 
 ### IT-002 Role 与 Account 绑定
 
@@ -21,8 +21,8 @@
 - 重复 `Role` 名称在同 namespace 下应被拒绝，不再走隐式 update
 
 对应测试：
-- [account_test.py](/home/rangh/codespace/magicTest/cas/account/account_test.py)
-- [role_test.py](/home/rangh/codespace/magicTest/cas/role/role_test.py)
+- [account_test.py](account/account_test.py)
+- [role_test.py](role/role_test.py)
 
 ### IT-003 Endpoint 显式授权对象
 
@@ -33,7 +33,7 @@
 - 未显式提供 `Scope` 的 `Endpoint` 创建应失败
 
 对应测试：
-- [endpoint_test.py](/home/rangh/codespace/magicTest/cas/endpoint/endpoint_test.py)
+- [endpoint_test.py](endpoint/endpoint_test.py)
 
 ### IT-004 AuthSecret 凭证签发与外部授信访问
 
@@ -45,8 +45,8 @@
 - endpoint 删除、endpoint 失效、绑定 account 失效、绑定 role 失效后，运行态 `AuthSecret` 应被拒绝
 
 对应测试：
-- [endpoint_test.py](/home/rangh/codespace/magicTest/cas/endpoint/endpoint_test.py)
-- [cas_api_test.py](/home/rangh/codespace/magicTest/cas/cas_api_test.py)
+- [endpoint_test.py](endpoint/endpoint_test.py)
+- [cas_api_test.py](cas_api_test.py)
 
 ### IT-005 基础链路冒烟
 
@@ -55,7 +55,7 @@
 - `account login -> refresh -> logout` 会话链路
 
 对应测试：
-- [basic_scenario_test.py](/home/rangh/codespace/magicTest/cas/basic_scenario_test.py)
+- [basic_scenario_test.py](basic_scenario_test.py)
 
 ### IT-006 CAS 运行态接口语义
 
@@ -71,7 +71,7 @@
 - 绑定 `Role` 已失效时，已登录 JWT 的 `refresh` 必须拒绝
 
 对应测试：
-- [cas_api_test.py](/home/rangh/codespace/magicTest/cas/cas_api_test.py)
+- [cas_api_test.py](cas_api_test.py)
 
 ## 当前执行约定
 

@@ -4,8 +4,8 @@
 
 ## 1. 前提条件
 
-- 代码目录：`/home/rangh/codespace/magicTest/vmi`
-- Python 虚拟环境：`/home/rangh/codespace/venv`
+- 代码目录：`../magicTest/vmi`
+- Python 虚拟环境：`../venv`
 - 可访问目标服务：本地验证默认 `https://autotest.local.vpc`
 - CAS 认证可用
 - `test_config.json` 已按当前环境更新
@@ -13,8 +13,8 @@
 准备：
 
 ```bash
-cd /home/rangh/codespace/magicTest/vmi
-source /home/rangh/codespace/venv/bin/activate
+cd ../magicTest/vmi
+source ../venv/bin/activate
 ```
 
 如果环境带有代理，建议先按实际目标域名清空，例如：
@@ -30,7 +30,7 @@ export no_proxy=autotest.local.vpc
 
 ## 2. 核对配置
 
-先检查 [test_config.json](/home/rangh/codespace/magicTest/vmi/test_config.json)：
+先检查 [test_config.json](test_config.json)：
 
 ```bash
 python3 run_tests.py --check-config
