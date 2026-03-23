@@ -152,4 +152,4 @@ python3 aging_test_simple.py --duration 0.5
 
 - 2026-03-22 对 `https://autotest.local.vpc` 的 `run_tests.py --all` 回归中，验证、多租户、场景、模块测试通过
 - 同日单独复跑 `concurrent_test_v2.py` 时，其余 4 个并发用例通过，仅 `test_concurrent_product_creation` 失败
-- 当前唯一剩余失败为产品并发创建场景的性能阈值断言，最近一次观测到平均响应时间略高于 `< 3.0s` 的目标阈值
+- 当前剩余失败集中在产品并发创建场景的性能阈值断言，最近一次观测到平均响应时间略高于 `< 3.0s` 的目标阈值

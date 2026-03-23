@@ -172,4 +172,4 @@
 
 - 2026-03-22 `run_tests.py --all`：验证、多租户、场景、模块测试通过
 - 2026-03-22 单独复跑 `concurrent_test_v2.py`：5 个并发用例中 4 个通过，仅 `test_concurrent_product_creation` 失败
-- 当前唯一剩余失败为 `test_concurrent_product_creation` 的平均响应时间阈值断言 `avg_response_time < 3.0s`，最近一次观测到平均响应时间略高于该阈值
+- 当前剩余失败集中在 `test_concurrent_product_creation` 的平均响应时间阈值断言 `avg_response_time < 3.0s`，最近一次观测到平均响应时间略高于该阈值
