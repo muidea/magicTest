@@ -87,5 +87,5 @@
 - **全局作用域**: `"*"` 表示全局治理权限，需要特殊处理
 # 当前说明
 
-> 本文中的历史用例如果与 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 冲突，以后者为准。
+> 本文中的历史用例如果与 [cas.md](../cas.md) 冲突，以后者为准。
 > 当前不再将 namespace `scope` 解释为层级关系字段。

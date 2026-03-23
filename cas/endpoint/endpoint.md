@@ -419,7 +419,7 @@ def test_endpoint_timeliness():
 - [`magicTest/cas/role/role.py`](magicTest/cas/role/role.py): Role 客户端（依赖）
 # 当前说明
 
-> 本文包含历史样例，当前以 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [magicTest/cas/integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+> 本文包含历史样例，当前以 [cas.md](../cas.md) 和 [integration_test_cases.md](../integration_test_cases.md) 为准。
 > 当前有效口径：
 > `Endpoint` 是显式授权对象，必须绑定有效 `Account`、有效 `Role`、显式 `Scope`。
 > `Endpoint.Scope` 是运行态数据访问边界，不再按旧版“全局/逗号列表”口径理解。

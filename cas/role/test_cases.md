@@ -2,7 +2,7 @@
 
 ## 当前基线
 
-当前 `Role` 的测试语义以 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [magicTest/cas/integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+当前 `Role` 的测试语义以 [cas.md](../cas.md) 和 [integration_test_cases.md](../integration_test_cases.md) 为准。
 
 ## 已落地场景
 
@@ -40,4 +40,4 @@
 
 ## 对应测试
 
-- [role_test.py](/home/rangh/codespace/magicTest/cas/role/role_test.py)
+- [role_test.py](role_test.py)

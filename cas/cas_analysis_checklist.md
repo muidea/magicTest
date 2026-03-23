@@ -2,7 +2,7 @@
 
 ## 当前口径
 
-历史版本里混入过旧语义，这里只保留当前仍有效的核对点。业务与测试基线以 [cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+历史版本里混入过旧语义，这里只保留当前仍有效的核对点。业务与测试基线以 [cas.md](cas.md) 和 [integration_test_cases.md](integration_test_cases.md) 为准。
 
 ## 已确认
 
@@ -34,4 +34,4 @@
 ## 当前未做的事
 
 - 不在这里继续维护历史“分析过程”。
-- 若需补新场景，直接更新 [integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 和对应测试文件。
+- 若需补新场景，直接更新 [integration_test_cases.md](integration_test_cases.md) 和对应测试文件。

@@ -1,10 +1,10 @@
 # CAS Python 客户端
 
-当前客户端实现位于 [cas.py](/home/rangh/codespace/magicTest/cas/cas/cas.py)。
+当前客户端实现位于 [cas.py](cas.py)。
 
 ## 当前定位
 
-这不是通用 SDK 文档，而是 `magicTest/cas` e2e 用例使用的轻量客户端说明。当前语义以 [cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+这不是通用 SDK 文档，而是 `magicTest/cas` e2e 用例使用的轻量客户端说明。当前语义以 [cas.md](../cas.md) 和 [integration_test_cases.md](../integration_test_cases.md) 为准。
 
 ## 已支持能力
 
@@ -70,4 +70,4 @@ if cas.login("demo-user", "Test@123"):
 ## 说明
 
 - 当前 e2e 环境不可达时，用例会按 `SkipTest` 处理，不把网络问题误判为业务失败。
-- 文档若与代码不一致，以 [cas.py](/home/rangh/codespace/magicTest/cas/cas/cas.py) 为准。
+- 文档若与代码不一致，以 [cas.py](cas.py) 为准。

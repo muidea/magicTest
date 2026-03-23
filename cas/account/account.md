@@ -365,7 +365,7 @@ if new_account:
 - [`magicTest/cas/role/role_documentation.md`](magicTest/cas/role/role_documentation.md): Role 模块文档
 # 当前说明
 
-> 本文包含历史样例，当前以 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [magicTest/cas/integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+> 本文包含历史样例，当前以 [cas.md](../cas.md) 和 [integration_test_cases.md](../integration_test_cases.md) 为准。
 > 当前有效口径：
 > 当前请求体中的角色绑定字段为 `role`。
 > namespace 由当前会话上下文决定，不在 `Account` 请求体中单独传递。

@@ -343,7 +343,7 @@ if new_ns:
 - [`magicTest/mock/common.py`](magicTest/mock/common.py): 模拟数据生成工具
 # 当前说明
 
-> 本文包含历史样例，当前以 [magicTest/cas/cas.md](/home/rangh/codespace/magicTest/cas/cas.md) 和 [magicTest/cas/integration_test_cases.md](/home/rangh/codespace/magicTest/cas/integration_test_cases.md) 为准。
+> 本文包含历史样例，当前以 [cas.md](../cas.md) 和 [integration_test_cases.md](../integration_test_cases.md) 为准。
 > 当前有效口径：
 > `Namespace.Scope` 是治理范围，不是旧版“逗号分隔访问列表”语义。
 > 新建 namespace 未显式传入 `scope` 时，应默认回填为 namespace 自身名称。
