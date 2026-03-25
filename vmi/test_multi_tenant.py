@@ -149,6 +149,15 @@ class TestMultiTenantConfig(unittest.TestCase):
             },
             "credentials": {"username": "admin", "password": "admin"},
             "session": {"refresh_interval": 540, "timeout": 1800},
+            "concurrent": {
+                "multi_tenant_target_tenants": [
+                    "t001",
+                    "t002",
+                    "t003",
+                    "t004",
+                    "t005",
+                ]
+            },
             "multi_tenant": {
                 "enabled": True,
                 "default_tenant": "autotest",
@@ -179,6 +188,64 @@ class TestMultiTenantConfig(unittest.TestCase):
         self.assertTrue(is_multi_tenant_enabled())
 
         logger.info("启用多租户配置加载测试通过")
+
+    def test_concurrent_tenant_config_auto_fill(self):
+        """测试并发租户配置按 t001-t005 自动补齐"""
+        config_content = {
+            "server": {
+                "url": "https://test.local.vpc",
+                "namespace": "autotest",
+                "environment": "test",
+            },
+            "credentials": {"username": "administrator", "password": "administrator"},
+            "session": {"refresh_interval": 540, "timeout": 1800},
+            "concurrent": {
+                "multi_tenant_target_tenants": [
+                    "t001",
+                    "t002",
+                    "t003",
+                    "t004",
+                    "t005",
+                ]
+            },
+            "multi_tenant": {
+                "enabled": True,
+                "default_tenant": "autotest",
+                "tenants": [
+                    {
+                        "id": "autotest",
+                        "server_url": "https://test.local.vpc",
+                        "username": "administrator",
+                        "password": "administrator",
+                        "namespace": "autotest",
+                        "enabled": True,
+                    }
+                ],
+            },
+        }
+
+        with open("test_config.json", "w") as f:
+            json.dump(config_content, f, indent=2)
+
+        self._clear_config_cache()
+
+        from tenant_config_helper import (get_concurrent_tenant_configs,
+                                          get_concurrent_tenant_ids,
+                                          get_preferred_concurrent_tenant_ids)
+
+        preferred_ids = get_preferred_concurrent_tenant_ids()
+        self.assertEqual(preferred_ids, ["t001", "t002", "t003", "t004", "t005"])
+
+        tenant_ids = get_concurrent_tenant_ids()
+        self.assertEqual(tenant_ids, preferred_ids)
+
+        tenant_configs = get_concurrent_tenant_configs()
+        self.assertEqual(set(tenant_configs.keys()), set(preferred_ids))
+        self.assertEqual(tenant_configs["t001"]["server_url"], "https://test.local.vpc")
+        self.assertEqual(tenant_configs["t003"]["namespace"], "t003")
+        self.assertEqual(tenant_configs["t005"]["username"], "administrator")
+
+        logger.info("并发租户配置自动补齐测试通过")
 
     def test_disabled_config_loading(self):
         """测试禁用多租户的配置加载"""

@@ -52,13 +52,13 @@ python3 run_tests.py --pytest --all
 - `--multi-tenant`
   跑多租户配置和管理器测试。
 - `--concurrent`
-  跑并发测试。
+  跑并发测试；若启用多租户，会额外并发执行 `t001`-`t005` 的全业务链路覆盖。
 - `--scenario`
   跑业务场景测试。
 - `--module`
   跑所有模块级实体测试。
 - `--aging N`
-  跑 `N` 分钟老化测试，内部会转换为小时传给 `aging_test_simple.py`。
+  跑 `N` 分钟老化测试，内部会转换为小时传给 `aging_test_simple.py`；若开启多租户老化开关，则统一按时长控制 `t001`-`t005` 的持续并发业务流。
 - `--all`
   组合执行验证、多租户、并发、场景和模块测试。
 
@@ -123,7 +123,8 @@ python3 run_tests.py --pytest --all
   "concurrent": {
     "max_workers": 10,
     "timeout": 30,
-    "retry_count": 3
+    "retry_count": 3,
+    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
   },
   "aging": {
     "duration_hours": 0.5,
@@ -131,7 +132,9 @@ python3 run_tests.py --pytest --all
     "operation_interval": 1.0,
     "max_data_count": 1000,
     "performance_degradation_threshold": 20.0,
-    "report_interval_minutes": 5
+    "report_interval_minutes": 5,
+    "multi_tenant_business_flow_enabled": false,
+    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
   }
 }
 ```
@@ -157,11 +160,11 @@ python3 run_tests.py --pytest --all
         "enabled": true
       },
       {
-        "id": "tenant2",
-        "server_url": "https://tenant2.local.vpc",
+        "id": "t001",
+        "server_url": "https://autotest.local.vpc",
         "username": "administrator",
         "password": "administrator",
-        "namespace": "tenant2",
+        "namespace": "t001",
         "enabled": true
       }
     ]
@@ -174,6 +177,9 @@ python3 run_tests.py --pytest --all
 - 当前 `tenant_config_helper.py` 始终会补一个默认 `autotest` 租户
 - 多租户关闭时，测试只对 `autotest` 生效
 - 多租户验证测试默认使用 mock，避免依赖真实多租户环境
+- 并发测试默认目标租户为 `t001` 到 `t005`
+- 若 `multi_tenant.tenants` 未逐个声明 `t001`-`t005`，并发入口会基于默认租户自动补齐配置，并仅替换 `namespace`
+- 若 `aging.multi_tenant_business_flow_enabled=true`，老化测试入口会为 `t001`-`t005` 各启动 1 个长期 worker，持续重复执行完整 VMI 业务链路，直到达到统一时长上限
 
 ## 5. 如何新增测试
 

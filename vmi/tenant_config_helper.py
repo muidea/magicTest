@@ -16,6 +16,8 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_CONCURRENT_TENANT_IDS = ["t001", "t002", "t003", "t004", "t005"]
+
 
 def get_multi_tenant_config() -> Dict[str, Any]:
     """获取多租户配置
@@ -98,6 +100,86 @@ def get_multi_tenant_config() -> Dict[str, Any]:
         multi_tenant_config["tenants"][default_tenant_id] = default_tenant_config
 
     return multi_tenant_config
+
+
+def get_preferred_concurrent_tenant_ids() -> List[str]:
+    """获取并发多租户测试优先使用的租户ID列表。"""
+    from config_helper import get_config
+
+    base_config = get_config()
+    concurrent_config = base_config.get("concurrent", {})
+    configured_ids = concurrent_config.get("multi_tenant_target_tenants")
+
+    if isinstance(configured_ids, list):
+        tenant_ids = [str(tenant_id).strip() for tenant_id in configured_ids]
+        tenant_ids = [tenant_id for tenant_id in tenant_ids if tenant_id]
+        if tenant_ids:
+            return tenant_ids
+
+    return list(DEFAULT_CONCURRENT_TENANT_IDS)
+
+
+def _build_fallback_tenant_config(tenant_id: str) -> Optional[Dict[str, Any]]:
+    """基于默认租户为并发测试补齐目标租户配置。"""
+    config = get_multi_tenant_config()
+    default_tenant_id = config.get("default_tenant", "autotest")
+    default_config = config.get("tenants", {}).get(default_tenant_id)
+
+    if not default_config:
+        default_config = config.get("tenants", {}).get("autotest")
+
+    if not default_config:
+        logger.warning("无法为租户 '%s' 生成默认配置，缺少基准租户配置", tenant_id)
+        return None
+
+    fallback_config = dict(default_config)
+    fallback_config["namespace"] = tenant_id
+    fallback_config["enabled"] = True
+    return fallback_config
+
+
+def get_concurrent_tenant_configs(
+    target_tenant_ids: Optional[List[str]] = None,
+    auto_fill_missing: bool = True,
+) -> Dict[str, Dict[str, Any]]:
+    """获取并发多租户测试使用的租户配置。
+
+    当多租户已启用但目标租户未在配置文件中逐个声明时，
+    会基于默认租户自动派生 `server_url/username/password`，并将 `namespace`
+    替换为目标租户ID，便于对 t001-t005 这类批量租户直接发起并发测试。
+    """
+    config = get_multi_tenant_config()
+    if not config.get("enabled", False):
+        return {}
+
+    resolved_configs: Dict[str, Dict[str, Any]] = {}
+    tenant_ids = target_tenant_ids or get_preferred_concurrent_tenant_ids()
+
+    for tenant_id in tenant_ids:
+        tenant_config = config["tenants"].get(tenant_id)
+        if tenant_config and tenant_config.get("enabled", True):
+            resolved_configs[tenant_id] = dict(tenant_config)
+            continue
+
+        if auto_fill_missing:
+            fallback_config = _build_fallback_tenant_config(tenant_id)
+            if fallback_config:
+                resolved_configs[tenant_id] = fallback_config
+
+    return resolved_configs
+
+
+def get_concurrent_tenant_ids(
+    target_tenant_ids: Optional[List[str]] = None,
+    auto_fill_missing: bool = True,
+) -> List[str]:
+    """获取并发多租户测试实际会使用的租户ID列表。"""
+    return list(
+        get_concurrent_tenant_configs(
+            target_tenant_ids=target_tenant_ids,
+            auto_fill_missing=auto_fill_missing,
+        ).keys()
+    )
 
 
 def is_multi_tenant_enabled() -> bool:
@@ -187,6 +269,9 @@ def create_multi_tenant_config_template() -> Dict[str, Any]:
         "max_workers": 10,
         "concurrent_timeout": 30,
         "retry_count": 3,
+        "concurrent": {
+            "multi_tenant_target_tenants": list(DEFAULT_CONCURRENT_TENANT_IDS)
+        },
         "multi_tenant": {
             "enabled": False,  # 设置为True启用多租户
             "default_tenant": "autotest",
@@ -200,20 +285,44 @@ def create_multi_tenant_config_template() -> Dict[str, Any]:
                     "enabled": True,
                 },
                 {
-                    "id": "tenant1",
-                    "server_url": "https://tenant1.local.vpc",
-                    "username": "admin1",
-                    "password": "password1",
-                    "namespace": "tenant1",
+                    "id": "t001",
+                    "server_url": "https://autotest.local.vpc",
+                    "username": "administrator",
+                    "password": "administrator",
+                    "namespace": "t001",
                     "enabled": True,
                 },
                 {
-                    "id": "tenant2",
-                    "server_url": "https://tenant2.local.vpc",
-                    "username": "admin2",
-                    "password": "password2",
-                    "namespace": "tenant2",
-                    "enabled": False,  # 可以临时禁用某个租户
+                    "id": "t002",
+                    "server_url": "https://autotest.local.vpc",
+                    "username": "administrator",
+                    "password": "administrator",
+                    "namespace": "t002",
+                    "enabled": True,
+                },
+                {
+                    "id": "t003",
+                    "server_url": "https://autotest.local.vpc",
+                    "username": "administrator",
+                    "password": "administrator",
+                    "namespace": "t003",
+                    "enabled": True,
+                },
+                {
+                    "id": "t004",
+                    "server_url": "https://autotest.local.vpc",
+                    "username": "administrator",
+                    "password": "administrator",
+                    "namespace": "t004",
+                    "enabled": True,
+                },
+                {
+                    "id": "t005",
+                    "server_url": "https://autotest.local.vpc",
+                    "username": "administrator",
+                    "password": "administrator",
+                    "namespace": "t005",
+                    "enabled": True,
                 },
             ],
         },

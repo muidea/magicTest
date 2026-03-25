@@ -39,9 +39,9 @@ python3 -m unittest discover -s . -p '*_test.py' -v
 - `scenario_test.py`
   校验业务场景和基础性能要求。
 - `concurrent_test_v2.py`
-  并发会话和并发实体操作测试。
+  并发会话、单租户实体并发压测，以及 `t001`-`t005` 多租户全业务链路并发测试。
 - `aging_test_simple.py`
-  长时间老化测试和性能劣化观测。
+  长时间老化测试和性能劣化观测；开启开关后可统一承载 `t001`-`t005` 多租户全业务链路持续并发。
 - `credit/`、`order/`、`partner/`、`product/`、`status/`、`store/`、`warehouse/`
   面向业务模块的实体级集成测试。
 
@@ -82,7 +82,8 @@ python3 -m unittest discover -s . -p '*_test.py' -v
   "concurrent": {
     "max_workers": 10,
     "timeout": 30,
-    "retry_count": 3
+    "retry_count": 3,
+    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
   },
   "aging": {
     "duration_hours": 0.5,
@@ -90,14 +91,19 @@ python3 -m unittest discover -s . -p '*_test.py' -v
     "operation_interval": 1.0,
     "max_data_count": 1000,
     "performance_degradation_threshold": 20.0,
-    "report_interval_minutes": 5
+    "report_interval_minutes": 5,
+    "multi_tenant_business_flow_enabled": false,
+    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
   }
 }
 ```
 
 如果当前工作区已经切到其他环境，回归前先把 `test_config.json` 调整到目标环境，再同步调整 `NO_PROXY`。
 
-如果启用多租户，需要额外声明 `multi_tenant` 段，具体见 [TEST_GUIDE.md](TEST_GUIDE.md)。
+如果启用多租户，需要额外声明 `multi_tenant` 段。并发测试会优先读取
+`concurrent.multi_tenant_target_tenants`，默认按 `t001` 到 `t005` 并发访问；
+未逐个声明的目标租户会基于默认租户配置自动派生 `server_url/username/password`，
+并把 `namespace` 替换为目标租户ID。具体示例见 [TEST_GUIDE.md](TEST_GUIDE.md)。
 
 ## 常用命令
 
@@ -128,6 +134,7 @@ python3 concurrent_test_v2.py
 ```bash
 python3 run_tests.py --aging 30
 python3 aging_test_simple.py --duration 0.5
+python3 aging_test_simple.py --duration 0.5 --multi-tenant-business-flow --target-tenants t001,t002,t003,t004,t005
 ```
 
 ## 文档索引

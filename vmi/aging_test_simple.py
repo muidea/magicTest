@@ -20,6 +20,7 @@ import statistics
 import threading
 import time
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 # 配置日志
 LOG_LEVEL = os.getenv("VMI_TEST_LOG_LEVEL", "INFO").upper()
@@ -58,6 +59,14 @@ class AgingTestConfig:
         self.performance_window_size = 100
         # 报告生成间隔（分钟）
         self.report_interval_minutes = aging_config.get("report_interval_minutes", 30)
+        # 是否启用多租户全业务链路老化模式
+        self.multi_tenant_business_flow_enabled = aging_config.get(
+            "multi_tenant_business_flow_enabled", False
+        )
+        # 多租户老化目标租户，未指定时回退到并发测试目标租户
+        self.multi_tenant_target_tenants = aging_config.get(
+            "multi_tenant_target_tenants"
+        )
 
         # 保存原始配置引用（如果提供）
         self.config = config
@@ -1009,6 +1018,229 @@ class AgingTestWorker:
         }
 
 
+class MultiTenantAgingWorker:
+    """多租户全业务链路老化测试工作线程。
+
+    每个 worker 绑定一个 tenant，持续重复执行完整 VMI 业务流，
+    直到老化测试总入口发出停止信号。
+    """
+
+    def __init__(
+        self,
+        worker_id: int,
+        tenant_id: str,
+        tenant_config: Dict[str, Any],
+        config: AgingTestConfig,
+    ):
+        self.worker_id = worker_id
+        self.tenant_id = tenant_id
+        self.tenant_config = tenant_config
+        self.config = config
+        self.results: List[Dict[str, Any]] = []
+        self.running = False
+        self.performance_window: List[float] = []
+        self.baseline_performance: Optional[float] = None
+        self.error_counts = {
+            "total": 0,
+            "by_entity": {"multi_tenant_full_flow": 0},
+            "by_operation": {"full_flow": 0},
+        }
+        self.skipped_operations = 0
+        self.session_manager = None
+        self._scenario_func = None
+
+    def run(self, stop_event: threading.Event):
+        """运行租户老化循环。"""
+        self.running = True
+        logger.info("多租户老化线程 %s 启动: tenant=%s", self.worker_id, self.tenant_id)
+
+        try:
+            from concurrent_test_v2 import MultiTenantBusinessScenarioFactory
+            from config_helper import get_session_config
+            from session_manager import SessionManager
+
+            session_config = get_session_config()
+            self.session_manager = SessionManager(
+                server_url=self.tenant_config["server_url"],
+                namespace=self.tenant_config["namespace"],
+                username=self.tenant_config["username"],
+                password=self.tenant_config["password"],
+                refresh_interval=session_config.get("refresh_interval", 540),
+                session_timeout=session_config.get("timeout", 1800),
+            )
+
+            if not self.session_manager.create_session():
+                logger.error(
+                    "多租户老化线程 %s: tenant=%s 创建会话失败",
+                    self.worker_id,
+                    self.tenant_id,
+                )
+                return
+
+            self.session_manager.start_auto_refresh()
+            self._scenario_func = (
+                MultiTenantBusinessScenarioFactory.create_full_business_flow_test()
+            )
+
+            while self.running and not stop_event.is_set():
+                start_time = time.time()
+                success = False
+                error = None
+
+                try:
+                    if not self.session_manager.is_session_valid():
+                        logger.warning(
+                            "多租户老化线程 %s: tenant=%s 会话无效，尝试重连",
+                            self.worker_id,
+                            self.tenant_id,
+                        )
+                        if not self.session_manager.reconnect():
+                            raise RuntimeError("会话重连失败")
+
+                    self._scenario_func(
+                        tenant_id=self.tenant_id,
+                        session_manager=self.session_manager,
+                    )
+                    success = True
+
+                except Exception as exc:
+                    error = str(exc)
+                    self.error_counts["total"] += 1
+                    self.error_counts["by_entity"]["multi_tenant_full_flow"] += 1
+                    self.error_counts["by_operation"]["full_flow"] += 1
+                    logger.error(
+                        "多租户老化线程 %s: tenant=%s 执行失败 - %s",
+                        self.worker_id,
+                        self.tenant_id,
+                        exc,
+                    )
+
+                duration = time.time() - start_time
+                self.results.append(
+                    {
+                        "operation_type": "full_flow",
+                        "entity_type": "multi_tenant_full_flow",
+                        "success": success,
+                        "duration": duration,
+                        "wall_duration": duration,
+                        "request_duration": duration,
+                        "backoff_duration": 0,
+                        "attempt_count": 1,
+                        "error": error,
+                        "timestamp": datetime.now().isoformat(),
+                        "tenant_id": self.tenant_id,
+                    }
+                )
+
+                if success and duration > 0:
+                    self._update_performance_window(duration)
+
+                if not stop_event.is_set():
+                    time.sleep(self.config.operation_interval)
+
+        except Exception as exc:
+            logger.error(
+                "多租户老化线程 %s 初始化失败: tenant=%s error=%s",
+                self.worker_id,
+                self.tenant_id,
+                exc,
+            )
+        finally:
+            self.running = False
+            if self.session_manager:
+                try:
+                    self.session_manager.stop_auto_refresh()
+                    self.session_manager.close_session()
+                except Exception as exc:
+                    logger.warning(
+                        "多租户老化线程 %s: tenant=%s 清理会话失败 - %s",
+                        self.worker_id,
+                        self.tenant_id,
+                        exc,
+                    )
+            logger.info("多租户老化线程 %s 停止: tenant=%s", self.worker_id, self.tenant_id)
+
+    def _update_performance_window(self, duration: float):
+        """更新性能监控窗口。"""
+        self.performance_window.append(duration)
+        if len(self.performance_window) > 100:
+            self.performance_window.pop(0)
+
+        if self.baseline_performance is None and len(self.performance_window) >= 20:
+            self.baseline_performance = statistics.mean(self.performance_window)
+            logger.info(
+                "多租户老化线程 %s: tenant=%s 基线性能 %.3fs",
+                self.worker_id,
+                self.tenant_id,
+                self.baseline_performance,
+            )
+
+    def check_performance_degradation(self):
+        """检查性能劣化。"""
+        if self.baseline_performance is None or len(self.performance_window) < 5:
+            return None
+
+        current_performance = statistics.mean(self.performance_window)
+        if self.baseline_performance > 0:
+            degradation_percent = (
+                (current_performance - self.baseline_performance)
+                / self.baseline_performance
+                * 100
+            )
+            if degradation_percent > self.config.performance_degradation_threshold:
+                return degradation_percent
+
+        return None
+
+    def get_statistics(self):
+        """获取统计信息。"""
+        if not self.results:
+            return {}
+
+        successful_results = [r for r in self.results if r["success"]]
+        failed_results = [r for r in self.results if not r["success"]]
+        durations = [r["duration"] for r in self.results if r["duration"] > 0]
+        wall_durations = [
+            r["wall_duration"] for r in self.results if r["wall_duration"] > 0
+        ]
+        degradation_percent = self.check_performance_degradation()
+
+        return {
+            "tenant_id": self.tenant_id,
+            "total_operations": len(self.results),
+            "successful_operations": len(successful_results),
+            "failed_operations": len(failed_results),
+            "skipped_operations": self.skipped_operations,
+            "success_rate": (
+                len(successful_results) / len(self.results) * 100 if self.results else 0
+            ),
+            "avg_duration": statistics.mean(durations) if durations else 0,
+            "avg_wall_duration": statistics.mean(wall_durations) if wall_durations else 0,
+            "min_duration": min(durations) if durations else 0,
+            "max_duration": max(durations) if durations else 0,
+            "avg_attempt_count": 1,
+            "entity_counts": {"multi_tenant_full_flow": 0},
+            "total_entities": 0,
+            "performance_degradation_percent": degradation_percent,
+            "baseline_performance": self.baseline_performance,
+            "current_performance": (
+                statistics.mean(self.performance_window)
+                if self.performance_window
+                else 0
+            ),
+            "error_statistics": {
+                "total_errors": self.error_counts["total"],
+                "error_rate": (
+                    self.error_counts["total"] / len(self.results) * 100
+                    if self.results and self.error_counts["total"] > 0
+                    else 0
+                ),
+                "by_entity": self.error_counts["by_entity"],
+                "by_operation": self.error_counts["by_operation"],
+            },
+        }
+
+
 class AgingTestRunner:
     """老化测试运行器"""
 
@@ -1031,12 +1263,14 @@ class AgingTestRunner:
             f"并发线程={self.config.concurrent_threads}, "
             f"最大数据量={self.config.max_data_count}万条"
         )
+        if self.config.multi_tenant_business_flow_enabled:
+            logger.info("老化模式: 多租户全业务链路")
 
         try:
             self.start_time = datetime.now()
 
             # 启动工作线程
-            self._start_workers(self.config.concurrent_threads)
+            self._start_workers()
 
             # 运行指定时间
             end_time = self.start_time + timedelta(hours=self.config.duration_hours)
@@ -1080,16 +1314,55 @@ class AgingTestRunner:
 
             logger.info("长期老化测试完成")
 
-    def _start_workers(self, thread_count: int):
+        return self.stop_reason in (None, "", "正常完成")
+
+    def _resolve_multi_tenant_configs(self) -> Dict[str, Dict[str, Any]]:
+        """解析多租户老化测试目标租户配置。"""
+        from tenant_config_helper import (get_concurrent_tenant_configs,
+                                          get_preferred_concurrent_tenant_ids)
+
+        target_tenants = self.config.multi_tenant_target_tenants
+        if not target_tenants:
+            target_tenants = get_preferred_concurrent_tenant_ids()
+
+        tenant_configs = get_concurrent_tenant_configs(target_tenants)
+        if not tenant_configs:
+            raise RuntimeError("多租户老化模式已启用，但未解析到可用租户配置")
+
+        missing_tenants = [
+            tenant_id for tenant_id in target_tenants if tenant_id not in tenant_configs
+        ]
+        if missing_tenants:
+            raise RuntimeError(f"多租户老化目标租户配置不完整，缺少: {missing_tenants}")
+
+        self.config.multi_tenant_target_tenants = list(tenant_configs.keys())
+        return tenant_configs
+
+    def _start_workers(self):
         """启动工作线程"""
         # 停止现有工作线程
         self._stop_workers()
 
         # 创建新的工作线程
         self.workers = []
-        for i in range(thread_count):
-            worker = AgingTestWorker(i, self.config)
-            self.workers.append(worker)
+        if self.config.multi_tenant_business_flow_enabled:
+            tenant_configs = self._resolve_multi_tenant_configs()
+            for i, tenant_id in enumerate(tenant_configs.keys()):
+                worker = MultiTenantAgingWorker(
+                    worker_id=i,
+                    tenant_id=tenant_id,
+                    tenant_config=tenant_configs[tenant_id],
+                    config=self.config,
+                )
+                self.workers.append(worker)
+            logger.info(
+                "多租户老化模式启用，固定并发租户: %s",
+                list(tenant_configs.keys()),
+            )
+        else:
+            for i in range(self.config.concurrent_threads):
+                worker = AgingTestWorker(i, self.config)
+                self.workers.append(worker)
 
         # 启动工作线程
         self.worker_threads = []
@@ -1100,7 +1373,7 @@ class AgingTestRunner:
             thread.start()
             self.worker_threads.append(thread)
 
-        logger.info(f"启动 {thread_count} 个工作线程")
+        logger.info("启动 %s 个工作线程", len(self.workers))
 
     def _stop_workers(self):
         """停止工作线程"""
@@ -1255,6 +1528,8 @@ class AgingTestRunner:
                     "operation_interval": self.config.operation_interval,
                     "max_data_count": self.config.max_data_count,
                     "performance_degradation_threshold": self.config.performance_degradation_threshold,
+                    "multi_tenant_business_flow_enabled": self.config.multi_tenant_business_flow_enabled,
+                    "multi_tenant_target_tenants": self.config.multi_tenant_target_tenants,
                 },
             },
             "summary": {
@@ -1500,6 +1775,17 @@ def main():
         default=None,
         help="报告生成间隔（分钟），未指定时使用配置文件",
     )
+    parser.add_argument(
+        "--multi-tenant-business-flow",
+        action="store_true",
+        help="启用多租户全业务链路老化模式",
+    )
+    parser.add_argument(
+        "--target-tenants",
+        type=str,
+        default=None,
+        help="多租户老化目标租户，逗号分隔，例如 t001,t002,t003,t004,t005",
+    )
 
     args = parser.parse_args()
 
@@ -1516,9 +1802,18 @@ def main():
         config.performance_degradation_threshold = args.degradation_threshold
     if args.report_interval is not None:
         config.report_interval_minutes = args.report_interval
+    if args.multi_tenant_business_flow:
+        config.multi_tenant_business_flow_enabled = True
+    if args.target_tenants:
+        config.multi_tenant_target_tenants = [
+            tenant_id.strip()
+            for tenant_id in args.target_tenants.split(",")
+            if tenant_id.strip()
+        ]
 
     runner = AgingTestRunner(config)
-    runner.run()
+    success = runner.run()
+    raise SystemExit(0 if success else 1)
 
 
 if __name__ == "__main__":
