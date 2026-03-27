@@ -256,11 +256,14 @@ def check_config_status() -> None:
     logger.info("配置文件: %s", CONFIG_FILE)
     if os.path.exists(CONFIG_FILE):
         config = load_config()
-        logger.info("服务器: %s", config.get("server", {}).get("url", "N/A"))
+        logger.info("运行模式: %s", config.get("mode", "N/A"))
+        logger.info("环境: %s", config.get("environment", "N/A"))
+        logger.info("默认租户: %s", config.get("default_tenant", "N/A"))
+        logger.info("服务器: %s", config.get("default_server_url", "N/A"))
         logger.info(
-            "命名空间: %s", config.get("server", {}).get("namespace", "N/A")
+            "目标租户: %s",
+            ", ".join(config.get("tenant_targets", [])) or "未启用多租户",
         )
-        logger.info("环境: %s", config.get("server", {}).get("environment", "N/A"))
     else:
         logger.warning("配置文件不存在")
 

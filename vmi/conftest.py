@@ -40,23 +40,24 @@ def _pick_status_ref(statuses) -> Dict[str, Any]:
 @pytest.fixture(scope="session")
 def test_config() -> Dict[str, Any]:
     """测试配置fixture - 从统一配置文件读取"""
-    import json
-    import os
+    from config_helper import (get_aging_params, get_concurrent_config, get_config,
+                               get_credentials, get_namespace, get_server_url,
+                               get_session_config)
 
-    config_path = os.path.join(os.path.dirname(__file__), "test_config.json")
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        cfg = json.load(f)
+    cfg = get_config()
+    session_cfg = get_session_config()
 
     config = {
-        "server_url": cfg["server"]["url"],
-        "namespace": cfg["server"]["namespace"],
-        "credentials": cfg["credentials"],
-        "refresh_interval": cfg["session"]["refresh_interval"],
-        "session_timeout": cfg["session"]["timeout"],
+        "mode": cfg.get("mode", "single_tenant"),
+        "environment": cfg.get("environment", "local"),
+        "server_url": get_server_url(),
+        "namespace": get_namespace(),
+        "credentials": get_credentials(),
+        "refresh_interval": session_cfg.get("refresh_interval", 540),
+        "session_timeout": session_cfg.get("timeout", 1800),
         "pytest": cfg.get("pytest", {}),
-        "concurrent": cfg.get("concurrent", {}),
-        "aging": cfg.get("aging", {}),
+        "concurrent": get_concurrent_config(),
+        "aging": get_aging_params(),
     }
 
     logger.info(f"测试配置加载完成 - 服务器: {config['server_url']}")

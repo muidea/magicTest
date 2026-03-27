@@ -5,7 +5,7 @@
 特性：
 1. 继承复用：完全继承TestBaseWithSessionManager的所有功能
 2. 多租户支持：添加多租户测试相关方法
-3. 向后兼容：默认使用autotest租户，保持现有行为不变
+3. 默认租户：统一从配置中读取默认租户上下文
 4. 灵活切换：支持在不同租户间切换测试
 """
 
@@ -31,7 +31,7 @@ class TestBaseMultiTenant(TestBaseWithSessionManager):
     """多租户测试基类
 
     继承自TestBaseWithSessionManager，添加多租户测试支持。
-    默认使用autotest租户，保持与现有测试的完全兼容性。
+    默认租户上下文由统一配置决定。
     """
 
     # 类属性
@@ -73,7 +73,7 @@ class TestBaseMultiTenant(TestBaseWithSessionManager):
 
             logger.info(f"多租户测试基类: 使用默认租户 '{cls.current_tenant_id}'")
 
-            # 初始化默认租户的SDK实例（向后兼容）
+            # 初始化默认租户的SDK实例，供后续测试直接复用
             cls._init_default_tenant_sdks()
 
         else:
@@ -89,7 +89,7 @@ class TestBaseMultiTenant(TestBaseWithSessionManager):
 
     @classmethod
     def _init_default_tenant_sdks(cls):
-        """初始化默认租户的SDK实例（向后兼容）"""
+        """初始化默认租户的SDK实例。"""
         if not cls.multi_tenant_enabled or not cls.sdk_factory:
             return
 
@@ -415,10 +415,10 @@ class TestBaseMultiTenant(TestBaseWithSessionManager):
                 f"租户 '{tenant2_id}' 访问租户 '{tenant1_id}' 的数据失败，符合隔离性预期: {e}"
             )
 
-    # ==================== 向后兼容的包装方法 ====================
+    # ==================== 单租户/多租户共用包装方法 ====================
 
     def ensure_session_before_operation(self) -> bool:
-        """在执行操作前确保会话有效（向后兼容）"""
+        """在执行操作前确保会话有效。"""
         if self.multi_tenant_enabled:
             return self.multi_tenant_manager.ensure_session_valid(
                 self.current_tenant_id
@@ -431,7 +431,7 @@ class TestBaseMultiTenant(TestBaseWithSessionManager):
             return TestBaseWithSessionManager.ensure_session_before_operation(self)
 
     def execute_with_session_check(self, operation_func, *args, **kwargs):
-        """带会话检查的执行方法（向后兼容）"""
+        """带会话检查的执行方法。"""
         if self.multi_tenant_enabled:
             return self.execute_with_tenant_session_check(
                 self.current_tenant_id, operation_func, *args, **kwargs

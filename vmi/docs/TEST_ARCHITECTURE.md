@@ -33,14 +33,14 @@
 职责：
 
 - 提供统一配置读取入口
-- 将单租户配置扩展为多租户视图
+- 根据顶层配置自动展开默认租户和目标租户视图
 - 让测试代码只依赖 helper，不直接散落解析 JSON
 
 现状约束：
 
 - `config_helper.py` 使用 `_config_cache`
 - 测试修改配置文件后，需要显式清理缓存
-- 多租户 helper 当前默认始终补 `autotest` 租户，保证兼容旧测试
+- 多租户 helper 始终保留 `default_tenant`，并按 `tenant_url_template` 自动展开目标租户
 
 ### 2.3 会话层
 

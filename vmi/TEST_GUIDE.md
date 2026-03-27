@@ -99,6 +99,11 @@ python3 run_tests.py --pytest --all
 - [concurrent_test_v2.py](concurrent_test_v2.py)
 - [aging_test_simple.py](aging_test_simple.py)
 
+其中多租户全业务链路当前覆盖矩阵为：
+
+- `status`: `list/query`
+- `warehouse`、`shelf`、`store`、`partner`、`member`、`product`、`product_info`、`goods_info`、`goods`、`reward_policy`、`credit`、`credit_report`、`credit_reward`、`goods_item`、`stockin`、`stockout`、`order`: `create/query/list/update/delete`
+
 ## 4. 配置说明
 
 ### 4.1 单租户配置
@@ -107,11 +112,12 @@ python3 run_tests.py --pytest --all
 
 ```json
 {
-  "server": {
-    "url": "https://autotest.local.vpc",
-    "namespace": "autotest",
-    "environment": "local"
-  },
+  "mode": "aging_multi_tenant",
+  "environment": "local",
+  "default_tenant": "autotest",
+  "default_server_url": "https://autotest.local.vpc",
+  "tenant_targets": ["t001", "t002", "t003", "t004", "t005"],
+  "tenant_url_template": "https://{tenant}.local.vpc",
   "credentials": {
     "username": "administrator",
     "password": "administrator"
@@ -123,8 +129,7 @@ python3 run_tests.py --pytest --all
   "concurrent": {
     "max_workers": 10,
     "timeout": 30,
-    "retry_count": 3,
-    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
+    "retry_count": 3
   },
   "aging": {
     "duration_hours": 0.5,
@@ -133,8 +138,7 @@ python3 run_tests.py --pytest --all
     "max_data_count": 1000,
     "performance_degradation_threshold": 20.0,
     "report_interval_minutes": 5,
-    "multi_tenant_business_flow_enabled": false,
-    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
+    "multi_tenant_business_flow_enabled": true
   }
 }
 ```
@@ -143,43 +147,20 @@ python3 run_tests.py --pytest --all
 
 ### 4.2 多租户配置
 
-如果启用多租户，需要追加 `multi_tenant`：
+最终方案只保留一组租户字段：
 
-```json
-{
-  "multi_tenant": {
-    "enabled": true,
-    "default_tenant": "autotest",
-    "tenants": [
-      {
-        "id": "autotest",
-        "server_url": "https://autotest.local.vpc",
-        "username": "administrator",
-        "password": "administrator",
-        "namespace": "autotest",
-        "enabled": true
-      },
-      {
-        "id": "t001",
-        "server_url": "https://autotest.local.vpc",
-        "username": "administrator",
-        "password": "administrator",
-        "namespace": "t001",
-        "enabled": true
-      }
-    ]
-  }
-}
-```
+- `default_tenant`
+- `default_server_url`
+- `tenant_targets`
+- `tenant_url_template`
 
-注意：
+规则如下：
 
-- 当前 `tenant_config_helper.py` 始终会补一个默认 `autotest` 租户
-- 多租户关闭时，测试只对 `autotest` 生效
+- `tenant_targets` 为空时，系统只使用默认租户
+- `tenant_targets` 非空时，系统会保留默认租户，并按 `tenant_url_template` 自动展开目标租户
+- 并发测试和多租户老化测试共用这组 `tenant_targets`
+- `aging.multi_tenant_business_flow_enabled=true` 时，老化入口会为每个目标租户启动 1 个长期 worker，持续重复执行完整 VMI 业务链路
 - 多租户验证测试默认使用 mock，避免依赖真实多租户环境
-- 并发测试默认目标租户为 `t001` 到 `t005`
-- 若 `multi_tenant.tenants` 未逐个声明 `t001`-`t005`，并发入口会基于默认租户自动补齐配置，并仅替换 `namespace`
-- 若 `aging.multi_tenant_business_flow_enabled=true`，老化测试入口会为 `t001`-`t005` 各启动 1 个长期 worker，持续重复执行完整 VMI 业务链路，直到达到统一时长上限
 
 ## 5. 如何新增测试
 

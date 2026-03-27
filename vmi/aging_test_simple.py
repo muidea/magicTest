@@ -36,7 +36,7 @@ class AgingTestConfig:
 
     def __init__(self, config=None):
         # 导入配置助手
-        from config_helper import get_aging_params
+        from config_helper import get_aging_params, get_tenant_targets
 
         # 获取老化测试配置
         aging_config = get_aging_params()
@@ -63,10 +63,8 @@ class AgingTestConfig:
         self.multi_tenant_business_flow_enabled = aging_config.get(
             "multi_tenant_business_flow_enabled", False
         )
-        # 多租户老化目标租户，未指定时回退到并发测试目标租户
-        self.multi_tenant_target_tenants = aging_config.get(
-            "multi_tenant_target_tenants"
-        )
+        # 多租户老化目标租户统一来自顶层 tenant_targets，可由 CLI 临时覆盖
+        self.target_tenants = get_tenant_targets()
 
         # 保存原始配置引用（如果提供）
         self.config = config
@@ -1308,6 +1306,10 @@ class AgingTestRunner:
             # 停止测试
             self.stop()
 
+            # 工作线程停止后再补一次最终指标，确保最后一轮完成的结果进入报告。
+            if self.workers:
+                self._record_metrics()
+
             # 生成最终报告
             report = self._generate_report()
             self._save_report(report)
@@ -1321,7 +1323,7 @@ class AgingTestRunner:
         from tenant_config_helper import (get_concurrent_tenant_configs,
                                           get_preferred_concurrent_tenant_ids)
 
-        target_tenants = self.config.multi_tenant_target_tenants
+        target_tenants = self.config.target_tenants
         if not target_tenants:
             target_tenants = get_preferred_concurrent_tenant_ids()
 
@@ -1335,7 +1337,7 @@ class AgingTestRunner:
         if missing_tenants:
             raise RuntimeError(f"多租户老化目标租户配置不完整，缺少: {missing_tenants}")
 
-        self.config.multi_tenant_target_tenants = list(tenant_configs.keys())
+        self.config.target_tenants = list(tenant_configs.keys())
         return tenant_configs
 
     def _start_workers(self):
@@ -1378,10 +1380,10 @@ class AgingTestRunner:
     def _stop_workers(self):
         """停止工作线程"""
         self.stop_event.set()
+        join_timeout = 60.0 if self.config.multi_tenant_business_flow_enabled else 5.0
         for thread in self.worker_threads:
-            thread.join(timeout=5.0)
+            thread.join(timeout=join_timeout)
         self.stop_event.clear()
-        self.workers = []
         self.worker_threads = []
         logger.info("工作线程已停止")
 
@@ -1529,7 +1531,7 @@ class AgingTestRunner:
                     "max_data_count": self.config.max_data_count,
                     "performance_degradation_threshold": self.config.performance_degradation_threshold,
                     "multi_tenant_business_flow_enabled": self.config.multi_tenant_business_flow_enabled,
-                    "multi_tenant_target_tenants": self.config.multi_tenant_target_tenants,
+                    "target_tenants": self.config.target_tenants,
                 },
             },
             "summary": {
@@ -1805,7 +1807,7 @@ def main():
     if args.multi_tenant_business_flow:
         config.multi_tenant_business_flow_enabled = True
     if args.target_tenants:
-        config.multi_tenant_target_tenants = [
+        config.target_tenants = [
             tenant_id.strip()
             for tenant_id in args.target_tenants.split(",")
             if tenant_id.strip()

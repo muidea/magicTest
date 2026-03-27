@@ -2,10 +2,6 @@
 """
 VMI 多租户测试
 整合核心功能测试和配置验证测试，无需网络连接
-
-包含测试类：
-- TestMultiTenantCore：核心功能测试
-- TestMultiTenantConfig：配置验证测试
 """
 
 import json
@@ -25,14 +21,42 @@ def _clear_config_cache() -> None:
             del sys.modules[module]
 
 
+def _build_config(
+    tenant_targets=None,
+    tenant_url_template="https://{tenant}.test.vpc",
+    default_server_url="https://autotest.test.vpc",
+    mode="aging_multi_tenant",
+) -> dict:
+    return {
+        "mode": mode,
+        "environment": "test",
+        "default_tenant": "autotest",
+        "request_namespace": "",
+        "default_server_url": default_server_url,
+        "tenant_targets": tenant_targets or [],
+        "tenant_url_template": tenant_url_template,
+        "credentials": {"username": "administrator", "password": "administrator"},
+        "session": {"refresh_interval": 540, "timeout": 1800},
+        "concurrent": {"max_workers": 10, "timeout": 30, "retry_count": 3},
+        "aging": {
+            "duration_hours": 0.1,
+            "concurrent_threads": 5,
+            "operation_interval": 1.0,
+            "max_data_count": 1000,
+            "performance_degradation_threshold": 20.0,
+            "report_interval_minutes": 5,
+            "multi_tenant_business_flow_enabled": True,
+        },
+    }
+
+
 class TestMultiTenantCore(unittest.TestCase):
     """多租户核心功能测试"""
 
     def test_config_helper(self):
         """测试配置助手核心逻辑"""
         _clear_config_cache()
-        from tenant_config_helper import (get_multi_tenant_config,
-                                          is_multi_tenant_enabled)
+        from tenant_config_helper import get_multi_tenant_config, is_multi_tenant_enabled
 
         config = get_multi_tenant_config()
 
@@ -81,8 +105,7 @@ class TestMultiTenantCore(unittest.TestCase):
 
             sdk = sdk_factory.get_sdk_for_tenant("autotest", MockSDK)
             self.assertIsNotNone(sdk)
-            sdk2 = sdk_factory.get_sdk_for_tenant("autotest", MockSDK)
-            self.assertIs(sdk, sdk2)
+            self.assertIs(sdk, sdk_factory.get_sdk_for_tenant("autotest", MockSDK))
 
             logger.info("多租户管理器结构测试通过")
 
@@ -92,7 +115,6 @@ class TestMultiTenantCore(unittest.TestCase):
         from test_base_with_session_manager import TestBaseWithSessionManager
 
         self.assertTrue(issubclass(TestBaseMultiTenant, TestBaseWithSessionManager))
-
         self.assertTrue(hasattr(TestBaseMultiTenant, "multi_tenant_enabled"))
         self.assertTrue(hasattr(TestBaseMultiTenant, "multi_tenant_manager"))
         self.assertTrue(hasattr(TestBaseMultiTenant, "sdk_factory"))
@@ -103,131 +125,69 @@ class TestMultiTenantCore(unittest.TestCase):
 
         logger.info("测试基类继承关系测试通过")
 
-    def test_backward_compatibility(self):
-        """测试向后兼容性"""
+    def test_config_schema(self):
+        """测试当前配置文件使用精简后的最终结构"""
         config_path = "test_config.json"
-        if os.path.exists(config_path):
-            with open(config_path, "r") as f:
-                config = json.load(f)
+        if not os.path.exists(config_path):
+            self.skipTest("配置文件不存在")
 
-            self.assertIn("server", config)
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
 
-            logger.info("向后兼容性测试通过")
-        else:
-            logger.warning("配置文件不存在，跳过测试")
+        self.assertIn("default_server_url", config)
+        self.assertIn("default_tenant", config)
+        self.assertIn("tenant_targets", config)
+        self.assertNotIn("server", config)
+        self.assertNotIn("multi_tenant", config)
+
+        logger.info("最终配置结构测试通过")
 
 
 class TestMultiTenantConfig(unittest.TestCase):
     """多租户配置验证测试"""
 
     def setUp(self):
-        """备份原始配置"""
         self.original_config_exists = os.path.exists("test_config.json")
         if self.original_config_exists:
-            with open("test_config.json", "r") as f:
+            with open("test_config.json", "r", encoding="utf-8") as f:
                 self.original_config = f.read()
 
     def tearDown(self):
-        """恢复原始配置"""
         if self.original_config_exists:
-            with open("test_config.json", "w") as f:
+            with open("test_config.json", "w", encoding="utf-8") as f:
                 f.write(self.original_config)
         elif os.path.exists("test_config.json"):
             os.remove("test_config.json")
 
-    def _clear_config_cache(self):
-        """清除配置缓存"""
+    def _write_config(self, content: dict) -> None:
+        with open("test_config.json", "w", encoding="utf-8") as f:
+            json.dump(content, f, indent=2, ensure_ascii=False)
         _clear_config_cache()
 
     def test_enabled_config_loading(self):
         """测试启用多租户的配置加载"""
-        config_content = {
-            "server": {
-                "url": "https://test.local.vpc",
-                "namespace": "test",
-                "environment": "test",
-            },
-            "credentials": {"username": "admin", "password": "admin"},
-            "session": {"refresh_interval": 540, "timeout": 1800},
-            "concurrent": {
-                "multi_tenant_target_tenants": [
-                    "t001",
-                    "t002",
-                    "t003",
-                    "t004",
-                    "t005",
-                ]
-            },
-            "multi_tenant": {
-                "enabled": True,
-                "default_tenant": "autotest",
-                "tenants": [
-                    {
-                        "id": "autotest",
-                        "server_url": "https://autotest.local.vpc",
-                        "username": "administrator",
-                        "password": "administrator",
-                        "namespace": "autotest",
-                        "enabled": True,
-                    }
-                ],
-            },
-        }
+        self._write_config(_build_config(tenant_targets=["t001", "t002"]))
 
-        with open("test_config.json", "w") as f:
-            json.dump(config_content, f, indent=2)
-
-        self._clear_config_cache()
-
-        from tenant_config_helper import (get_multi_tenant_config,
-                                          is_multi_tenant_enabled)
+        from tenant_config_helper import get_multi_tenant_config, is_multi_tenant_enabled
 
         config = get_multi_tenant_config()
 
         self.assertTrue(config["enabled"])
         self.assertTrue(is_multi_tenant_enabled())
+        self.assertEqual(config["default_tenant"], "autotest")
+        self.assertEqual(set(config["tenants"].keys()), {"autotest", "t001", "t002"})
 
         logger.info("启用多租户配置加载测试通过")
 
-    def test_concurrent_tenant_config_auto_fill(self):
-        """测试并发租户配置按 t001-t005 自动补齐"""
-        config_content = {
-            "server": {
-                "url": "https://test.local.vpc",
-                "namespace": "autotest",
-                "environment": "test",
-            },
-            "credentials": {"username": "administrator", "password": "administrator"},
-            "session": {"refresh_interval": 540, "timeout": 1800},
-            "concurrent": {
-                "multi_tenant_target_tenants": [
-                    "t001",
-                    "t002",
-                    "t003",
-                    "t004",
-                    "t005",
-                ]
-            },
-            "multi_tenant": {
-                "enabled": True,
-                "default_tenant": "autotest",
-                "tenants": [
-                    {
-                        "id": "autotest",
-                        "server_url": "https://test.local.vpc",
-                        "username": "administrator",
-                        "password": "administrator",
-                        "namespace": "autotest",
-                        "enabled": True,
-                    }
-                ],
-            },
-        }
-
-        with open("test_config.json", "w") as f:
-            json.dump(config_content, f, indent=2)
-
-        self._clear_config_cache()
+    def test_concurrent_tenant_config_generation(self):
+        """测试租户地址由模板自动生成"""
+        self._write_config(
+            _build_config(
+                tenant_targets=["t001", "t002", "t003", "t004", "t005"],
+                tenant_url_template="https://{tenant}.remote.vpc",
+                default_server_url="https://autotest.remote.vpc",
+            )
+        )
 
         from tenant_config_helper import (get_concurrent_tenant_configs,
                                           get_concurrent_tenant_ids,
@@ -241,50 +201,27 @@ class TestMultiTenantConfig(unittest.TestCase):
 
         tenant_configs = get_concurrent_tenant_configs()
         self.assertEqual(set(tenant_configs.keys()), set(preferred_ids))
-        self.assertEqual(tenant_configs["t001"]["server_url"], "https://test.local.vpc")
-        self.assertEqual(tenant_configs["t003"]["namespace"], "t003")
+        self.assertEqual(
+            tenant_configs["t001"]["server_url"], "https://t001.remote.vpc"
+        )
+        self.assertEqual(tenant_configs["t003"]["namespace"], "")
         self.assertEqual(tenant_configs["t005"]["username"], "administrator")
 
-        logger.info("并发租户配置自动补齐测试通过")
+        logger.info("并发租户配置生成测试通过")
 
     def test_disabled_config_loading(self):
-        """测试禁用多租户的配置加载"""
-        config_content = {
-            "server": {
-                "url": "https://test.local.vpc",
-                "namespace": "test",
-                "environment": "test",
-            },
-            "credentials": {"username": "admin", "password": "admin"},
-            "session": {"refresh_interval": 540, "timeout": 1800},
-            "multi_tenant": {
-                "enabled": False,
-                "default_tenant": "autotest",
-                "tenants": [
-                    {
-                        "id": "autotest",
-                        "server_url": "https://autotest.local.vpc",
-                        "username": "administrator",
-                        "password": "administrator",
-                        "namespace": "autotest",
-                        "enabled": True,
-                    }
-                ],
-            },
-        }
+        """测试未配置目标租户时多租户关闭"""
+        self._write_config(_build_config(tenant_targets=[], mode="single_tenant"))
 
-        with open("test_config.json", "w") as f:
-            json.dump(config_content, f, indent=2)
-
-        self._clear_config_cache()
-
-        from tenant_config_helper import (get_multi_tenant_config,
+        from tenant_config_helper import (get_multi_tenant_config, get_tenant_config,
                                           is_multi_tenant_enabled)
 
         config = get_multi_tenant_config()
 
         self.assertFalse(config["enabled"])
         self.assertFalse(is_multi_tenant_enabled())
+        self.assertEqual(list(config["tenants"].keys()), ["autotest"])
+        self.assertIsNone(get_tenant_config("t001"))
 
         logger.info("禁用多租户配置加载测试通过")
 

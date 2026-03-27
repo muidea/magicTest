@@ -1,9 +1,11 @@
 {
-  "server": {
-    "url": "https://autotest.remote.vpc",
-    "namespace": "autotest",
-    "environment": "remote"
-  },
+  "mode": "aging_multi_tenant",
+  "environment": "remote",
+  "default_tenant": "autotest",
+  "request_namespace": "",
+  "default_server_url": "https://autotest.remote.vpc",
+  "tenant_targets": ["t001", "t002", "t003", "t004", "t005"],
+  "tenant_url_template": "https://{tenant}.remote.vpc",
   "credentials": {
     "username": "administrator",
     "password": "administrator"
@@ -33,8 +35,7 @@
   "concurrent": {
     "max_workers": 10,
     "timeout": 30,
-    "retry_count": 3,
-    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
+    "retry_count": 3
   },
   "aging": {
     "duration_hours": 0.5,
@@ -43,8 +44,7 @@
     "max_data_count": 1000,
     "performance_degradation_threshold": 20.0,
     "report_interval_minutes": 5,
-    "multi_tenant_business_flow_enabled": false,
-    "multi_tenant_target_tenants": ["t001", "t002", "t003", "t004", "t005"]
+    "multi_tenant_business_flow_enabled": true
   },
   "coverage": {
     "source": ["."],

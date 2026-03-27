@@ -33,8 +33,14 @@ class TestFrameworkValidation(unittest.TestCase):
         with open("test_config.json", "r") as f:
             config = json.load(f)
 
-        self.assertIn("server", config, "配置缺少server字段")
+        self.assertIn("mode", config, "配置缺少mode字段")
+        self.assertIn("environment", config, "配置缺少environment字段")
+        self.assertIn("default_tenant", config, "配置缺少default_tenant字段")
+        self.assertIn("default_server_url", config, "配置缺少default_server_url字段")
         self.assertIn("credentials", config, "配置缺少credentials字段")
+        self.assertIn("tenant_targets", config, "配置缺少tenant_targets字段")
+        self.assertNotIn("server", config, "配置仍包含旧server字段")
+        self.assertNotIn("multi_tenant", config, "配置仍包含旧multi_tenant字段")
 
         logger.info("配置系统测试通过")
 
@@ -159,20 +165,68 @@ class TestFrameworkValidation(unittest.TestCase):
 
         logger.info("测试基类测试通过")
 
-    def test_backward_compatibility(self):
-        """测试向后兼容性"""
-        logger.info("测试向后兼容性")
+    def test_runtime_readiness(self):
+        """测试运行时入口完整性"""
+        logger.info("测试运行时入口完整性")
 
         test_files = ["scenario_test.py", "aging_test_simple.py", "run_tests.py"]
 
         for test_file in test_files:
             self.assertTrue(os.path.exists(test_file), f"测试文件不存在: {test_file}")
 
-        from tenant_config_helper import is_multi_tenant_enabled
+        _clear_config_cache()
 
-        self.assertFalse(is_multi_tenant_enabled())
+        from tenant_config_helper import (get_multi_tenant_config,
+                                          is_multi_tenant_enabled)
 
-        logger.info("向后兼容性测试通过")
+        config = get_multi_tenant_config()
+        self.assertIsInstance(is_multi_tenant_enabled(), bool)
+        self.assertIn("autotest", config["tenants"])
+        self.assertTrue(config["tenants"]["autotest"]["enabled"])
+        self.assertEqual(config["default_tenant"], "autotest")
+
+        logger.info("运行时入口完整性测试通过")
+
+    def test_multi_tenant_full_flow_coverage(self):
+        """测试多租户全业务链路覆盖矩阵完整性"""
+        logger.info("测试多租户全业务链路覆盖矩阵")
+
+        from concurrent_test_v2 import MultiTenantBusinessScenarioFactory
+
+        coverage = MultiTenantBusinessScenarioFactory.get_full_flow_coverage()
+        expected_entities = {
+            "status",
+            "warehouse",
+            "shelf",
+            "store",
+            "partner",
+            "member",
+            "product",
+            "product_info",
+            "goods_info",
+            "goods",
+            "reward_policy",
+            "credit",
+            "credit_report",
+            "credit_reward",
+            "goods_item",
+            "stockin",
+            "stockout",
+            "order",
+        }
+
+        self.assertEqual(set(coverage.keys()), expected_entities)
+        self.assertEqual(coverage["status"], ["list", "query"])
+
+        mutable_entities = expected_entities - {"status"}
+        for entity_type in mutable_entities:
+            self.assertEqual(
+                coverage[entity_type],
+                ["create", "query", "list", "update", "delete"],
+                f"{entity_type} 覆盖矩阵不完整",
+            )
+
+        logger.info("多租户全业务链路覆盖矩阵测试通过")
 
     def test_test_runner(self):
         """测试运行器"""
@@ -254,7 +308,7 @@ def run_validation():
         logger.info("3. 配置助手正常")
         logger.info("4. 多租户管理器正常")
         logger.info("5. 测试基类正常")
-        logger.info("6. 向后兼容性保证")
+        logger.info("6. 运行时入口完整")
         logger.info("7. 测试运行器正常")
         logger.info("8. 集成测试正常")
         return True

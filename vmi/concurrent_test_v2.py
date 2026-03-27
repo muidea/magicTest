@@ -67,7 +67,7 @@ class ConcurrentTestRunner:
                 # 为每个线程创建独立的会话管理器实例（不使用全局单例）
                 session_mgr = SessionManager(
                     server_url=server_url,
-                    namespace="autotest",
+                    namespace="",
                     username=credentials["username"],
                     password=credentials["password"],
                     refresh_interval=540,
@@ -747,6 +747,27 @@ class MultiTenantConcurrentRunner:
 class MultiTenantBusinessScenarioFactory:
     """构造覆盖 VMI 现有业务面的多租户并发场景。"""
 
+    FULL_FLOW_COVERAGE: Dict[str, List[str]] = {
+        "status": ["list", "query"],
+        "warehouse": ["create", "query", "list", "update", "delete"],
+        "shelf": ["create", "query", "list", "update", "delete"],
+        "store": ["create", "query", "list", "update", "delete"],
+        "partner": ["create", "query", "list", "update", "delete"],
+        "member": ["create", "query", "list", "update", "delete"],
+        "product": ["create", "query", "list", "update", "delete"],
+        "product_info": ["create", "query", "list", "update", "delete"],
+        "goods_info": ["create", "query", "list", "update", "delete"],
+        "goods": ["create", "query", "list", "update", "delete"],
+        "reward_policy": ["create", "query", "list", "update", "delete"],
+        "credit": ["create", "query", "list", "update", "delete"],
+        "credit_report": ["create", "query", "list", "update", "delete"],
+        "credit_reward": ["create", "query", "list", "update", "delete"],
+        "goods_item": ["create", "query", "list", "update", "delete"],
+        "stockin": ["create", "query", "list", "update", "delete"],
+        "stockout": ["create", "query", "list", "update", "delete"],
+        "order": ["create", "query", "list", "update", "delete"],
+    }
+
     @staticmethod
     def _build_suffix(tenant_id: str) -> str:
         return f"{tenant_id}_{uuid.uuid4().hex[:8]}"
@@ -801,6 +822,51 @@ class MultiTenantBusinessScenarioFactory:
         }
 
     @staticmethod
+    def _load_statuses_with_retry(
+        sdks: Dict[str, Any],
+        tenant_id: str,
+        attempts: int = 5,
+        delay_seconds: float = 0.5,
+    ) -> List[Dict[str, Any]]:
+        for attempt in range(1, attempts + 1):
+            statuses = sdks["status"].filter_status({"page": 1, "size": 100}) or []
+            statuses = [
+                item for item in statuses if isinstance(item, dict) and item.get("id")
+            ]
+            if statuses:
+                return statuses
+
+            if attempt < attempts:
+                logger.warning(
+                    "租户 %s: 状态列表暂不可用，第 %s/%s 次重试",
+                    tenant_id,
+                    attempt,
+                    attempts,
+                )
+                time.sleep(delay_seconds)
+
+        raise AssertionError(f"租户 {tenant_id} 无可用状态数据")
+
+    @staticmethod
+    def _resolve_status_id_from_statuses(
+        statuses: List[Dict[str, Any]],
+        preferred_names: Optional[List[str]] = None,
+    ) -> Optional[int]:
+        preferred_names = preferred_names or ["启用", "已启用", "正常", "active", "enabled"]
+        preferred_names = {name.lower() for name in preferred_names}
+
+        for item in statuses:
+            name = str(item.get("name", "")).strip().lower()
+            if name in preferred_names:
+                return int(item["id"])
+
+        for item in statuses:
+            if item.get("id"):
+                return int(item["id"])
+
+        return None
+
+    @staticmethod
     def _cleanup_entities(sdks: Dict[str, Any], created_entities: Dict[str, List[int]]):
         cleanup_plan = [
             ("stockout", "stockout"),
@@ -835,6 +901,88 @@ class MultiTenantBusinessScenarioFactory:
                     logger.warning("清理 %s(%s) 失败: %s", entity_type, entity_id, exc)
 
     @staticmethod
+    def _query_entity(sdks: Dict[str, Any], entity_type: str, entity_id: int):
+        sdk = sdks[entity_type]
+        query_method = getattr(sdk, f"query_{entity_type}")
+        return query_method(entity_id)
+
+    @staticmethod
+    def _filter_entities(
+        sdks: Dict[str, Any],
+        entity_type: str,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        sdk = sdks[entity_type]
+        filter_method = getattr(sdk, f"filter_{entity_type}")
+        return filter_method(filters or {"page": 1, "size": 200}) or []
+
+    @staticmethod
+    def _assert_list_contains(
+        sdks: Dict[str, Any],
+        entity_type: str,
+        entity_id: int,
+        tenant_id: str,
+    ):
+        listed_entities = MultiTenantBusinessScenarioFactory._filter_entities(
+            sdks,
+            entity_type,
+        )
+        assert any(
+            isinstance(item, dict) and int(item.get("id", 0)) == entity_id
+            for item in listed_entities
+        ), f"租户 {tenant_id} 的 {entity_type} 列表中未找到实体 {entity_id}"
+
+    @staticmethod
+    def _assert_query_field(
+        sdks: Dict[str, Any],
+        entity_type: str,
+        entity_id: int,
+        field_name: str,
+        expected_value: Any,
+        tenant_id: str,
+    ):
+        queried_entity = MultiTenantBusinessScenarioFactory._query_entity(
+            sdks, entity_type, entity_id
+        )
+        assert queried_entity is not None, f"租户 {tenant_id} 查询 {entity_type} 失败"
+        assert queried_entity.get(field_name) == expected_value, (
+            f"租户 {tenant_id} 的 {entity_type}.{field_name} 更新未生效，"
+            f"实际为 {queried_entity.get(field_name)}"
+        )
+
+    @staticmethod
+    def _update_entity(
+        sdks: Dict[str, Any],
+        entity_type: str,
+        entity_id: int,
+        update_payload: Dict[str, Any],
+        tenant_id: str,
+        fallback_payload: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        sdk = sdks[entity_type]
+        update_method = getattr(sdk, f"update_{entity_type}")
+
+        try:
+            updated_entity = update_method(entity_id, update_payload)
+        except Exception:
+            if fallback_payload is None:
+                raise
+            updated_entity = update_method(entity_id, fallback_payload)
+
+        if updated_entity is None and fallback_payload is not None:
+            updated_entity = update_method(entity_id, fallback_payload)
+
+        assert updated_entity is not None, f"租户 {tenant_id} 更新 {entity_type} 失败"
+        return updated_entity
+
+    @staticmethod
+    def get_full_flow_coverage() -> Dict[str, List[str]]:
+        return {
+            entity_type: list(operations)
+            for entity_type, operations in MultiTenantBusinessScenarioFactory.FULL_FLOW_COVERAGE.items()
+        }
+
+    @staticmethod
     def create_full_business_flow_test():
         """创建全业务覆盖的租户场景测试。"""
 
@@ -844,7 +992,6 @@ class MultiTenantBusinessScenarioFactory:
                              OrderSDK, PartnerSDK, ProductInfoSDK, ProductSDK,
                              RewardPolicySDK, ShelfSDK, StatusSDK, StockinSDK,
                              StockoutSDK, StoreSDK, WarehouseSDK)
-            from test_dependency_helper import resolve_status_id
 
             work_session = session_manager.get_session()
             sdks = {
@@ -871,104 +1018,209 @@ class MultiTenantBusinessScenarioFactory:
             suffix = MultiTenantBusinessScenarioFactory._build_suffix(tenant_id)
 
             try:
-                statuses = sdks["status"].filter_status({"page": 1, "size": 100}) or []
-                assert statuses, f"租户 {tenant_id} 无可用状态数据"
+                statuses = MultiTenantBusinessScenarioFactory._load_statuses_with_retry(
+                    sdks,
+                    tenant_id,
+                )
 
-                status_id = resolve_status_id(sdks["status"])
+                status_id = MultiTenantBusinessScenarioFactory._resolve_status_id_from_statuses(
+                    statuses
+                )
                 assert status_id, f"租户 {tenant_id} 无法解析可用状态ID"
 
                 status_entity = sdks["status"].query_status(status_id)
                 assert status_entity is not None, f"租户 {tenant_id} 查询状态失败"
-
-                warehouse = sdks["warehouse"].create_warehouse(
-                    {
-                        "name": f"MT_WH_{suffix}",
-                        "description": f"多租户并发仓库_{suffix}",
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "status", status_id, tenant_id
                 )
+
+                warehouse_payload = {
+                    "name": f"MT_WH_{suffix}",
+                    "description": f"多租户并发仓库_{suffix}",
+                }
+                warehouse = sdks["warehouse"].create_warehouse(warehouse_payload)
                 warehouse_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "warehouse", warehouse
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(warehouse, tenant_id)
                 assert sdks["warehouse"].query_warehouse(warehouse_id) is not None
-
-                shelf = sdks["shelf"].create_shelf(
-                    {
-                        "description": f"多租户并发货架_{suffix}",
-                        "capacity": 200,
-                        "warehouse": {"id": warehouse_id},
-                        "status": {"id": status_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "warehouse", warehouse_id, tenant_id
                 )
+                warehouse_update_payload = dict(warehouse)
+                warehouse_update_payload["description"] = f"更新后的仓库_{suffix}"
+                updated_warehouse = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "warehouse",
+                    warehouse_id,
+                    warehouse_update_payload,
+                    tenant_id,
+                )
+                assert updated_warehouse.get("description") == warehouse_update_payload["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "warehouse",
+                    warehouse_id,
+                    "description",
+                    warehouse_update_payload["description"],
+                    tenant_id,
+                )
+
+                shelf_payload = {
+                    "description": f"多租户并发货架_{suffix}",
+                    "capacity": 200,
+                    "warehouse": {"id": warehouse_id},
+                    "status": {"id": status_id},
+                }
+                shelf = sdks["shelf"].create_shelf(shelf_payload)
                 shelf_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "shelf", shelf
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(shelf, tenant_id)
                 assert sdks["shelf"].query_shelf(shelf_id) is not None
-
-                store = sdks["store"].create_store(
-                    {
-                        "name": f"MT_STORE_{suffix}",
-                        "description": f"多租户并发店铺_{suffix}",
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "shelf", shelf_id, tenant_id
                 )
+                shelf_update_payload = {
+                    "description": f"更新后的货架_{suffix}",
+                    "capacity": 260,
+                    "warehouse": {"id": warehouse_id},
+                    "status": {"id": status_id},
+                }
+                updated_shelf = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks, "shelf", shelf_id, shelf_update_payload, tenant_id
+                )
+                assert updated_shelf.get("description") == shelf_update_payload["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "shelf",
+                    shelf_id,
+                    "description",
+                    shelf_update_payload["description"],
+                    tenant_id,
+                )
+
+                store_payload = {
+                    "name": f"MT_STORE_{suffix}",
+                    "description": f"多租户并发店铺_{suffix}",
+                }
+                store = sdks["store"].create_store(store_payload)
                 store_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "store", store
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(store, tenant_id)
                 assert sdks["store"].query_store(store_id) is not None
-
-                partner = sdks["partner"].create_partner(
-                    {
-                        "name": f"MT_PARTNER_{suffix}",
-                        "telephone": f"13{random.randint(100000000, 999999999)}",
-                        "wechat": f"wechat_{suffix}",
-                        "description": f"多租户并发会员_{suffix}",
-                        "status": {"id": status_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "store", store_id, tenant_id
                 )
+                store_update_payload = dict(store)
+                store_update_payload["description"] = f"更新后的店铺_{suffix}"
+                updated_store = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks, "store", store_id, store_update_payload, tenant_id
+                )
+                assert updated_store.get("description") == store_update_payload["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "store",
+                    store_id,
+                    "description",
+                    store_update_payload["description"],
+                    tenant_id,
+                )
+
+                partner_payload = {
+                    "name": f"MT_PARTNER_{suffix}",
+                    "telephone": f"13{random.randint(100000000, 999999999)}",
+                    "wechat": f"wechat_{suffix}",
+                    "description": f"多租户并发会员_{suffix}",
+                    "status": {"id": status_id},
+                }
+                partner = sdks["partner"].create_partner(partner_payload)
                 partner_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "partner", partner
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(partner, tenant_id)
                 assert sdks["partner"].query_partner(partner_id) is not None
-
-                member = sdks["member"].create_member(
-                    {
-                        "title": f"店员_{tenant_id}",
-                        "name": f"MT_MEMBER_{suffix}",
-                        "store": {"id": store_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "partner", partner_id, tenant_id
                 )
+                partner_update_payload = dict(partner)
+                partner_update_payload["description"] = f"更新后的合作伙伴_{suffix}"
+                updated_partner = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks, "partner", partner_id, partner_update_payload, tenant_id
+                )
+                assert updated_partner.get("description") == partner_update_payload["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "partner",
+                    partner_id,
+                    "description",
+                    partner_update_payload["description"],
+                    tenant_id,
+                )
+
+                member_payload = {
+                    "title": f"店员_{tenant_id}",
+                    "name": f"MT_MEMBER_{suffix}",
+                    "store": {"id": store_id},
+                }
+                member = sdks["member"].create_member(member_payload)
                 member_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "member", member
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(member, tenant_id)
                 assert sdks["member"].query_member(member_id) is not None
-
-                product = sdks["product"].create_product(
-                    {
-                        "name": f"MT_PRODUCT_{suffix}",
-                        "description": f"多租户并发产品_{suffix}",
-                        "image": [],
-                        "expire": 365,
-                        "tags": ["multi-tenant", tenant_id, suffix],
-                        "status": {"id": status_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "member", member_id, tenant_id
                 )
+                member_update_payload = dict(member)
+                member_update_payload["title"] = f"更新后的店员_{suffix}"
+                updated_member = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks, "member", member_id, member_update_payload, tenant_id
+                )
+                assert updated_member.get("title") == member_update_payload["title"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks, "member", member_id, "title", member_update_payload["title"], tenant_id
+                )
+
+                product_payload = {
+                    "name": f"MT_PRODUCT_{suffix}",
+                    "description": f"多租户并发产品_{suffix}",
+                    "image": [],
+                    "expire": 365,
+                    "tags": ["multi-tenant", tenant_id, suffix],
+                    "status": {"id": status_id},
+                }
+                product = sdks["product"].create_product(product_payload)
                 product_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "product", product
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(product, tenant_id)
                 assert sdks["product"].query_product(product_id) is not None
-
-                product_info = sdks["product_info"].create_product_info(
-                    {
-                        "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
-                        "description": f"多租户并发产品SKU_{suffix}",
-                        "product": {"id": product_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "product", product_id, tenant_id
                 )
+                product_update_payload = dict(product)
+                product_update_payload["description"] = f"更新后的产品_{suffix}"
+                updated_product = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks, "product", product_id, product_update_payload, tenant_id
+                )
+                assert updated_product.get("description") == product_update_payload["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "product",
+                    product_id,
+                    "description",
+                    product_update_payload["description"],
+                    tenant_id,
+                )
+
+                product_info_payload = {
+                    "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                    "description": f"多租户并发产品SKU_{suffix}",
+                    "product": {"id": product_id},
+                }
+                product_info = sdks["product_info"].create_product_info(product_info_payload)
                 product_info_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "product_info", product_info
                 )
@@ -976,16 +1228,42 @@ class MultiTenantBusinessScenarioFactory:
                     product_info, tenant_id
                 )
                 assert sdks["product_info"].query_product_info(product_info_id) is not None
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "product_info", product_info_id, tenant_id
+                )
+                product_info_update_payload = {
+                    "sku": product_info_payload["sku"],
+                    "description": f"更新后的产品SKU_{suffix}",
+                    "product": {"id": product_id},
+                }
+                updated_product_info = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "product_info",
+                    product_info_id,
+                    {"description": product_info_update_payload["description"]},
+                    tenant_id,
+                    fallback_payload=product_info_update_payload,
+                )
+                assert updated_product_info.get("description") == product_info_update_payload["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "product_info",
+                    product_info_id,
+                    "description",
+                    product_info_update_payload["description"],
+                    tenant_id,
+                )
 
+                goods_info_stockin_payload = {
+                    "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                    "product": {"id": product_info_id},
+                    "type": 1,
+                    "count": 100,
+                    "price": 99.99,
+                    "shelf": [{"id": shelf_id}],
+                }
                 goods_info_stockin = sdks["goods_info"].create_goods_info(
-                    {
-                        "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
-                        "product": {"id": product_info_id},
-                        "type": 1,
-                        "count": 100,
-                        "price": 99.99,
-                        "shelf": [{"id": shelf_id}],
-                    }
+                    goods_info_stockin_payload
                 )
                 goods_info_stockin_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "goods_info", goods_info_stockin
@@ -994,16 +1272,37 @@ class MultiTenantBusinessScenarioFactory:
                     goods_info_stockin_id
                 )
                 assert queried_goods_info_stockin is not None
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "goods_info", goods_info_stockin_id, tenant_id
+                )
+                goods_info_stockin_update_payload = {"count": 120, "price": 109.99}
+                updated_goods_info_stockin = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "goods_info",
+                    goods_info_stockin_id,
+                    goods_info_stockin_update_payload,
+                    tenant_id,
+                )
+                assert updated_goods_info_stockin.get("count") == goods_info_stockin_update_payload["count"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "goods_info",
+                    goods_info_stockin_id,
+                    "count",
+                    goods_info_stockin_update_payload["count"],
+                    tenant_id,
+                )
 
+                goods_info_stockout_payload = {
+                    "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                    "product": {"id": product_info_id},
+                    "type": 2,
+                    "count": 50,
+                    "price": 59.99,
+                    "shelf": [{"id": shelf_id}],
+                }
                 goods_info_stockout = sdks["goods_info"].create_goods_info(
-                    {
-                        "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
-                        "product": {"id": product_info_id},
-                        "type": 2,
-                        "count": 50,
-                        "price": 59.99,
-                        "shelf": [{"id": shelf_id}],
-                    }
+                    goods_info_stockout_payload
                 )
                 goods_info_stockout_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "goods_info", goods_info_stockout
@@ -1012,38 +1311,82 @@ class MultiTenantBusinessScenarioFactory:
                     goods_info_stockout_id
                 )
                 assert queried_goods_info_stockout is not None
-
-                goods = sdks["goods"].create_goods(
-                    {
-                        "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
-                        "name": f"MT_GOODS_{suffix}",
-                        "description": f"多租户并发商品_{suffix}",
-                        "parameter": f"参数_{suffix}",
-                        "serviceInfo": f"服务信息_{suffix}",
-                        "product": {"id": product_info_id},
-                        "count": 80,
-                        "price": 119.99,
-                        "shelf": [{"id": shelf_id}],
-                        "store": {"id": store_id},
-                        "status": {"id": status_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "goods_info", goods_info_stockout_id, tenant_id
                 )
+                goods_info_stockout_update_payload = {"count": 60, "price": 69.99}
+                updated_goods_info_stockout = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "goods_info",
+                    goods_info_stockout_id,
+                    goods_info_stockout_update_payload,
+                    tenant_id,
+                )
+                assert updated_goods_info_stockout.get("count") == goods_info_stockout_update_payload["count"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "goods_info",
+                    goods_info_stockout_id,
+                    "count",
+                    goods_info_stockout_update_payload["count"],
+                    tenant_id,
+                )
+
+                goods_payload = {
+                    "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                    "name": f"MT_GOODS_{suffix}",
+                    "description": f"多租户并发商品_{suffix}",
+                    "parameter": f"参数_{suffix}",
+                    "serviceInfo": f"服务信息_{suffix}",
+                    "product": {"id": product_info_id},
+                    "count": 80,
+                    "price": 119.99,
+                    "shelf": [{"id": shelf_id}],
+                    "store": {"id": store_id},
+                    "status": {"id": status_id},
+                }
+                goods = sdks["goods"].create_goods(goods_payload)
                 goods_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "goods", goods
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(goods, tenant_id)
                 assert sdks["goods"].query_goods(goods_id) is not None
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "goods", goods_id, tenant_id
+                )
+                goods_partial_update = {"description": f"更新后的商品_{suffix}", "count": 88}
+                goods_fallback_update = dict(goods_payload)
+                goods_fallback_update["description"] = goods_partial_update["description"]
+                goods_fallback_update["count"] = goods_partial_update["count"]
+                updated_goods = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "goods",
+                    goods_id,
+                    goods_partial_update,
+                    tenant_id,
+                    fallback_payload=goods_fallback_update,
+                )
+                assert updated_goods.get("description") == goods_partial_update["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "goods",
+                    goods_id,
+                    "description",
+                    goods_partial_update["description"],
+                    tenant_id,
+                )
 
+                reward_policy_payload = {
+                    "name": f"MT_POLICY_{suffix}",
+                    "description": f"多租户并发积分策略_{suffix}",
+                    "policy": json.dumps(
+                        {"type": "fixed", "points": 100, "tenant": tenant_id},
+                        ensure_ascii=False,
+                    ),
+                    "status": {"id": status_id},
+                }
                 reward_policy = sdks["reward_policy"].create_reward_policy(
-                    {
-                        "name": f"MT_POLICY_{suffix}",
-                        "description": f"多租户并发积分策略_{suffix}",
-                        "policy": json.dumps(
-                            {"type": "fixed", "points": 100, "tenant": tenant_id},
-                            ensure_ascii=False,
-                        ),
-                        "status": {"id": status_id},
-                    }
+                    reward_policy_payload
                 )
                 reward_policy_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "reward_policy", reward_policy
@@ -1051,28 +1394,63 @@ class MultiTenantBusinessScenarioFactory:
                 assert (
                     sdks["reward_policy"].query_reward_policy(reward_policy_id) is not None
                 )
-
-                credit = sdks["credit"].create_credit(
-                    {
-                        "owner": {"id": partner_id},
-                        "memo": f"多租户并发积分_{suffix}",
-                        "credit": 100,
-                        "type": 1,
-                        "level": 1,
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "reward_policy", reward_policy_id, tenant_id
                 )
+                reward_policy_update_payload = {
+                    "name": f"更新后的策略_{suffix}",
+                    "description": f"更新后的积分策略_{suffix}",
+                }
+                updated_reward_policy = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "reward_policy",
+                    reward_policy_id,
+                    reward_policy_update_payload,
+                    tenant_id,
+                )
+                assert updated_reward_policy.get("name") == reward_policy_update_payload["name"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "reward_policy",
+                    reward_policy_id,
+                    "name",
+                    reward_policy_update_payload["name"],
+                    tenant_id,
+                )
+
+                credit_payload = {
+                    "owner": {"id": partner_id},
+                    "memo": f"多租户并发积分_{suffix}",
+                    "credit": 100,
+                    "type": 1,
+                    "level": 1,
+                }
+                credit = sdks["credit"].create_credit(credit_payload)
                 credit_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "credit", credit
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(credit, tenant_id)
                 assert sdks["credit"].query_credit(credit_id) is not None
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "credit", credit_id, tenant_id
+                )
+                credit_update_payload = dict(credit)
+                credit_update_payload["memo"] = f"更新后的积分备注_{suffix}"
+                updated_credit = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks, "credit", credit_id, credit_update_payload, tenant_id
+                )
+                assert updated_credit.get("memo") == credit_update_payload["memo"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks, "credit", credit_id, "memo", credit_update_payload["memo"], tenant_id
+                )
 
+                credit_report_payload = {
+                    "owner": {"id": partner_id},
+                    "credit": 1000,
+                    "available": 800,
+                }
                 credit_report = sdks["credit_report"].create_credit_report(
-                    {
-                        "owner": {"id": partner_id},
-                        "credit": 1000,
-                        "available": 800,
-                    }
+                    credit_report_payload
                 )
                 credit_report_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "credit_report", credit_report
@@ -1081,13 +1459,34 @@ class MultiTenantBusinessScenarioFactory:
                     sdks["credit_report"].query_credit_report(credit_report_id)
                     is not None
                 )
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "credit_report", credit_report_id, tenant_id
+                )
+                credit_report_update_payload = {"credit": 1200, "available": 900}
+                updated_credit_report = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "credit_report",
+                    credit_report_id,
+                    credit_report_update_payload,
+                    tenant_id,
+                )
+                assert updated_credit_report.get("credit") == credit_report_update_payload["credit"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "credit_report",
+                    credit_report_id,
+                    "credit",
+                    credit_report_update_payload["credit"],
+                    tenant_id,
+                )
 
+                credit_reward_payload = {
+                    "owner": {"id": partner_id},
+                    "credit": 100,
+                    "memo": f"多租户并发积分消费_{suffix}",
+                }
                 credit_reward = sdks["credit_reward"].create_credit_reward(
-                    {
-                        "owner": {"id": partner_id},
-                        "credit": 100,
-                        "memo": f"多租户并发积分消费_{suffix}",
-                    }
+                    credit_reward_payload
                 )
                 credit_reward_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "credit_reward", credit_reward
@@ -1096,89 +1495,188 @@ class MultiTenantBusinessScenarioFactory:
                     sdks["credit_reward"].query_credit_reward(credit_reward_id)
                     is not None
                 )
-
-                goods_item = sdks["goods_item"].create_goods_item(
-                    {
-                        "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
-                        "name": f"MT_GOODS_ITEM_{suffix}",
-                        "price": 39.99,
-                        "count": 3,
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "credit_reward", credit_reward_id, tenant_id
                 )
+                credit_reward_update_payload = {"memo": f"更新后的积分消费_{suffix}"}
+                updated_credit_reward = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "credit_reward",
+                    credit_reward_id,
+                    credit_reward_update_payload,
+                    tenant_id,
+                )
+                assert updated_credit_reward.get("memo") == credit_reward_update_payload["memo"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "credit_reward",
+                    credit_reward_id,
+                    "memo",
+                    credit_reward_update_payload["memo"],
+                    tenant_id,
+                )
+
+                goods_item_payload = {
+                    "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                    "name": f"MT_GOODS_ITEM_{suffix}",
+                    "price": 39.99,
+                    "count": 3,
+                }
+                goods_item = sdks["goods_item"].create_goods_item(goods_item_payload)
                 goods_item_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "goods_item", goods_item
                 )
                 assert sdks["goods_item"].query_goods_item(goods_item_id) is not None
-
-                stockin = sdks["stockin"].create_stockin(
-                    {
-                        "goodsInfo": [
-                            MultiTenantBusinessScenarioFactory._build_goods_info_payload(
-                                queried_goods_info_stockin,
-                                product_info_id,
-                                shelf_id,
-                                default_type=1,
-                                default_count=100,
-                                default_price=99.99,
-                            )
-                        ],
-                        "description": f"多租户并发入库单_{suffix}",
-                        "store": {"id": store_id},
-                        "status": {"id": status_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "goods_item", goods_item_id, tenant_id
                 )
+                goods_item_update_payload = {
+                    "name": f"更新后的商品条目_{suffix}",
+                    "price": 49.99,
+                }
+                updated_goods_item = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "goods_item",
+                    goods_item_id,
+                    goods_item_update_payload,
+                    tenant_id,
+                )
+                assert updated_goods_item.get("name") == goods_item_update_payload["name"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "goods_item",
+                    goods_item_id,
+                    "name",
+                    goods_item_update_payload["name"],
+                    tenant_id,
+                )
+
+                stockin_payload = {
+                    "goodsInfo": [
+                        MultiTenantBusinessScenarioFactory._build_goods_info_payload(
+                            queried_goods_info_stockin,
+                            product_info_id,
+                            shelf_id,
+                            default_type=1,
+                            default_count=100,
+                            default_price=99.99,
+                        )
+                    ],
+                    "description": f"多租户并发入库单_{suffix}",
+                    "store": {"id": store_id},
+                    "status": {"id": status_id},
+                }
+                stockin = sdks["stockin"].create_stockin(stockin_payload)
                 stockin_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "stockin", stockin
                 )
                 assert sdks["stockin"].query_stockin(stockin_id) is not None
-
-                stockout = sdks["stockout"].create_stockout(
-                    {
-                        "goodsInfo": [
-                            MultiTenantBusinessScenarioFactory._build_goods_info_payload(
-                                queried_goods_info_stockout,
-                                product_info_id,
-                                shelf_id,
-                                default_type=2,
-                                default_count=50,
-                                default_price=59.99,
-                            )
-                        ],
-                        "description": f"多租户并发出库单_{suffix}",
-                        "store": {"id": store_id},
-                        "status": {"id": status_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "stockin", stockin_id, tenant_id
                 )
+                stockin_partial_update = {"description": f"更新后的入库单_{suffix}"}
+                stockin_fallback_update = dict(stockin_payload)
+                stockin_fallback_update["description"] = stockin_partial_update["description"]
+                updated_stockin = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "stockin",
+                    stockin_id,
+                    stockin_partial_update,
+                    tenant_id,
+                    fallback_payload=stockin_fallback_update,
+                )
+                assert updated_stockin.get("description") == stockin_partial_update["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "stockin",
+                    stockin_id,
+                    "description",
+                    stockin_partial_update["description"],
+                    tenant_id,
+                )
+
+                stockout_payload = {
+                    "goodsInfo": [
+                        MultiTenantBusinessScenarioFactory._build_goods_info_payload(
+                            queried_goods_info_stockout,
+                            product_info_id,
+                            shelf_id,
+                            default_type=2,
+                            default_count=50,
+                            default_price=59.99,
+                        )
+                    ],
+                    "description": f"多租户并发出库单_{suffix}",
+                    "store": {"id": store_id},
+                    "status": {"id": status_id},
+                }
+                stockout = sdks["stockout"].create_stockout(stockout_payload)
                 stockout_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "stockout", stockout
                 )
                 assert sdks["stockout"].query_stockout(stockout_id) is not None
-
-                order = sdks["order"].create_order(
-                    {
-                        "type": 1,
-                        "customer": {"id": partner_id},
-                        "goods": [
-                            {
-                                "sku": goods_item.get(
-                                    "sku",
-                                    MultiTenantBusinessScenarioFactory._build_numeric_code(),
-                                ),
-                                "name": goods_item.get("name", f"订单商品_{suffix}"),
-                                "price": goods_item.get("price", 39.99),
-                                "count": 2,
-                            }
-                        ],
-                        "cost": 79.98,
-                        "store": {"id": store_id},
-                        "status": {"id": status_id},
-                    }
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "stockout", stockout_id, tenant_id
                 )
+                stockout_partial_update = {"description": f"更新后的出库单_{suffix}"}
+                stockout_fallback_update = dict(stockout_payload)
+                stockout_fallback_update["description"] = stockout_partial_update["description"]
+                updated_stockout = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "stockout",
+                    stockout_id,
+                    stockout_partial_update,
+                    tenant_id,
+                    fallback_payload=stockout_fallback_update,
+                )
+                assert updated_stockout.get("description") == stockout_partial_update["description"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks,
+                    "stockout",
+                    stockout_id,
+                    "description",
+                    stockout_partial_update["description"],
+                    tenant_id,
+                )
+
+                order_payload = {
+                    "type": 1,
+                    "customer": {"id": partner_id},
+                    "goods": [
+                        {
+                            "sku": goods_item.get(
+                                "sku",
+                                MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                            ),
+                            "name": goods_item.get("name", f"订单商品_{suffix}"),
+                            "price": goods_item.get("price", 39.99),
+                            "count": 2,
+                        }
+                    ],
+                    "cost": 79.98,
+                    "store": {"id": store_id},
+                    "status": {"id": status_id},
+                }
+                order = sdks["order"].create_order(order_payload)
                 order_id = MultiTenantBusinessScenarioFactory._record_entity(
                     created_entities, "order", order
                 )
                 MultiTenantBusinessScenarioFactory._assert_namespace(order, tenant_id)
                 assert sdks["order"].query_order(order_id) is not None
+                MultiTenantBusinessScenarioFactory._assert_list_contains(
+                    sdks, "order", order_id, tenant_id
+                )
+                order_update_payload = {
+                    "cost": 89.98,
+                    "memo": f"更新后的订单备注_{suffix}",
+                }
+                updated_order = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks, "order", order_id, order_update_payload, tenant_id
+                )
+                assert updated_order.get("cost") == order_update_payload["cost"]
+                MultiTenantBusinessScenarioFactory._assert_query_field(
+                    sdks, "order", order_id, "cost", order_update_payload["cost"], tenant_id
+                )
 
                 logger.info("租户 %s: 全业务链路执行完成", tenant_id)
 

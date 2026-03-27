@@ -38,14 +38,15 @@ python3 run_tests.py --check-config
 
 重点确认：
 
-- `server.url`
-- `server.namespace`
+- `default_server_url`
+- `default_tenant`
+- `tenant_targets`
 - `credentials.username`
 - `session.refresh_interval`
 - `session.timeout`
 - `aging.duration_hours`
 
-本地验证时，`server.url` 通常应为 `https://autotest.local.vpc`。
+本地验证时，`default_server_url` 通常应为 `https://autotest.local.vpc`。
 
 ## 3. 部署后冒烟验证
 
