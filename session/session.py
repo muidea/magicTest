@@ -3,7 +3,8 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Union
+import time
+from typing import Any, Callable, Dict, Optional, Union
 import requests
 import urllib3
 
@@ -47,6 +48,7 @@ class MagicSession:
         self.application = None
         self.verify_ssl = os.getenv('VERIFY_SSL', 'false').lower() != 'false'
         self.timeout = float(os.getenv('REQUEST_TIMEOUT', '30.0'))
+        self.request_observer: Optional[Callable[..., None]] = None
 
     def new_session(self) -> 'MagicSession':
         """Create a new session with same configuration.
@@ -54,7 +56,16 @@ class MagicSession:
         Returns:
             A new MagicSession instance
         """
-        return MagicSession(self.base_url, self.namespace)
+        new_session = MagicSession(self.base_url, self.namespace)
+        new_session.verify_ssl = self.verify_ssl
+        new_session.timeout = self.timeout
+        new_session.application = self.application
+        new_session.request_observer = self.request_observer
+        return new_session
+
+    def set_request_observer(self, observer: Optional[Callable[..., None]]) -> None:
+        """Register a request observer for every business HTTP call."""
+        self.request_observer = observer
 
     def bind_token(self, token: Optional[str]) -> None:
         """Bind bearer token for authentication.
@@ -112,6 +123,32 @@ class MagicSession:
 
         return header
 
+    def _notify_request_observer(
+        self,
+        method: str,
+        url: str,
+        full_url: str,
+        elapsed: float,
+        status_code: int,
+        response: Any,
+        error: Optional[BaseException] = None,
+    ) -> None:
+        if self.request_observer is None:
+            return
+
+        try:
+            self.request_observer(
+                method=method.upper(),
+                url=url,
+                full_url=full_url,
+                elapsed=elapsed,
+                status_code=status_code,
+                response=response,
+                error=error,
+            )
+        except Exception as exc:
+            logger.debug('Request observer failed: %s', exc)
+
     def _request(self, method: str, url: str, **kwargs) -> Dict[str, Any]:
         """Internal method to make HTTP requests with error handling.
         
@@ -124,6 +161,7 @@ class MagicSession:
             Response data as dictionary, or error dictionary
         """
         full_url = f'{self.base_url}{url}'
+        start_time = time.perf_counter()
         
         # Set default parameters
         kwargs.setdefault('headers', self.header())
@@ -139,39 +177,86 @@ class MagicSession:
             # If stream=True is set, return the response object directly
             # Also return response for file upload/download cases
             if 'files' in kwargs or 'data' in kwargs or kwargs.get('stream', False):
+                self._notify_request_observer(
+                    method,
+                    url,
+                    full_url,
+                    time.perf_counter() - start_time,
+                    response.status_code,
+                    response,
+                )
                 return response
             
             # Parse JSON response
             try:
-                return response.json()
+                payload = response.json()
+                self._notify_request_observer(
+                    method,
+                    url,
+                    full_url,
+                    time.perf_counter() - start_time,
+                    response.status_code,
+                    payload,
+                )
+                return payload
             except ValueError as e:
                 logger.error('Failed to parse JSON response: %s', e)
-                return {
+                payload = {
                     "error": {
                         "code": 100,
                         "message": f"JSON解析失败: {str(e)}",
                         "status_code": response.status_code
                     }
                 }
+                self._notify_request_observer(
+                    method,
+                    url,
+                    full_url,
+                    time.perf_counter() - start_time,
+                    response.status_code,
+                    payload,
+                    e,
+                )
+                return payload
                 
         except requests.exceptions.RequestException as e:
             logger.error('HTTP request failed: %s', e)
             status_code = getattr(e.response, 'status_code', 0) if hasattr(e, 'response') else 0
-            return {
+            payload = {
                 "error": {
                     "code": 100,
                     "message": f"HTTP请求失败: {str(e)}",
                     "status_code": status_code
                 }
             }
+            self._notify_request_observer(
+                method,
+                url,
+                full_url,
+                time.perf_counter() - start_time,
+                status_code,
+                payload,
+                e,
+            )
+            return payload
         except Exception as e:
             logger.error('Unexpected error: %s', e)
-            return {
+            payload = {
                 "error": {
                     "code": 500,
                     "message": f"内部错误: {str(e)}"
                 }
             }
+            self._notify_request_observer(
+                method,
+                url,
+                full_url,
+                time.perf_counter() - start_time,
+                500,
+                payload,
+                e,
+            )
+            return payload
 
     def post(self, url: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Make POST request.

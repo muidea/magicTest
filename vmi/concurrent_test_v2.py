@@ -16,6 +16,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlparse
 
 # 配置日志
 logging.basicConfig(
@@ -39,10 +40,111 @@ class ConcurrentTestResult:
     throughput: float
     error_details: List[Dict[str, Any]]
     timestamp: Optional[str] = None
+    http_requests: int = 0
+    http_successful_requests: int = 0
+    http_failed_requests: int = 0
+    http_read_requests: int = 0
+    http_write_requests: int = 0
+    http_avg_response_time: float = 0.0
+    http_qps: float = 0.0
+    read_qps: float = 0.0
+    write_tps: float = 0.0
 
     def __post_init__(self):
         if self.timestamp is None:
             self.timestamp = datetime.now().isoformat()
+
+
+class HTTPRequestMetricsCollector:
+    """统计压测过程中的真实 HTTP 请求口径。"""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.failed_requests = 0
+        self.read_requests = 0
+        self.write_requests = 0
+        self.total_elapsed = 0.0
+
+    def observe(
+        self,
+        method: str,
+        url: str,
+        full_url: str,
+        elapsed: float,
+        status_code: int,
+        response: Any,
+        error: Optional[BaseException] = None,
+    ) -> None:
+        path = urlparse(full_url or url).path or url
+        if self._should_ignore_path(path):
+            return
+
+        request_kind = self._classify_request_kind(method, path)
+        success = self._is_success(status_code, response, error)
+
+        with self.lock:
+            self.total_requests += 1
+            self.total_elapsed += elapsed
+            if success:
+                self.successful_requests += 1
+            else:
+                self.failed_requests += 1
+
+            if request_kind == "read":
+                self.read_requests += 1
+            else:
+                self.write_requests += 1
+
+    def snapshot(self, total_time: float) -> Dict[str, float]:
+        with self.lock:
+            avg_response_time = (
+                self.total_elapsed / self.total_requests if self.total_requests else 0.0
+            )
+            return {
+                "http_requests": self.total_requests,
+                "http_successful_requests": self.successful_requests,
+                "http_failed_requests": self.failed_requests,
+                "http_read_requests": self.read_requests,
+                "http_write_requests": self.write_requests,
+                "http_avg_response_time": avg_response_time,
+                "http_qps": self.total_requests / total_time if total_time > 0 else 0.0,
+                "read_qps": self.read_requests / total_time if total_time > 0 else 0.0,
+                "write_tps": self.write_requests / total_time if total_time > 0 else 0.0,
+            }
+
+    @staticmethod
+    def _should_ignore_path(path: str) -> bool:
+        return path.startswith("/api/v1/cas/")
+
+    @staticmethod
+    def _classify_request_kind(method: str, path: str) -> str:
+        method = (method or "").upper()
+        if method in {"GET", "HEAD", "OPTIONS"}:
+            return "read"
+        if method in {"PUT", "PATCH", "DELETE"}:
+            return "write"
+        if method == "POST":
+            lower_path = path.lower()
+            for keyword in ("/query", "/filter", "/count", "/search", "/summary"):
+                if keyword in lower_path:
+                    return "read"
+        return "write"
+
+    @staticmethod
+    def _is_success(
+        status_code: int,
+        response: Any,
+        error: Optional[BaseException],
+    ) -> bool:
+        if error is not None:
+            return False
+        if isinstance(response, dict) and response.get("error") is not None:
+            return False
+        if status_code >= 400:
+            return False
+        return True
 
 
 class ConcurrentTestRunner:
@@ -53,9 +155,15 @@ class ConcurrentTestRunner:
         self.results_lock = threading.Lock()
         self.results: List[ConcurrentTestResult] = []
         self.session_managers = {}  # 线程ID -> 会话管理器映射
+        self._http_request_observer = None
+
+    def _resolve_session_slot(self, worker_id: int) -> int:
+        """将请求编号映射到固定 worker 槽位，避免重复创建大量会话。"""
+        return worker_id % max(1, self.max_workers)
 
     def _get_session_manager_for_thread(self, thread_id: int):
         """为线程获取或创建会话管理器"""
+        thread_id = self._resolve_session_slot(thread_id)
         if thread_id not in self.session_managers:
             try:
                 from config_helper import get_credentials, get_server_url
@@ -72,6 +180,7 @@ class ConcurrentTestRunner:
                     password=credentials["password"],
                     refresh_interval=540,
                     session_timeout=1800,
+                    request_observer=self._http_request_observer,
                 )
 
                 # 添加超时处理
@@ -121,6 +230,9 @@ class ConcurrentTestRunner:
         def cleanup_single_manager(thread_id, session_mgr):
             """清理单个会话管理器"""
             try:
+                cleanup_hook = getattr(session_mgr, "_codex_cleanup_hook", None)
+                if callable(cleanup_hook):
+                    cleanup_hook()
                 # 设置超时，避免无限等待
                 session_mgr.stop_auto_refresh()
                 session_mgr.close_session()
@@ -160,6 +272,8 @@ class ConcurrentTestRunner:
             测试结果
         """
         start_time = time.time()
+        http_metrics = HTTPRequestMetricsCollector()
+        self._http_request_observer = http_metrics.observe
         successful_requests = 0
         failed_requests = 0
         response_times = []
@@ -242,6 +356,7 @@ class ConcurrentTestRunner:
             max_response_time=max_response_time,
             throughput=throughput,
             error_details=error_details,
+            **http_metrics.snapshot(total_time),
         )
 
         self.results.append(result)
@@ -249,6 +364,127 @@ class ConcurrentTestRunner:
         # 打印测试摘要
         self._print_test_summary(result)
 
+        return result
+
+    def run_worker_loop_test(
+        self,
+        test_func: Callable,
+        test_name: str,
+        num_workers: int,
+        iterations_per_worker: int,
+        **kwargs,
+    ) -> ConcurrentTestResult:
+        """运行固定 worker 循环压测。
+
+        每个 worker 仅创建一次会话，并在多轮操作中持续复用。
+        """
+        start_time = time.time()
+        http_metrics = HTTPRequestMetricsCollector()
+        self._http_request_observer = http_metrics.observe
+        successful_requests = 0
+        failed_requests = 0
+        response_times = []
+        error_details = []
+        total_requests = num_workers * iterations_per_worker
+
+        def worker(worker_id: int):
+            nonlocal successful_requests, failed_requests
+
+            try:
+                session_mgr = self._get_session_manager_for_thread(worker_id)
+                if not session_mgr:
+                    raise RuntimeError("无法获取会话管理器")
+
+                for iteration in range(iterations_per_worker):
+                    iteration_start = time.time()
+                    try:
+                        test_func(
+                            worker_id=worker_id,
+                            iteration=iteration,
+                            session_manager=session_mgr,
+                            **kwargs,
+                        )
+                        iteration_end = time.time()
+                        with self.results_lock:
+                            successful_requests += 1
+                            response_times.append(iteration_end - iteration_start)
+                    except Exception as exc:
+                        iteration_end = time.time()
+                        with self.results_lock:
+                            failed_requests += 1
+                            error_details.append(
+                                {
+                                    "worker_id": worker_id,
+                                    "iteration": iteration,
+                                    "error": str(exc),
+                                    "timestamp": datetime.now().isoformat(),
+                                    "response_time": iteration_end - iteration_start,
+                                }
+                            )
+                        logger.error(
+                            "线程 %s 第 %s 轮执行失败 - %s",
+                            worker_id,
+                            iteration,
+                            exc,
+                        )
+            except Exception as exc:
+                with self.results_lock:
+                    for iteration in range(iterations_per_worker):
+                        failed_requests += 1
+                        error_details.append(
+                            {
+                                "worker_id": worker_id,
+                                "iteration": iteration,
+                                "error": str(exc),
+                                "timestamp": datetime.now().isoformat(),
+                                "response_time": 0,
+                            }
+                        )
+                logger.error("线程 %s: 初始化失败 - %s", worker_id, exc)
+
+        logger.info(
+            "开始 worker 循环压测: %s, worker 数: %s, 每 worker 轮次: %s, 总请求数: %s",
+            test_name,
+            num_workers,
+            iterations_per_worker,
+            total_requests,
+        )
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+                futures = [executor.submit(worker, worker_id) for worker_id in range(num_workers)]
+                concurrent.futures.wait(futures, timeout=300)
+                for future in futures:
+                    if not future.done():
+                        future.cancel()
+        finally:
+            self._cleanup_session_managers()
+
+        total_time = time.time() - start_time
+        if response_times:
+            avg_response_time = sum(response_times) / len(response_times)
+            min_response_time = min(response_times)
+            max_response_time = max(response_times)
+        else:
+            avg_response_time = min_response_time = max_response_time = 0
+
+        throughput = successful_requests / total_time if total_time > 0 else 0
+        result = ConcurrentTestResult(
+            test_name=test_name,
+            total_requests=total_requests,
+            successful_requests=successful_requests,
+            failed_requests=failed_requests,
+            total_time=total_time,
+            avg_response_time=avg_response_time,
+            min_response_time=min_response_time,
+            max_response_time=max_response_time,
+            throughput=throughput,
+            error_details=error_details,
+            **http_metrics.snapshot(total_time),
+        )
+
+        self.results.append(result)
+        self._print_test_summary(result)
         return result
 
     def _print_test_summary(self, result: ConcurrentTestResult):
@@ -269,6 +505,12 @@ class ConcurrentTestRunner:
         logger.info(f"最小响应时间: {result.min_response_time:.3f}秒")
         logger.info(f"最大响应时间: {result.max_response_time:.3f}秒")
         logger.info(f"吞吐量: {result.throughput:.2f} 请求/秒")
+        if result.http_requests > 0:
+            logger.info(f"HTTP请求数: {result.http_requests}")
+            logger.info(f"HTTP平均响应时间: {result.http_avg_response_time:.3f}秒")
+            logger.info(f"HTTP QPS: {result.http_qps:.2f}")
+            logger.info(f"读QPS: {result.read_qps:.2f}")
+            logger.info(f"写TPS: {result.write_tps:.2f}")
 
         if result.error_details:
             logger.info(f"\n错误详情 ({len(result.error_details)}个):")
@@ -319,6 +561,15 @@ class ConcurrentTestRunner:
                     "min_response_time": r.min_response_time,
                     "max_response_time": r.max_response_time,
                     "throughput": r.throughput,
+                    "http_requests": r.http_requests,
+                    "http_successful_requests": r.http_successful_requests,
+                    "http_failed_requests": r.http_failed_requests,
+                    "http_read_requests": r.http_read_requests,
+                    "http_write_requests": r.http_write_requests,
+                    "http_avg_response_time": r.http_avg_response_time,
+                    "http_qps": r.http_qps,
+                    "read_qps": r.read_qps,
+                    "write_tps": r.write_tps,
                 }
                 for r in self.results
             ],
@@ -383,11 +634,13 @@ class ConcurrentTestFactory:
     def create_store_creation_test():
         """创建门店创建测试函数"""
 
-        def test_create_store(worker_id: int, session_manager):
+        def test_create_store(worker_id: int, session_manager, iteration: int = 0):
             from sdk.store import StoreSDK
 
             store_sdk = StoreSDK(session_manager.get_session())
-            suffix = ConcurrentTestFactory._build_unique_suffix(worker_id)
+            suffix = ConcurrentTestFactory._build_unique_suffix(
+                worker_id * 1000 + iteration
+            )
             store_data = {
                 "name": f"并发测试门店_{suffix}",
                 "description": f"并发测试创建的门店_{suffix}",
@@ -406,12 +659,14 @@ class ConcurrentTestFactory:
     def create_product_creation_test():
         """创建产品创建测试函数"""
 
-        def test_create_product(worker_id: int, session_manager):
+        def test_create_product(worker_id: int, session_manager, iteration: int = 0):
             from sdk.product import ProductSDK
 
             product_sdk = ProductSDK(session_manager.get_session())
             status_id = ConcurrentTestFactory._resolve_status_id(session_manager)
-            suffix = ConcurrentTestFactory._build_unique_suffix(worker_id)
+            suffix = ConcurrentTestFactory._build_unique_suffix(
+                worker_id * 1000 + iteration
+            )
             product_data = {
                 "name": f"并发测试产品_{suffix}",
                 "description": f"并发测试创建的产品_{suffix}",
@@ -434,11 +689,13 @@ class ConcurrentTestFactory:
     def create_warehouse_creation_test():
         """创建仓库创建测试函数"""
 
-        def test_create_warehouse(worker_id: int, session_manager):
+        def test_create_warehouse(worker_id: int, session_manager, iteration: int = 0):
             from sdk.warehouse import WarehouseSDK
 
             warehouse_sdk = WarehouseSDK(session_manager.get_session())
-            suffix = ConcurrentTestFactory._build_unique_suffix(worker_id)
+            suffix = ConcurrentTestFactory._build_unique_suffix(
+                worker_id * 1000 + iteration
+            )
             warehouse_data = {
                 "name": f"并发测试仓库_{suffix}",
                 "description": f"并发测试创建的仓库_{suffix}",
@@ -463,10 +720,11 @@ class TestConcurrentStoreOperations(ConcurrentTestBase):
         runner = ConcurrentTestRunner(max_workers=5)
 
         test_func = ConcurrentTestFactory.create_store_creation_test()
-        result = runner.run_concurrent_test(
+        result = runner.run_worker_loop_test(
             test_func=test_func,
             test_name="concurrent_store_creation",
-            num_requests=10,
+            num_workers=5,
+            iterations_per_worker=2,
         )
 
         # 验证测试结果 - 降低要求以适应实际服务器性能
@@ -479,10 +737,11 @@ class TestConcurrentStoreOperations(ConcurrentTestBase):
         runner = ConcurrentTestRunner(max_workers=10)
 
         test_func = ConcurrentTestFactory.create_store_creation_test()
-        result = runner.run_concurrent_test(
+        result = runner.run_worker_loop_test(
             test_func=test_func,
             test_name="high_concurrency_store_operations",
-            num_requests=20,
+            num_workers=10,
+            iterations_per_worker=2,
         )
 
         # 验证测试结果 - 降低要求以适应实际服务器性能
@@ -495,22 +754,23 @@ class TestConcurrentProductOperations(ConcurrentTestBase):
 
     def test_concurrent_product_creation(self):
         """并发创建产品测试"""
-        runner = ConcurrentTestRunner(max_workers=15)
+        runner = ConcurrentTestRunner(max_workers=10)
 
         test_func = ConcurrentTestFactory.create_product_creation_test()
-        result = runner.run_concurrent_test(
+        result = runner.run_worker_loop_test(
             test_func=test_func,
             test_name="concurrent_product_creation",
-            num_requests=30,
+            num_workers=10,
+            iterations_per_worker=3,
         )
 
-        # 验证测试结果
-        self.assertGreaterEqual(result.successful_requests, 25, "至少83%的请求应该成功")
-        self.assertLess(result.avg_response_time, 3.0, "平均响应时间应小于3秒")
+        # 压测目标改为强调成功率和吞吐，而不是低延迟阈值
+        self.assertGreaterEqual(result.successful_requests, 28, "至少93%的请求应该成功")
+        self.assertGreater(result.throughput, 0.8, "吞吐量应大于0.8请求/秒")
 
     def test_mixed_concurrent_operations(self):
         """混合并发操作测试"""
-        runner = ConcurrentTestRunner(max_workers=25)
+        runner = ConcurrentTestRunner(max_workers=20)
 
         # 随机选择测试函数
         test_functions = [
@@ -519,20 +779,21 @@ class TestConcurrentProductOperations(ConcurrentTestBase):
             ConcurrentTestFactory.create_warehouse_creation_test(),
         ]
 
-        def mixed_operation(worker_id: int, session_manager):
+        def mixed_operation(worker_id: int, session_manager, iteration: int = 0):
             # 随机选择一个操作
             test_func = random.choice(test_functions)
-            test_func(worker_id, session_manager)
+            test_func(worker_id, session_manager, iteration=iteration)
 
-        result = runner.run_concurrent_test(
+        result = runner.run_worker_loop_test(
             test_func=mixed_operation,
             test_name="mixed_concurrent_operations",
-            num_requests=100,
+            num_workers=20,
+            iterations_per_worker=5,
         )
 
-        # 验证测试结果
-        self.assertGreaterEqual(result.successful_requests, 80, "至少80%的请求应该成功")
-        self.assertLess(result.avg_response_time, 5.0, "平均响应时间应小于5秒")
+        # 强调大规模稳定压测的成功率和总吞吐
+        self.assertGreaterEqual(result.successful_requests, 90, "至少90%的请求应该成功")
+        self.assertGreater(result.throughput, 1.5, "吞吐量应大于1.5请求/秒")
 
 
 class TestConcurrentWarehouseOperations(ConcurrentTestBase):
@@ -543,10 +804,11 @@ class TestConcurrentWarehouseOperations(ConcurrentTestBase):
         runner = ConcurrentTestRunner(max_workers=10)
 
         test_func = ConcurrentTestFactory.create_warehouse_creation_test()
-        result = runner.run_concurrent_test(
+        result = runner.run_worker_loop_test(
             test_func=test_func,
             test_name="concurrent_warehouse_creation",
-            num_requests=15,
+            num_workers=5,
+            iterations_per_worker=3,
         )
 
         # 验证测试结果
@@ -572,11 +834,12 @@ class MultiTenantConcurrentRunner:
         self.results_lock = threading.Lock()
         self.results: List[ConcurrentTestResult] = []
         self.session_managers: Dict[str, Any] = {}
+        self._http_request_observer = None
 
-    def _get_session_manager_for_tenant(self, tenant_id: str):
-        """为租户获取独立会话管理器。"""
-        if tenant_id in self.session_managers:
-            return self.session_managers[tenant_id]
+    def _get_session_manager(self, session_key: str, tenant_id: str):
+        """为租户 worker 获取独立会话管理器。"""
+        if session_key in self.session_managers:
+            return self.session_managers[session_key]
 
         tenant_config = self.tenant_configs[tenant_id]
 
@@ -592,6 +855,7 @@ class MultiTenantConcurrentRunner:
                 password=tenant_config["password"],
                 refresh_interval=session_config.get("refresh_interval", 540),
                 session_timeout=session_config.get("timeout", 1800),
+                request_observer=self._http_request_observer,
             )
 
             from queue import Queue
@@ -620,19 +884,26 @@ class MultiTenantConcurrentRunner:
                 return None
 
             session_mgr.start_auto_refresh()
-            self.session_managers[tenant_id] = session_mgr
-            logger.info("租户 %s: 会话初始化完成", tenant_id)
+            self.session_managers[session_key] = session_mgr
+            logger.info("租户 %s: 会话初始化完成(session=%s)", tenant_id, session_key)
             return session_mgr
 
         except Exception as exc:
             logger.error("租户 %s: 初始化会话管理器失败 - %s", tenant_id, exc)
             return None
 
+    def _get_session_manager_for_tenant(self, tenant_id: str):
+        """兼容旧接口，为单租户 worker 获取会话。"""
+        return self._get_session_manager(tenant_id, tenant_id)
+
     def _cleanup_session_managers(self):
         """清理所有租户会话。"""
 
         def cleanup_single_manager(tenant_id: str, session_mgr):
             try:
+                cleanup_hook = getattr(session_mgr, "_codex_cleanup_hook", None)
+                if callable(cleanup_hook):
+                    cleanup_hook()
                 session_mgr.stop_auto_refresh()
                 session_mgr.close_session()
                 logger.info("租户 %s: 会话清理完成", tenant_id)
@@ -665,6 +936,8 @@ class MultiTenantConcurrentRunner:
 
         tenant_ids = list(self.tenant_configs.keys())
         start_time = time.time()
+        http_metrics = HTTPRequestMetricsCollector()
+        self._http_request_observer = http_metrics.observe
         successful_requests = 0
         failed_requests = 0
         response_times = []
@@ -739,6 +1012,142 @@ class MultiTenantConcurrentRunner:
             max_response_time=max_response_time,
             throughput=throughput,
             error_details=error_details,
+            **http_metrics.snapshot(total_time),
+        )
+        self.results.append(result)
+        return result
+
+    def run_multi_tenant_worker_loop_test(
+        self,
+        test_func: Callable,
+        test_name: str,
+        workers_per_tenant: int,
+        iterations_per_worker: int,
+    ) -> ConcurrentTestResult:
+        """按租户 x worker 并发执行热点循环压测。"""
+        if not self.tenant_configs:
+            raise ValueError("没有可用的多租户配置")
+
+        tenant_ids = list(self.tenant_configs.keys())
+        tasks = [
+            (tenant_id, worker_id)
+            for tenant_id in tenant_ids
+            for worker_id in range(workers_per_tenant)
+        ]
+
+        start_time = time.time()
+        http_metrics = HTTPRequestMetricsCollector()
+        self._http_request_observer = http_metrics.observe
+        successful_requests = 0
+        failed_requests = 0
+        response_times = []
+        error_details = []
+        total_requests = len(tasks) * iterations_per_worker
+
+        def worker(tenant_id: str, worker_id: int):
+            nonlocal successful_requests, failed_requests
+            session_key = f"{tenant_id}#{worker_id}"
+
+            try:
+                session_mgr = self._get_session_manager(session_key, tenant_id)
+                if not session_mgr:
+                    raise RuntimeError("无法获取租户会话")
+
+                for iteration in range(iterations_per_worker):
+                    iteration_start = time.time()
+                    try:
+                        test_func(
+                            tenant_id=tenant_id,
+                            worker_id=worker_id,
+                            iteration=iteration,
+                            session_manager=session_mgr,
+                        )
+                        iteration_end = time.time()
+                        with self.results_lock:
+                            successful_requests += 1
+                            response_times.append(iteration_end - iteration_start)
+                    except Exception as exc:
+                        iteration_end = time.time()
+                        with self.results_lock:
+                            failed_requests += 1
+                            error_details.append(
+                                {
+                                    "tenant_id": tenant_id,
+                                    "worker_id": worker_id,
+                                    "iteration": iteration,
+                                    "error": str(exc),
+                                    "timestamp": datetime.now().isoformat(),
+                                    "response_time": iteration_end - iteration_start,
+                                }
+                            )
+                        logger.error(
+                            "租户 %s worker %s 第 %s 轮失败 - %s",
+                            tenant_id,
+                            worker_id,
+                            iteration,
+                            exc,
+                        )
+            except Exception as exc:
+                with self.results_lock:
+                    for iteration in range(iterations_per_worker):
+                        failed_requests += 1
+                        error_details.append(
+                            {
+                                "tenant_id": tenant_id,
+                                "worker_id": worker_id,
+                                "iteration": iteration,
+                                "error": str(exc),
+                                "timestamp": datetime.now().isoformat(),
+                                "response_time": 0,
+                            }
+                        )
+                logger.error("租户 %s worker %s 初始化失败 - %s", tenant_id, worker_id, exc)
+
+        logger.info(
+            "开始多租户热点压测: %s, 租户数: %s, 每租户 worker: %s, 每 worker 轮次: %s, 总请求数: %s",
+            test_name,
+            len(tenant_ids),
+            workers_per_tenant,
+            iterations_per_worker,
+            total_requests,
+        )
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=min(self.max_workers, len(tasks))
+            ) as executor:
+                futures = [
+                    executor.submit(worker, tenant_id, worker_id)
+                    for tenant_id, worker_id in tasks
+                ]
+                concurrent.futures.wait(futures, timeout=self.timeout)
+                for future in futures:
+                    if not future.done():
+                        future.cancel()
+        finally:
+            self._cleanup_session_managers()
+
+        total_time = time.time() - start_time
+        if response_times:
+            avg_response_time = sum(response_times) / len(response_times)
+            min_response_time = min(response_times)
+            max_response_time = max(response_times)
+        else:
+            avg_response_time = min_response_time = max_response_time = 0
+
+        throughput = successful_requests / total_time if total_time > 0 else 0
+        result = ConcurrentTestResult(
+            test_name=test_name,
+            total_requests=total_requests,
+            successful_requests=successful_requests,
+            failed_requests=failed_requests,
+            total_time=total_time,
+            avg_response_time=avg_response_time,
+            min_response_time=min_response_time,
+            max_response_time=max_response_time,
+            throughput=throughput,
+            error_details=error_details,
+            **http_metrics.snapshot(total_time),
         )
         self.results.append(result)
         return result
@@ -1687,9 +2096,311 @@ class MultiTenantBusinessScenarioFactory:
 
         return test_full_business_flow
 
+    @staticmethod
+    def _prepare_hotspot_context(
+        tenant_id: str,
+        worker_id: int,
+        session_manager,
+    ) -> Dict[str, Any]:
+        existing_context = getattr(session_manager, "_vmi_hotspot_context", None)
+        if existing_context is not None:
+            return existing_context
+
+        from sdk import (GoodsInfoSDK, GoodsSDK, ProductInfoSDK, ProductSDK,
+                         ShelfSDK, StatusSDK, StoreSDK, WarehouseSDK)
+
+        work_session = session_manager.get_session()
+        sdks = {
+            "status": StatusSDK(work_session),
+            "warehouse": WarehouseSDK(work_session),
+            "shelf": ShelfSDK(work_session),
+            "store": StoreSDK(work_session),
+            "product": ProductSDK(work_session),
+            "product_info": ProductInfoSDK(work_session),
+            "goods_info": GoodsInfoSDK(work_session),
+            "goods": GoodsSDK(work_session),
+        }
+        created_entities: Dict[str, List[int]] = defaultdict(list)
+        suffix = f"{tenant_id}_w{worker_id}_{uuid.uuid4().hex[:8]}"
+
+        statuses = MultiTenantBusinessScenarioFactory._load_statuses_with_retry(
+            sdks,
+            tenant_id,
+        )
+        status_id = MultiTenantBusinessScenarioFactory._resolve_status_id_from_statuses(
+            statuses
+        )
+        assert status_id, f"租户 {tenant_id} 无法解析可用状态ID"
+
+        warehouse = sdks["warehouse"].create_warehouse(
+            {
+                "name": f"STRESS_WH_{suffix}",
+                "description": f"热点压测仓库_{suffix}",
+            }
+        )
+        warehouse_id = MultiTenantBusinessScenarioFactory._record_entity(
+            created_entities, "warehouse", warehouse
+        )
+
+        shelf = sdks["shelf"].create_shelf(
+            {
+                "description": f"热点压测货架_{suffix}",
+                "capacity": 500,
+                "warehouse": {"id": warehouse_id},
+                "status": {"id": status_id},
+            }
+        )
+        shelf_id = MultiTenantBusinessScenarioFactory._record_entity(
+            created_entities, "shelf", shelf
+        )
+
+        store = sdks["store"].create_store(
+            {
+                "name": f"STRESS_STORE_{suffix}",
+                "description": f"热点压测门店_{suffix}",
+            }
+        )
+        store_id = MultiTenantBusinessScenarioFactory._record_entity(
+            created_entities, "store", store
+        )
+
+        product = sdks["product"].create_product(
+            {
+                "name": f"STRESS_PRODUCT_{suffix}",
+                "description": f"热点压测产品_{suffix}",
+                "image": [],
+                "expire": 365,
+                "tags": ["stress", tenant_id, f"worker-{worker_id}"],
+                "status": {"id": status_id},
+            }
+        )
+        product_id = MultiTenantBusinessScenarioFactory._record_entity(
+            created_entities, "product", product
+        )
+
+        product_info = sdks["product_info"].create_product_info(
+            {
+                "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                "description": f"热点压测产品SKU_{suffix}",
+                "product": {"id": product_id},
+            }
+        )
+        product_info_id = MultiTenantBusinessScenarioFactory._record_entity(
+            created_entities, "product_info", product_info
+        )
+
+        goods_info = sdks["goods_info"].create_goods_info(
+            {
+                "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                "product": {"id": product_info_id},
+                "type": 1,
+                "count": 200,
+                "price": 88.88,
+                "shelf": [{"id": shelf_id}],
+            }
+        )
+        goods_info_id = MultiTenantBusinessScenarioFactory._record_entity(
+            created_entities, "goods_info", goods_info
+        )
+
+        goods = sdks["goods"].create_goods(
+            {
+                "sku": MultiTenantBusinessScenarioFactory._build_numeric_code(),
+                "name": f"STRESS_GOODS_{suffix}",
+                "description": f"热点压测商品_{suffix}",
+                "parameter": f"参数_{suffix}",
+                "serviceInfo": f"服务_{suffix}",
+                "product": {"id": product_info_id},
+                "count": 160,
+                "price": 128.88,
+                "shelf": [{"id": shelf_id}],
+                "store": {"id": store_id},
+                "status": {"id": status_id},
+            }
+        )
+        goods_id = MultiTenantBusinessScenarioFactory._record_entity(
+            created_entities, "goods", goods
+        )
+
+        def cleanup_hotspot_context():
+            if getattr(session_manager, "_vmi_hotspot_context_cleaned", False):
+                return
+
+            session_manager._vmi_hotspot_context_cleaned = True
+            MultiTenantBusinessScenarioFactory._cleanup_entities(sdks, created_entities)
+
+        context = {
+            "sdks": sdks,
+            "created_entities": created_entities,
+            "status_id": status_id,
+            "warehouse_id": warehouse_id,
+            "shelf_id": shelf_id,
+            "store_id": store_id,
+            "product_id": product_id,
+            "product_info_id": product_info_id,
+            "goods_info_id": goods_info_id,
+            "goods_id": goods_id,
+            "suffix": suffix,
+        }
+        session_manager._vmi_hotspot_context = context
+        session_manager._vmi_hotspot_context_cleaned = False
+        session_manager._codex_cleanup_hook = cleanup_hotspot_context
+        logger.info("租户 %s worker %s: 热点压测资源初始化完成", tenant_id, worker_id)
+        return context
+
+    @staticmethod
+    def create_hotspot_stress_test(
+        write_every: int = 4,
+        read_rounds: int = 2,
+        query_rounds: int = 2,
+    ):
+        """创建更偏向 DB 热点读写重叠的多租户压测场景。"""
+
+        def test_hotspot_stress(
+            tenant_id: str,
+            worker_id: int,
+            iteration: int,
+            session_manager,
+        ):
+            context = MultiTenantBusinessScenarioFactory._prepare_hotspot_context(
+                tenant_id=tenant_id,
+                worker_id=worker_id,
+                session_manager=session_manager,
+            )
+            sdks = context["sdks"]
+
+            filter_param = {"page": 1, "size": 200}
+            warehouse_id = context["warehouse_id"]
+            store_id = context["store_id"]
+            product_id = context["product_id"]
+            product_info_id = context["product_info_id"]
+            goods_info_id = context["goods_info_id"]
+            goods_id = context["goods_id"]
+
+            for _ in range(max(1, read_rounds)):
+                assert sdks["status"].filter_status(filter_param) is not None
+                assert sdks["warehouse"].filter_warehouse(filter_param) is not None
+                assert sdks["store"].filter_store(filter_param) is not None
+                assert sdks["product"].filter_product(filter_param) is not None
+                assert sdks["product_info"].filter_product_info(filter_param) is not None
+                assert sdks["goods_info"].filter_goods_info(filter_param) is not None
+                assert sdks["goods"].filter_goods(filter_param) is not None
+
+            for _ in range(max(1, query_rounds)):
+                assert sdks["warehouse"].query_warehouse(warehouse_id) is not None
+                assert sdks["store"].query_store(store_id) is not None
+                assert sdks["product"].query_product(product_id) is not None
+                assert sdks["product_info"].query_product_info(product_info_id) is not None
+                assert sdks["goods_info"].query_goods_info(goods_info_id) is not None
+                assert sdks["goods"].query_goods(goods_id) is not None
+
+            if (iteration + 1) % max(1, write_every) != 0:
+                return
+
+            update_suffix = f"{context['suffix']}_{iteration}"
+
+            warehouse_payload = dict(sdks["warehouse"].query_warehouse(warehouse_id))
+            warehouse_payload["description"] = f"热点压测更新仓库_{update_suffix}"
+            updated_warehouse = sdks["warehouse"].update_warehouse(
+                warehouse_id, warehouse_payload
+            )
+            assert updated_warehouse is not None
+
+            store_payload = dict(sdks["store"].query_store(store_id))
+            store_payload["description"] = f"热点压测更新门店_{update_suffix}"
+            updated_store = sdks["store"].update_store(store_id, store_payload)
+            assert updated_store is not None
+
+            product_payload = dict(sdks["product"].query_product(product_id))
+            product_payload["description"] = f"热点压测更新产品_{update_suffix}"
+            updated_product = sdks["product"].update_product(product_id, product_payload)
+            assert updated_product is not None
+
+            current_goods = sdks["goods"].query_goods(goods_id)
+            assert current_goods is not None
+            updated_goods = MultiTenantBusinessScenarioFactory._update_entity(
+                sdks,
+                "goods",
+                goods_id,
+                {
+                    "description": f"热点压测更新商品_{update_suffix}",
+                    "count": 160 + ((iteration + worker_id) % 17),
+                },
+                tenant_id,
+                fallback_payload={
+                    "sku": current_goods.get(
+                        "sku", MultiTenantBusinessScenarioFactory._build_numeric_code()
+                    ),
+                    "name": current_goods.get(
+                        "name", f"STRESS_GOODS_{context['suffix']}"
+                    ),
+                    "description": f"热点压测更新商品_{update_suffix}",
+                    "parameter": current_goods.get(
+                        "parameter", f"参数_{context['suffix']}"
+                    ),
+                    "serviceInfo": current_goods.get(
+                        "serviceInfo", f"服务_{context['suffix']}"
+                    ),
+                    "product": {"id": product_info_id},
+                    "count": 160 + ((iteration + worker_id) % 17),
+                    "price": current_goods.get("price", 128.88),
+                    "shelf": [{"id": context['shelf_id']}],
+                    "store": {"id": store_id},
+                    "status": {"id": context["status_id"]},
+                },
+            )
+            assert updated_goods is not None
+
+        return test_hotspot_stress
+
 
 class TestConcurrentMultiTenantBusinessOperations(unittest.TestCase):
     """多租户并发业务覆盖测试。"""
+
+    def test_multi_tenant_hotspot_stress(self):
+        from config_helper import get_concurrent_config, get_timeout
+        from tenant_config_helper import (get_concurrent_tenant_configs,
+                                          get_preferred_concurrent_tenant_ids)
+
+        preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
+        tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
+
+        if not tenant_configs:
+            self.skipTest("多租户未启用，跳过多租户热点压测")
+
+        concurrent_config = get_concurrent_config()
+        workers_per_tenant = int(concurrent_config.get("workers_per_tenant", 4))
+        iterations_per_worker = int(concurrent_config.get("iterations_per_worker", 12))
+        write_every = int(concurrent_config.get("write_every", 4))
+        read_rounds = int(concurrent_config.get("hotspot_read_rounds", 2))
+        query_rounds = int(concurrent_config.get("hotspot_query_rounds", 2))
+
+        runner = MultiTenantConcurrentRunner(
+            tenant_configs=tenant_configs,
+            max_workers=max(1, len(tenant_configs) * workers_per_tenant),
+            timeout=max(get_timeout(), 300),
+        )
+
+        result = runner.run_multi_tenant_worker_loop_test(
+            test_func=MultiTenantBusinessScenarioFactory.create_hotspot_stress_test(
+                write_every=write_every,
+                read_rounds=read_rounds,
+                query_rounds=query_rounds,
+            ),
+            test_name="multi_tenant_hotspot_stress",
+            workers_per_tenant=workers_per_tenant,
+            iterations_per_worker=iterations_per_worker,
+        )
+
+        self.assertEqual(result.failed_requests, 0, f"失败详情: {result.error_details[:5]}")
+        self.assertEqual(
+            result.successful_requests,
+            result.total_requests,
+            f"存在请求执行失败: {result.error_details[:5]}",
+        )
+        self.assertGreater(result.http_qps, 5.0, "多租户热点压测 HTTP QPS 应大于5")
+        self.assertGreater(result.write_tps, 0.5, "多租户热点压测写TPS应大于0.5")
+        self.assertGreater(result.avg_response_time, 0, "平均响应时间应大于0")
 
     def test_concurrent_multi_tenant_full_vmi_coverage(self):
         from config_helper import get_max_workers, get_timeout

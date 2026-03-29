@@ -35,7 +35,12 @@
   "concurrent": {
     "max_workers": 10,
     "timeout": 30,
-    "retry_count": 3
+    "retry_count": 3,
+    "workers_per_tenant": 4,
+    "iterations_per_worker": 12,
+    "write_every": 4,
+    "hotspot_read_rounds": 2,
+    "hotspot_query_rounds": 2
   },
   "aging": {
     "duration_hours": 0.5,

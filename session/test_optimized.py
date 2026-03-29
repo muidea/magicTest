@@ -40,11 +40,20 @@ def test_session_methods():
     
     session.bind_application("test-app")
     assert session.application == "test-app"
-    
+
+    observed = []
+    session.set_request_observer(lambda **kwargs: observed.append(kwargs))
+
     # Test header generation
     headers = session.header()
     assert "Authorization" in headers
     assert headers["Authorization"].startswith("Sig")  # Signature auth takes priority
+
+    cloned_session = session.new_session()
+    assert cloned_session.base_url == session.base_url
+    assert cloned_session.namespace == session.namespace
+    assert cloned_session.application == "test-app"
+    assert cloned_session.request_observer is session.request_observer
     
     print("✓ Session methods passed")
 

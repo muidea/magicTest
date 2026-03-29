@@ -11,6 +11,7 @@ source ../venv/bin/activate
 python3 run_tests.py --quick
 python3 run_tests.py --all
 python3 run_tests.py --module
+python3 run_tests.py --hotspot
 python3 run_tests.py --aging 30
 ```
 
@@ -40,6 +41,7 @@ python3 -m unittest discover -s . -p '*_test.py' -v
   校验业务场景和基础性能要求。
 - `concurrent_test_v2.py`
   并发会话、单租户实体并发压测，以及 `t001`-`t005` 多租户全业务链路并发测试。
+  当前还包含多租户热点读写压测，重点观察真实 HTTP QPS、读 QPS 和写 TPS。
   当前全业务链路覆盖 `status` 的 `list/query`，以及 `warehouse / shelf / store / partner / member / product / product_info / goods_info / goods / reward_policy / credit / credit_report / credit_reward / goods_item / stockin / stockout / order` 的 `create/query/list/update/delete`。
 - `aging_test_simple.py`
   长时间老化测试和性能劣化观测；开启开关后可统一承载 `t001`-`t005` 多租户全业务链路持续并发。
@@ -84,7 +86,12 @@ python3 -m unittest discover -s . -p '*_test.py' -v
   "concurrent": {
     "max_workers": 10,
     "timeout": 30,
-    "retry_count": 3
+    "retry_count": 3,
+    "workers_per_tenant": 4,
+    "iterations_per_worker": 12,
+    "write_every": 4,
+    "hotspot_read_rounds": 2,
+    "hotspot_query_rounds": 2
   },
   "aging": {
     "duration_hours": 0.5,
@@ -127,6 +134,7 @@ python3 -m unittest warehouse.shelf_test order.order_test -v
 
 ```bash
 python3 run_tests.py --concurrent
+python3 run_tests.py --hotspot
 python3 run_tests.py --scenario
 python3 concurrent_test_v2.py
 ```

@@ -35,6 +35,7 @@ class SessionManager:
         password: str,
         refresh_interval: int = 540,  # 9分钟刷新一次（服务器要求不超过10分钟）
         session_timeout: int = 1800,
+        request_observer=None,
     ):  # 30分钟会话超时
         """初始化会话管理器
 
@@ -52,6 +53,7 @@ class SessionManager:
         self.password = password
         self.refresh_interval = refresh_interval
         self.session_timeout = session_timeout
+        self.request_observer = request_observer
 
         # 会话相关对象
         self.work_session = None
@@ -83,6 +85,8 @@ class SessionManager:
                 return False
 
             self.work_session.bind_token(self.cas_session.get_session_token())
+            if self.request_observer and hasattr(self.work_session, "set_request_observer"):
+                self.work_session.set_request_observer(self.request_observer)
 
             # 更新状态
             self.last_activity_time = time.time()

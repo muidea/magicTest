@@ -7,6 +7,7 @@ VMI 统一测试入口
     python3 run_tests.py --all           # 运行所有测试
     python3 run_tests.py --quick         # 快速验证
     python3 run_tests.py --concurrent    # 并发测试
+    python3 run_tests.py --hotspot       # 多租户热点压测
     python3 run_tests.py --scenario      # 场景测试
     python3 run_tests.py --aging 60      # 老化测试（60分钟）
     python3 run_tests.py --multi-tenant  # 多租户测试
@@ -19,6 +20,7 @@ import argparse
 import json
 import logging
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -29,6 +31,14 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "test_config.json")
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
+
+
+def python_cmd() -> str:
+    return shlex.quote(sys.executable)
+
+
+def pytest_cmd() -> str:
+    return f"{python_cmd()} -m pytest"
 
 
 def load_config() -> Dict[str, Any]:
@@ -68,7 +78,7 @@ def run_command(cmd: str, description: str = "") -> Tuple[bool, float]:
 def run_pytest_command(
     pytest_args: List[str], description: str = ""
 ) -> Tuple[bool, float]:
-    cmd = "pytest " + " ".join(pytest_args)
+    cmd = pytest_cmd() + " " + " ".join(pytest_args)
     return run_command(cmd, description)
 
 
@@ -81,7 +91,7 @@ def run_validation_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
             ["test_complete_validation.py", "-v", "--tb=short"], "框架验证测试 (pytest)"
         )
 
-    cmd = "python3 test_complete_validation.py"
+    cmd = f"{python_cmd()} test_complete_validation.py"
     return run_command(cmd, "框架验证测试")
 
 
@@ -100,7 +110,7 @@ def run_multi_tenant_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
             "多租户测试 (pytest)",
         )
 
-    cmd = "python3 test_multi_tenant.py"
+    cmd = f"{python_cmd()} test_multi_tenant.py"
     return run_command(cmd, "多租户测试")
 
 
@@ -113,8 +123,32 @@ def run_concurrent_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
             ["concurrent_test_v2.py", "-v", "--tb=short"], "并发测试 (pytest)"
         )
 
-    cmd = "python3 concurrent_test_v2.py"
+    cmd = f"{python_cmd()} concurrent_test_v2.py"
     return run_command(cmd, "并发测试")
+
+
+def run_hotspot_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
+    """运行多租户热点压测"""
+    logger.info("运行多租户热点压测")
+
+    if pytest_mode:
+        return run_pytest_command(
+            [
+                "concurrent_test_v2.py",
+                "-k",
+                "test_multi_tenant_hotspot_stress",
+                "-v",
+                "--tb=short",
+            ],
+            "多租户热点压测 (pytest)",
+        )
+
+    cmd = (
+        f"{python_cmd()} -m unittest "
+        "concurrent_test_v2.TestConcurrentMultiTenantBusinessOperations."
+        "test_multi_tenant_hotspot_stress -v"
+    )
+    return run_command(cmd, "多租户热点压测")
 
 
 def run_scenario_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
@@ -126,7 +160,7 @@ def run_scenario_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
             ["scenario_test.py", "-v", "--tb=short"], "场景测试 (pytest)"
         )
 
-    cmd = "python3 scenario_test.py"
+    cmd = f"{python_cmd()} scenario_test.py"
     return run_command(cmd, "场景测试")
 
 
@@ -137,10 +171,10 @@ def run_aging_tests(
     if duration is None:
         logger.info("运行老化测试（使用配置文件时长）")
         if pytest_mode:
-            cmd = "python3 aging_test_simple.py --threads 2"
+            cmd = f"{python_cmd()} aging_test_simple.py --threads 2"
             return run_command(cmd, "老化测试 (配置文件) - 轻量模式")
 
-        cmd = "python3 aging_test_simple.py"
+        cmd = f"{python_cmd()} aging_test_simple.py"
         return run_command(cmd, "老化测试 (配置文件)")
 
     logger.info("运行老化测试（%s分钟）", duration)
@@ -148,12 +182,12 @@ def run_aging_tests(
 
     if pytest_mode:
         cmd = (
-            "python3 aging_test_simple.py "
+            f"{python_cmd()} aging_test_simple.py "
             f"--duration {duration_hours} --threads 2"
         )
         return run_command(cmd, f"老化测试 ({duration}分钟) - 轻量模式")
 
-    cmd = f"python3 aging_test_simple.py --duration {duration_hours}"
+    cmd = f"{python_cmd()} aging_test_simple.py --duration {duration_hours}"
     return run_command(cmd, f"老化测试 ({duration}分钟)")
 
 
@@ -177,7 +211,7 @@ def run_module_tests(pytest_mode: bool = False) -> Tuple[bool, float]:
             "模块测试 (pytest)",
         )
 
-    cmd = "python3 -m unittest discover -s . -p '*_test.py' -v"
+    cmd = f"{python_cmd()} -m unittest discover -s . -p '*_test.py' -v"
     return run_command(cmd, "模块测试")
 
 
@@ -281,6 +315,7 @@ def main():
     python3 run_tests.py --validation    # 框架验证测试
     python3 run_tests.py --module        # 模块测试
     python3 run_tests.py --concurrent    # 并发测试
+    python3 run_tests.py --hotspot       # 多租户热点压测
     python3 run_tests.py --scenario      # 场景测试
     python3 run_tests.py --aging 30      # 30分钟老化测试
     python3 run_tests.py --multi-tenant  # 多租户测试
@@ -292,6 +327,7 @@ def main():
     parser.add_argument("--quick", action="store_true", help="运行快速测试（框架验证）")
     parser.add_argument("--validation", action="store_true", help="运行框架验证测试")
     parser.add_argument("--concurrent", action="store_true", help="运行并发测试")
+    parser.add_argument("--hotspot", action="store_true", help="运行多租户热点压测")
     parser.add_argument("--scenario", action="store_true", help="运行场景测试")
     parser.add_argument(
         "--aging",
@@ -341,6 +377,8 @@ def main():
             results.append(("框架验证测试", *run_validation_tests(args.pytest)))
         if args.concurrent:
             results.append(("并发测试", *run_concurrent_tests(args.pytest)))
+        if args.hotspot:
+            results.append(("多租户热点压测", *run_hotspot_tests(args.pytest)))
         if args.scenario:
             results.append(("场景测试", *run_scenario_tests(args.pytest)))
         if args.aging is not None:
