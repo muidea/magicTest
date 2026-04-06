@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 class CreditRewardTestCase(VMITestCase):
     namespace = ""
+    entity_definition = "credit/creditReward.json"
 
     @classmethod
     def setUpClass(cls):
@@ -100,7 +101,6 @@ class CreditRewardTestCase(VMITestCase):
             "memo",
             "creater",
             "createTime",
-            "namespace",
         ]
         for field in required_fields:
             self.assertIn(field, credit_reward, f"积分消费记录缺少必填字段: {field}")
@@ -262,7 +262,7 @@ class CreditRewardTestCase(VMITestCase):
         }
         credit_reward = self.credit_reward_sdk.create_credit_reward(credit_reward_param)
         self.assertIsNotNone(credit_reward, "创建积分消费记录失败")
-        auto_fields = ["id", "sn", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "sn", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, credit_reward, f"缺少自动生成字段: {field}")
         self.test_data.append(credit_reward)

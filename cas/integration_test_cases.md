@@ -67,7 +67,8 @@
 - `verifySessionNamespace` 同时覆盖普通 namespace 拒绝越权和 `panel` 全局 scope 放行
 - `verifySessionEntity/verifySessionEntityRole` 覆盖 JWT 与 endpoint 两条会话路径
 - `verifySessionEntity/verifySessionEntityRole` 对错误 `entityID` 必须拒绝
-- `refresh` 必须把 namespace 最新 scope 写入新 JWT，而不是沿用旧 token scope
+- `refresh` 必须基于当前 CAS 运行态快照重签新 JWT，而不是沿用旧 token scope
+- namespace.scope 对 CAS 的生效允许延迟，不要求在 namespace 管理返回后立刻体现在 refresh 结果上
 - 绑定 `Role` 已失效时，已登录 JWT 的 `refresh` 必须拒绝
 
 对应测试：

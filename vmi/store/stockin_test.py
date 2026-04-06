@@ -13,7 +13,6 @@ Stockin 测试用例
 - store: store* (所属店铺) - 必选
 - creater: int64 (创建者) - 由系统自动生成
 - createTime: int64 (创建时间) - 由系统自动生成
-- modifyTime: int64 (修改时间) - 由系统自动更新
 - namespace: string (命名空间) - 由系统自动生成
 
 业务说明：入库单和出库单的状态由系统根据业务流程自动更新。商品库存数量在入库时增加。
@@ -75,6 +74,7 @@ class StockinTestCase(VMITestCase):
     """Stockin 测试用例类"""
 
     namespace = ""
+    entity_definition = "store/stockin.json"
 
     @classmethod
     def setUpClass(cls):
@@ -288,11 +288,8 @@ class StockinTestCase(VMITestCase):
         self.assertIsInstance(
             new_stockin["createTime"], (int, type(None)), "创建时间应为整数或None"
         )
+        self.assert_entity_matches_definition(new_stockin, context="创建入库单返回")
 
-        self.assertIn("namespace", new_stockin, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_stockin["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 记录创建的入库单ID以便清理
         if new_stockin and "id" in new_stockin:
@@ -311,7 +308,7 @@ class StockinTestCase(VMITestCase):
         # 查询入库单
         queried_stockin = self.stockin_sdk.query_stockin(new_stockin["id"])
         self.assertIsNotNone(queried_stockin, "查询入库单失败")
-        self.assertEqual(queried_stockin["id"], new_stockin["id"], "入库单ID不匹配")
+        self.assert_entity_round_trip(new_stockin, queried_stockin, context="查询入库单返回")
 
     def test_update_stockin(self):
         """测试更新入库单"""
@@ -334,8 +331,13 @@ class StockinTestCase(VMITestCase):
             updated_stockin = self.stockin_sdk.update_stockin(
                 new_stockin["id"], update_param
             )
-        self.assertIsNotNone(updated_stockin, "更新入库单失败")
-        self.assertEqual(updated_stockin["description"], "更新后的描述", "描述更新失败")
+        self.assert_update_round_trip(
+            new_stockin["id"],
+            updated_stockin,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_stockin,
+            context="更新入库单返回",
+        )
 
     def test_delete_stockin(self):
         """测试删除入库单"""
@@ -486,7 +488,7 @@ class StockinTestCase(VMITestCase):
             self._record_entity_for_cleanup("stockin", new_stockin["id"])
 
         # 验证所有系统自动生成字段
-        auto_generated_fields = ["id", "sn", "creater", "createTime", "namespace"]
+        auto_generated_fields = ["id", "sn", "creater", "createTime"]
         for field in auto_generated_fields:
             self.assertIn(field, new_stockin, f"缺少系统自动生成字段: {field}")
 
@@ -509,10 +511,8 @@ class StockinTestCase(VMITestCase):
         )
         if new_stockin["createTime"] is not None:
             self.assertGreater(new_stockin["createTime"], 0, "创建时间应为正数")
+        self.assert_entity_matches_definition(new_stockin, context="自动字段入库单返回")
 
-        self.assertIsInstance(
-            new_stockin["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
     def test_modify_time_auto_update(self):
         """测试修改时间自动更新"""
@@ -524,9 +524,8 @@ class StockinTestCase(VMITestCase):
         if new_stockin and "id" in new_stockin:
             self._record_entity_for_cleanup("stockin", new_stockin["id"])
 
-        # 记录初始创建时间和修改时间
+        # 记录初始创建时间
         initial_create_time = new_stockin.get("createTime")
-        initial_modify_time = new_stockin.get("modifyTime")
 
         # 先尝试部分更新；如果服务要求 store/status 等必填字段，则回退完整更新
         partial_update = {"description": "更新后的描述"}
@@ -539,33 +538,22 @@ class StockinTestCase(VMITestCase):
             updated_stockin = self.stockin_sdk.update_stockin(
                 new_stockin["id"], update_param
             )
-        self.assertIsNotNone(updated_stockin, "更新入库单失败")
-
-        # 验证修改时间 - 系统可能不返回此字段
-        updated_modify_time = updated_stockin.get("modifyTime")
-        if updated_modify_time is not None:
-            # 如果系统返回修改时间，验证其内容
-            # 验证修改时间比创建时间晚（如果两者都存在）
-            if initial_create_time and updated_modify_time:
-                self.assertGreaterEqual(
-                    updated_modify_time,
-                    initial_create_time,
-                    "修改时间应晚于或等于创建时间",
-                )
-
-            # 如果初始有修改时间，验证已更新
-            if initial_modify_time and updated_modify_time:
-                self.assertGreaterEqual(
-                    updated_modify_time, initial_modify_time, "修改时间应已更新"
-                )
-        else:
-            # 系统不返回修改时间字段，记录警告但不视为失败
-            logger.warning("更新入库单后未返回 modifyTime 字段，系统可能不返回此字段")
-
-        # 验证创建时间未改变
-        self.assertEqual(
-            updated_stockin.get("createTime"), initial_create_time, "创建时间不应被修改"
+        queried_stockin = self.assert_update_round_trip(
+            new_stockin["id"],
+            updated_stockin,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_stockin,
+            context="修改时间入库单更新返回",
         )
+
+        updated_create_time = queried_stockin.get("createTime")
+        self.assertIsNotNone(updated_create_time, "更新入库单后缺少 createTime 字段")
+        if initial_create_time and updated_create_time:
+            self.assertEqual(
+                updated_create_time,
+                initial_create_time,
+                "更新入库单不应修改 createTime",
+            )
 
 
 if __name__ == "__main__":

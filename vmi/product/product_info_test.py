@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 class ProductInfoTestCase(VMITestCase):
     namespace = ""
+    entity_definition = "product/productInfo.json"
 
     @classmethod
     def setUpClass(cls):
@@ -106,10 +107,10 @@ class ProductInfoTestCase(VMITestCase):
             "product",
             "creater",
             "createTime",
-            "namespace",
         ]
         for field in required_fields:
             self.assertIn(field, product_info, f"产品SKU缺少必填字段: {field}")
+        self.assert_entity_matches_definition(product_info, context="创建产品SKU返回")
         self._record_entity_for_cleanup("product_info", product_info)
         self.log_test_success(
             f"✓ 产品SKU创建成功: ID={product_info.get('id')}, SKU={product_info.get('sku')}"
@@ -126,7 +127,7 @@ class ProductInfoTestCase(VMITestCase):
         self.assertIsNotNone(created_info, "创建产品SKU失败")
         queried_info = self.product_info_sdk.query_product_info(created_info["id"])
         self.assertIsNotNone(queried_info, "查询产品SKU失败")
-        self.assertEqual(queried_info["id"], created_info["id"], "ID不匹配")
+        self.assert_entity_round_trip(created_info, queried_info, context="查询产品SKU返回")
         self._record_entity_for_cleanup("product_info", created_info)
         self.log_test_success(f"✓ 产品SKU查询成功: ID={queried_info.get('id')}")
 
@@ -167,13 +168,18 @@ class ProductInfoTestCase(VMITestCase):
         updated_info = self.product_info_sdk.update_product_info(
             created_info["id"], update_param_full
         )
-        if updated_info:
-            self.assertEqual(
-                updated_info["description"], "更新后描述", "更新后描述不匹配"
-            )
-            self.log_test_success(f"✓ 完整更新成功: ID={updated_info.get('id')}")
-        else:
-            self.log_test_observation("⚠ 完整更新未返回结果")
+        queried_info = self.assert_update_round_trip(
+            created_info["id"],
+            updated_info,
+            expected_updates={
+                "sku": "SKU003",
+                "description": "更新后描述",
+                "product": {"id": self.test_product["id"]},
+            },
+            original_entity=created_info,
+            context="更新产品SKU返回",
+        )
+        self.log_test_success(f"✓ 完整更新成功: ID={queried_info.get('id')}")
         self._record_entity_for_cleanup("product_info", created_info)
 
     def test_delete_product_info(self):
@@ -274,9 +280,10 @@ class ProductInfoTestCase(VMITestCase):
         }
         product_info = self.product_info_sdk.create_product_info(product_info_param)
         self.assertIsNotNone(product_info, "创建产品SKU失败")
-        auto_fields = ["id", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, product_info, f"缺少自动生成字段: {field}")
+        self.assert_entity_matches_definition(product_info, context="自动字段产品SKU返回")
         self._record_entity_for_cleanup("product_info", product_info)
         self.log_test_success(f"✓ 系统自动生成字段验证成功: ID={product_info.get('id')}")
 
@@ -303,23 +310,29 @@ class ProductInfoTestCase(VMITestCase):
             updated_info = self.product_info_sdk.update_product_info(
                 created_info["id"], update_param
             )
-            self.assertIsNotNone(updated_info, "更新产品SKU失败")
+            queried_info = self.assert_update_round_trip(
+                created_info["id"],
+                updated_info,
+                expected_updates={
+                    "sku": "SKU008_UPDATED",
+                    "description": "时间更新描述",
+                    "product": {"id": self.test_product["id"]},
+                },
+                original_entity=created_info,
+                context="修改时间产品SKU更新返回",
+            )
 
-            if "modifyTime" in updated_info:
-                updated_modify_time = updated_info["modifyTime"]
-
-                # 验证modifyTime已自动更新
-                self.assertNotEqual(
-                    updated_modify_time,
-                    original_modify_time,
-                    "modifyTime字段在更新后未自动刷新",
-                )
-                self.log_test_success("✓ 修改时间自动更新验证成功")
-                self.log_test_success(
-                    f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}"
-                )
-            else:
-                self.fail("更新操作未返回modifyTime字段")
+            updated_modify_time = queried_info.get("modifyTime")
+            self.assertIsNotNone(updated_modify_time, "更新操作未返回modifyTime字段")
+            self.assertNotEqual(
+                updated_modify_time,
+                original_modify_time,
+                "modifyTime字段在更新后未自动刷新",
+            )
+            self.log_test_success("✓ 修改时间自动更新验证成功")
+            self.log_test_success(
+                f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}"
+            )
         else:
             self.fail("创建的数据不包含modifyTime字段")
 

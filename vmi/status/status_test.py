@@ -50,6 +50,8 @@ logger = logging.getLogger(__name__)
 class StatusTestCase(VMITestCase):
     """Status 测试用例类"""
 
+    entity_definition = "status.json"
+
     @classmethod
     def _init_sdk(cls):
         cls.status_sdk = StatusSDK(cls.work_session)

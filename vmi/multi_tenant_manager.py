@@ -116,7 +116,7 @@ class MultiTenantSessionManager:
                 logger.warning(f"租户 '{tenant_id}' 未登录")
                 return None
 
-            return session_mgr.work_session
+            return session_mgr.get_session()
 
     def ensure_session_valid(self, tenant_id: str = "autotest") -> bool:
         """确保指定租户的会话有效

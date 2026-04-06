@@ -81,6 +81,7 @@ class ShelfTestCase(VMITestCase):
     """Shelf 测试用例类"""
 
     namespace = ""
+    entity_definition = "warehouse/shelf.json"
 
     @classmethod
     def setUpClass(cls):
@@ -263,11 +264,8 @@ class ShelfTestCase(VMITestCase):
         self.assertIsInstance(
             new_shelf["modifyTime"], (int, type(None)), "修改时间应为整数或None"
         )
+        self.assert_entity_matches_definition(new_shelf, context="创建货架返回")
 
-        self.assertIn("namespace", new_shelf, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_shelf["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 验证字段值一致性
         self.assertEqual(
@@ -306,32 +304,7 @@ class ShelfTestCase(VMITestCase):
         # 查询货架
         queried_shelf = self.shelf_sdk.query_shelf(shelf_id)
         self.assertIsNotNone(queried_shelf, "查询货架失败")
-
-        # 验证查询结果与创建结果一致
-        self.assertEqual(queried_shelf["id"], new_shelf["id"], "货架ID不一致")
-        self.assertEqual(
-            queried_shelf["description"], new_shelf["description"], "描述不一致"
-        )
-        self.assertEqual(queried_shelf["capacity"], new_shelf["capacity"], "容量不一致")
-
-        # warehouse字段比较，支持对象格式
-        # 首先检查字段是否存在
-        if "warehouse" in new_shelf and "warehouse" in queried_shelf:
-            if isinstance(new_shelf["warehouse"], dict) and isinstance(
-                queried_shelf["warehouse"], dict
-            ):
-                self.assertEqual(
-                    queried_shelf["warehouse"].get("id"),
-                    new_shelf["warehouse"].get("id"),
-                    "仓库不一致",
-                )
-            else:
-                self.assertEqual(
-                    queried_shelf["warehouse"], new_shelf["warehouse"], "仓库不一致"
-                )
-        elif "warehouse" not in queried_shelf:
-            # 如果查询结果中没有warehouse字段，记录警告但不使测试失败
-            logger.warning("查询结果中缺少warehouse字段，但创建结果中有该字段")
+        self.assert_entity_round_trip(new_shelf, queried_shelf, context="查询货架返回")
 
         logger.info(f"成功查询货架: ID={shelf_id}")
 
@@ -358,46 +331,21 @@ class ShelfTestCase(VMITestCase):
 
         # 执行更新
         updated_shelf = self.shelf_sdk.update_shelf(shelf_id, update_param)
-        self.assertIsNotNone(updated_shelf, "更新货架失败")
-
-        # 验证更新后的字段
-        self.assertEqual(
-            updated_shelf["description"], update_param["description"], "描述更新失败"
+        queried_shelf = self.assert_update_round_trip(
+            shelf_id,
+            updated_shelf,
+            expected_updates={
+                "description": update_param["description"],
+                "capacity": update_param["capacity"],
+                "status": {"id": self.status_id},
+            },
+            original_entity=new_shelf,
+            context="更新货架返回",
         )
-        self.assertEqual(
-            updated_shelf["capacity"], update_param["capacity"], "容量更新失败"
-        )
 
-        # 验证不可修改字段保持不变
-        # warehouse字段比较，支持对象格式
-        # 首先检查字段是否存在
-        if "warehouse" in new_shelf and "warehouse" in updated_shelf:
-            if isinstance(new_shelf["warehouse"], dict) and isinstance(
-                updated_shelf["warehouse"], dict
-            ):
-                self.assertEqual(
-                    updated_shelf["warehouse"].get("id"),
-                    new_shelf["warehouse"].get("id"),
-                    "仓库字段不应被修改",
-                )
-            else:
-                self.assertEqual(
-                    updated_shelf["warehouse"],
-                    new_shelf["warehouse"],
-                    "仓库字段不应被修改",
-                )
-        elif "warehouse" not in updated_shelf:
-            # 如果更新结果中没有warehouse字段，记录警告但不使测试失败
-            logger.warning("更新结果中缺少warehouse字段，但原始结果中有该字段")
-
-        # 验证修改时间已更新（如果系统支持）
-        # 注意：服务器可能在毫秒级别返回相同的时间戳，所以使用大于等于
-        if (
-            updated_shelf.get("modifyTime") is not None
-            and original_modify_time is not None
-        ):
+        if queried_shelf.get("modifyTime") is not None and original_modify_time is not None:
             self.assertGreaterEqual(
-                updated_shelf["modifyTime"],
+                queried_shelf["modifyTime"],
                 original_modify_time,
                 "修改时间应大于等于原始时间",
             )
@@ -613,7 +561,7 @@ class ShelfTestCase(VMITestCase):
                 logger.warning(f"货架编码有重复: {shelf_codes}")
 
     def test_auto_generated_fields(self):
-        """测试系统自动生成字段（id、code、creater、createTime、namespace）"""
+        """测试系统自动生成字段（id、code、creater、createTime）"""
         warehouse = self.create_test_warehouse()
         shelf_param = self.mock_shelf_param(warehouse["id"])
 
@@ -623,11 +571,12 @@ class ShelfTestCase(VMITestCase):
         self._record_shelf_for_cleanup(new_shelf["id"])
 
         # 验证系统自动生成字段
-        auto_fields = ["id", "code", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "code", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, new_shelf, f"系统应自动生成字段: {field}")
             if new_shelf[field] is not None:
                 logger.info(f"系统自动生成字段 {field}: {new_shelf[field]}")
+        self.assert_entity_matches_definition(new_shelf, context="自动字段货架返回")
 
     def test_modify_time_auto_update(self):
         """测试修改时间字段的自动更新逻辑"""
@@ -652,18 +601,27 @@ class ShelfTestCase(VMITestCase):
             "status": {"id": self.status_id},
         }
         updated_shelf = self.shelf_sdk.update_shelf(shelf_id, update_param)
-        self.assertIsNotNone(updated_shelf, "更新货架失败")
+        queried_shelf = self.assert_update_round_trip(
+            shelf_id,
+            updated_shelf,
+            expected_updates={
+                "description": update_param["description"],
+                "capacity": update_param["capacity"],
+                "status": {"id": self.status_id},
+            },
+            original_entity=new_shelf,
+            context="修改时间货架更新返回",
+        )
 
         # 验证修改时间已更新
         # 注意：服务器可能在毫秒级别返回相同的时间戳，所以使用大于等于
-        new_modify_time = updated_shelf.get("modifyTime")
-        if original_modify_time is not None and new_modify_time is not None:
+        new_modify_time = queried_shelf.get("modifyTime")
+        self.assertIsNotNone(new_modify_time, "更新后缺少 modifyTime 字段")
+        if original_modify_time is not None:
             self.assertGreaterEqual(
                 new_modify_time, original_modify_time, "修改时间应大于等于原始时间"
             )
             logger.info(f"修改时间: {original_modify_time} -> {new_modify_time}")
-        else:
-            logger.warning("无法验证修改时间更新，字段值为None")
 
     def test_used_field_auto_update(self):
         """测试使用量字段的自动更新逻辑"""

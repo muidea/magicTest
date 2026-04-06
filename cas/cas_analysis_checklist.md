@@ -13,7 +13,8 @@
 - `AllocateAuthSecret`：
   - 以 `Account` 实体为输入时可显式覆盖 role。
   - 以 `Endpoint` 实体为输入时沿用 endpoint 现有 account / role 绑定。
-- `refresh()` 必须基于当前运行态重签 JWT，新的 scope 应跟随最新 namespace scope。
+- `refresh()` 必须基于当前 CAS 运行态快照重签 JWT，不能沿用旧 token scope。
+- namespace.scope 对 CAS 的生效允许延迟，不要求在 namespace 管理返回后立刻反映到新 JWT。
 - 运行态鉴权必须回源校验当前 `Endpoint` / `Account` / `Role` 是否仍然有效。
 
 ## 当前 e2e 已覆盖
@@ -28,7 +29,7 @@
 - `verifyAccount`、`updateAccountPassword`、`queryEntity`、`queryEntityRole`
 - endpoint session 不允许代改绑定 account 密码
 - `verifySessionEntity` / `verifySessionEntityRole` 的 JWT 与 endpoint 路径
-- `refresh()` 对最新 namespace scope 的跟随
+- `refresh()` 基于当前 CAS 运行态快照重签
 - `panel` 默认 `superRole` / `administrator` / `defaultEndpoint` 初始化链
 
 ## 当前未做的事

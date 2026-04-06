@@ -69,6 +69,8 @@ logger = logging.getLogger(__name__)
 class WarehouseTestCase(VMITestCase):
     """Warehouse 测试用例类"""
 
+    entity_definition = "warehouse/warehouse.json"
+
     @classmethod
     def _init_sdk(cls):
         cls.warehouse_sdk = WarehouseSDK(cls.work_session)
@@ -196,11 +198,8 @@ class WarehouseTestCase(VMITestCase):
         self.assertIsInstance(
             new_warehouse["createTime"], (int, type(None)), "创建时间应为整数或None"
         )
+        self.assert_entity_matches_definition(new_warehouse, context="创建仓库返回")
 
-        self.assertIn("namespace", new_warehouse, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_warehouse["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 记录创建的仓库ID以便清理
         if new_warehouse and "id" in new_warehouse:
@@ -219,9 +218,8 @@ class WarehouseTestCase(VMITestCase):
         # 查询仓库
         queried_warehouse = self.warehouse_sdk.query_warehouse(new_warehouse["id"])
         self.assertIsNotNone(queried_warehouse, "查询仓库失败")
-        self.assertEqual(queried_warehouse["id"], new_warehouse["id"], "仓库ID不匹配")
-        self.assertEqual(
-            queried_warehouse["name"], new_warehouse["name"], "仓库名不匹配"
+        self.assert_entity_round_trip(
+            new_warehouse, queried_warehouse, context="查询仓库返回"
         )
 
     def test_update_warehouse(self):
@@ -241,9 +239,12 @@ class WarehouseTestCase(VMITestCase):
         updated_warehouse = self.warehouse_sdk.update_warehouse(
             new_warehouse["id"], update_param
         )
-        self.assertIsNotNone(updated_warehouse, "更新仓库失败")
-        self.assertEqual(
-            updated_warehouse["description"], "更新后的描述", "描述更新失败"
+        self.assert_update_round_trip(
+            new_warehouse["id"],
+            updated_warehouse,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_warehouse,
+            context="更新仓库返回",
         )
 
     def test_delete_warehouse(self):
@@ -381,7 +382,7 @@ class WarehouseTestCase(VMITestCase):
             logger.info(f"仓库编码自动生成: {new_warehouse['code']}")
 
     def test_auto_generated_fields(self):
-        """测试系统自动生成字段（id、code、creater、createTime、namespace）"""
+        """测试系统自动生成字段（id、code、creater、createTime）"""
         warehouse_param = self.mock_warehouse_param()
         new_warehouse = self.warehouse_sdk.create_warehouse(warehouse_param)
         self.assertIsNotNone(new_warehouse, "创建仓库失败")
@@ -390,11 +391,11 @@ class WarehouseTestCase(VMITestCase):
             self._record_warehouse_for_cleanup(new_warehouse["id"])
 
         # 验证所有系统自动生成字段
-        auto_fields = ["id", "code", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "code", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, new_warehouse, f"缺少系统自动生成字段: {field}")
             # 字段值不应该为None（除非系统允许某些字段为空）
-            if field in ["code", "namespace"]:
+            if field in ["code"]:
                 # 字符串字段可能为空字符串
                 if new_warehouse[field] is not None:
                     self.assertIsInstance(
@@ -406,9 +407,10 @@ class WarehouseTestCase(VMITestCase):
                     self.assertIsInstance(
                         new_warehouse[field], int, f"{field} 应为整数"
                     )
+        self.assert_entity_matches_definition(new_warehouse, context="自动字段仓库返回")
 
         logger.info(
-            f"系统自动生成字段验证通过: id={new_warehouse['id']}, code={new_warehouse['code']}, creater={new_warehouse['creater']}, createTime={new_warehouse['createTime']}, namespace={new_warehouse['namespace']}"
+            f"系统自动生成字段验证通过: id={new_warehouse['id']}, code={new_warehouse['code']}, creater={new_warehouse['creater']}, createTime={new_warehouse['createTime']}"
         )
 
     def test_modify_time_auto_update(self):
@@ -435,34 +437,24 @@ class WarehouseTestCase(VMITestCase):
         updated_warehouse = self.warehouse_sdk.update_warehouse(
             new_warehouse["id"], update_param
         )
-        self.assertIsNotNone(updated_warehouse, "更新仓库失败")
+        queried_warehouse = self.assert_update_round_trip(
+            new_warehouse["id"],
+            updated_warehouse,
+            expected_updates={"description": "更新描述以触发修改时间更新"},
+            original_entity=new_warehouse,
+            context="修改时间仓库更新返回",
+        )
 
         # 验证修改时间已更新
-        updated_modify_time = updated_warehouse.get("modifyTime")
+        updated_modify_time = queried_warehouse.get("modifyTime")
         logger.info(f"更新后修改时间: {updated_modify_time}")
 
         # 修改时间应该已更新（除非系统不自动更新）
-        if initial_modify_time is not None and updated_modify_time is not None:
-            # 检查时间戳是否已更新
-            if updated_modify_time > initial_modify_time:
-                logger.info(
-                    f"修改时间已自动更新: {initial_modify_time} -> {updated_modify_time}"
-                )
-                # 验证时间戳确实增加了
-                self.assertGreater(
-                    updated_modify_time, initial_modify_time, "修改时间应该自动更新"
-                )
-            else:
-                # 时间戳没有变化，这可能是因为系统不自动更新modifyTime字段
-                # 或者时间戳精度不够（例如使用秒级时间戳）
-                logger.warning(
-                    f"修改时间未自动更新: {initial_modify_time} == {updated_modify_time}"
-                )
-                # 不使测试失败，因为系统可能不自动更新此字段
-                # 记录警告但不抛出异常
-        else:
-            # 如果系统不自动更新modifyTime字段，这也是可接受的
-            logger.info("系统可能不自动更新modifyTime字段")
+        self.assertIsNotNone(updated_modify_time, "更新后缺少 modifyTime 字段")
+        if initial_modify_time is not None:
+            self.assertGreaterEqual(
+                updated_modify_time, initial_modify_time, "修改时间应该自动更新"
+            )
 
 
 if __name__ == "__main__":

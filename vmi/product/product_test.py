@@ -72,6 +72,7 @@ class ProductTestCase(VMITestCase):
     """Product 测试用例类"""
 
     namespace = ""
+    entity_definition = "product/product.json"
 
     @classmethod
     def setUpClass(cls):
@@ -216,11 +217,8 @@ class ProductTestCase(VMITestCase):
         self.assertIsInstance(
             new_product["createTime"], (int, type(None)), "创建时间应为整数或None"
         )
+        self.assert_entity_matches_definition(new_product, context="创建产品返回")
 
-        self.assertIn("namespace", new_product, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_product["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 记录创建的产品ID以便清理
         if new_product and "id" in new_product:
@@ -239,8 +237,7 @@ class ProductTestCase(VMITestCase):
         # 查询产品
         queried_product = self.product_sdk.query_product(new_product["id"])
         self.assertIsNotNone(queried_product, "查询产品失败")
-        self.assertEqual(queried_product["id"], new_product["id"], "产品ID不匹配")
-        self.assertEqual(queried_product["name"], new_product["name"], "产品名不匹配")
+        self.assert_entity_round_trip(new_product, queried_product, context="查询产品返回")
 
     def test_update_product(self):
         """测试更新产品"""
@@ -259,8 +256,13 @@ class ProductTestCase(VMITestCase):
         updated_product = self.product_sdk.update_product(
             new_product["id"], update_param
         )
-        self.assertIsNotNone(updated_product, "更新产品失败")
-        self.assertEqual(updated_product["description"], "更新后的描述", "描述更新失败")
+        self.assert_update_round_trip(
+            new_product["id"],
+            updated_product,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_product,
+            context="更新产品返回",
+        )
 
     def test_delete_product(self):
         """测试删除产品
@@ -403,7 +405,7 @@ class ProductTestCase(VMITestCase):
             self._record_product_for_cleanup(new_product["id"])
 
         # 验证所有系统自动生成字段
-        auto_generated_fields = ["id", "creater", "createTime", "namespace"]
+        auto_generated_fields = ["id", "creater", "createTime"]
         for field in auto_generated_fields:
             self.assertIn(field, new_product, f"缺少系统自动生成字段: {field}")
 
@@ -420,10 +422,8 @@ class ProductTestCase(VMITestCase):
         )
         if new_product["createTime"] is not None:
             self.assertGreater(new_product["createTime"], 0, "创建时间应为正数")
+        self.assert_entity_matches_definition(new_product, context="自动字段产品返回")
 
-        self.assertIsInstance(
-            new_product["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
     def test_modify_time_auto_update(self):
         """测试修改时间自动更新"""
@@ -446,10 +446,16 @@ class ProductTestCase(VMITestCase):
         updated_product = self.product_sdk.update_product(
             new_product["id"], update_param
         )
-        self.assertIsNotNone(updated_product, "更新产品失败")
+        queried_product = self.assert_update_round_trip(
+            new_product["id"],
+            updated_product,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_product,
+            context="修改时间产品更新返回",
+        )
 
         # 验证修改时间已更新
-        updated_modify_time = updated_product.get("modifyTime")
+        updated_modify_time = queried_product.get("modifyTime")
         self.assertIsNotNone(updated_modify_time, "更新后缺少修改时间字段")
 
         # 验证修改时间比创建时间晚（如果两者都存在）
@@ -460,7 +466,7 @@ class ProductTestCase(VMITestCase):
 
         # 验证创建时间未改变
         self.assertEqual(
-            updated_product.get("createTime"), initial_create_time, "创建时间不应被修改"
+            queried_product.get("createTime"), initial_create_time, "创建时间不应被修改"
         )
 
         # 如果初始有修改时间，验证已更新

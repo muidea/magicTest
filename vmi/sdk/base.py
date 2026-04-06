@@ -140,17 +140,18 @@ class VMISDKBase:
             logger.error("过滤%s异常: %s", self.entity_path, str(e))
             return None
 
-    def query(self, entity_id: Union[str, int]) -> Optional[Dict[str, Any]]:
+    def query(self, entity_id: Union[str, int], params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """查询实体
 
         Args:
             entity_id: 实体ID
+            params: 可选查询参数
 
         Returns:
             实体信息或 None（失败时）
         """
         try:
-            result = self.entity.query(entity_id)
+            result = self.entity.query(entity_id, params)
             if result is None:
                 logger.debug("查询%s返回None, ID: %s", self.entity_path, entity_id)
             return result

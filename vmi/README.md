@@ -22,7 +22,7 @@ source ../venv/bin/activate
 python3 -m unittest discover -s . -p '*_test.py' -v
 ```
 
-远端环境回归时，建议按实际目标域名显式关闭代理，例如：
+访问 `remote.vpc` 时要求临时禁用代理；本地 `*.local.vpc` 回归通常也建议按实际目标域名显式关闭代理，例如：
 
 ```bash
 source ../venv/bin/activate
@@ -90,8 +90,9 @@ python3 -m unittest discover -s . -p '*_test.py' -v
     "workers_per_tenant": 4,
     "iterations_per_worker": 12,
     "write_every": 4,
-    "hotspot_read_rounds": 2,
-    "hotspot_query_rounds": 2
+    "hotspot_read_rounds": 1,
+    "hotspot_query_rounds": 1,
+    "hotspot_prewrite_query": false
   },
   "aging": {
     "duration_hours": 0.5,
@@ -105,7 +106,7 @@ python3 -m unittest discover -s . -p '*_test.py' -v
 }
 ```
 
-如果当前工作区已经切到其他环境，回归前先把 `test_config.json` 调整到目标环境，再同步调整 `NO_PROXY`。
+如果当前工作区已经切到其他环境，回归前先把 `test_config.json` 调整到目标环境，并按目标域名同步调整 `NO_PROXY`。访问 `*.remote.vpc` 时默认应禁用代理，避免请求被错误转发到本地代理。
 
 多租户是否启用由 `tenant_targets` 决定。只要列表非空，系统就会：
 - 保留默认租户 `default_tenant`
@@ -135,6 +136,9 @@ python3 -m unittest warehouse.shelf_test order.order_test -v
 ```bash
 python3 run_tests.py --concurrent
 python3 run_tests.py --hotspot
+python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --report-file hotspot-report.json
+python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --report-file hotspot-report.json
+python3 concurrent_test_v2.py --hotspot --ignore-env-proxy --server-url https://autotest.remote.vpc --tenant-targets t001,t002,t003,t004,t005 --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --prometheus-url https://apm.remote.vpc/prometheus/ --remote-user fedquery --remote-host 192.168.19.231 --deployment-mode docker --report-file hotspot-report.json
 python3 run_tests.py --scenario
 python3 concurrent_test_v2.py
 ```

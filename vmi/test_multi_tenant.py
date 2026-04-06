@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import unittest
+from argparse import Namespace
 from unittest.mock import Mock, patch
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ def _build_config(
         "environment": "test",
         "default_tenant": "autotest",
         "request_namespace": "",
+        "request_application": "",
         "default_server_url": default_server_url,
         "tenant_targets": tenant_targets or [],
         "tenant_url_template": tenant_url_template,
@@ -209,6 +211,28 @@ class TestMultiTenantConfig(unittest.TestCase):
 
         logger.info("并发租户配置生成测试通过")
 
+    def test_concurrent_tenant_config_generation_accepts_tenant_id_placeholder(self):
+        """测试租户地址模板兼容 {tenant_id} 占位符。"""
+        self._write_config(
+            _build_config(
+                tenant_targets=["t001", "t002"],
+                tenant_url_template="https://{tenant_id}.local.vpc",
+                default_server_url="https://autotest.local.vpc",
+            )
+        )
+
+        from tenant_config_helper import get_concurrent_tenant_configs
+
+        tenant_configs = get_concurrent_tenant_configs()
+        self.assertEqual(
+            tenant_configs["t001"]["server_url"], "https://t001.local.vpc"
+        )
+        self.assertEqual(
+            tenant_configs["t002"]["server_url"], "https://t002.local.vpc"
+        )
+
+        logger.info("租户模板 tenant_id 占位符兼容测试通过")
+
     def test_disabled_config_loading(self):
         """测试未配置目标租户时多租户关闭"""
         self._write_config(_build_config(tenant_targets=[], mode="single_tenant"))
@@ -224,6 +248,78 @@ class TestMultiTenantConfig(unittest.TestCase):
         self.assertIsNone(get_tenant_config("t001"))
 
         logger.info("禁用多租户配置加载测试通过")
+
+    def test_runtime_env_overrides(self):
+        """测试运行时环境变量覆盖配置"""
+        self._write_config(_build_config(tenant_targets=["t001"]))
+
+        with patch.dict(
+            os.environ,
+            {
+                "MAGICTEST_SERVER_URL": "https://autotest.remote.vpc",
+                "MAGICTEST_TENANT_TARGETS": "t101,t102",
+                "MAGICTEST_WORKERS_PER_TENANT": "9",
+                "MAGICTEST_HOTSPOT_MEASURE_LOOP_ONLY": "false",
+                "MAGICTEST_HOTSPOT_PREWRITE_QUERY": "true",
+                "MAGICTEST_REQUEST_APPLICATION": "perf-run-001",
+                "MAGICTEST_REMOTE_HOST": "192.168.19.231",
+                "MAGICTEST_REMOTE_USER": "fedquery",
+                "MAGICTEST_PROMETHEUS_URL": "https://apm.remote.vpc/prometheus/",
+            },
+            clear=False,
+        ):
+            _clear_config_cache()
+
+            from config_helper import (get_concurrent_config,
+                                       get_observability_config,
+                                       get_request_application,
+                                       get_server_url, get_target_config,
+                                       get_tenant_targets)
+
+            self.assertEqual(get_server_url(), "https://autotest.remote.vpc")
+            self.assertEqual(get_tenant_targets(), ["t101", "t102"])
+            self.assertEqual(get_concurrent_config()["workers_per_tenant"], 9)
+            self.assertFalse(get_concurrent_config()["hotspot_measure_loop_only"])
+            self.assertTrue(get_concurrent_config()["hotspot_prewrite_query"])
+            self.assertEqual(get_request_application(), "perf-run-001")
+            self.assertEqual(get_target_config()["remote_host"], "192.168.19.231")
+            self.assertEqual(get_target_config()["remote_user"], "fedquery")
+            self.assertEqual(
+                get_observability_config()["prometheus_url"],
+                "https://apm.remote.vpc/prometheus/",
+            )
+
+        logger.info("运行时环境变量覆盖测试通过")
+
+    def test_single_tenant_cli_override_disables_multi_tenant_aging(self):
+        """测试单租户 CLI 开关可覆盖默认多租户老化配置。"""
+        self._write_config(_build_config(tenant_targets=["t001", "t002"]))
+
+        from aging_test_simple import AgingTestConfig, apply_cli_overrides
+
+        config = AgingTestConfig()
+        self.assertTrue(config.multi_tenant_business_flow_enabled)
+        self.assertEqual(config.target_tenants, ["t001", "t002"])
+
+        overridden = apply_cli_overrides(
+            config,
+            Namespace(
+                duration=None,
+                threads=None,
+                interval=None,
+                max_data=None,
+                degradation_threshold=None,
+                report_interval=None,
+                multi_tenant_business_flow=False,
+                single_tenant=True,
+                target_tenants=None,
+            ),
+        )
+
+        self.assertFalse(overridden.multi_tenant_business_flow_enabled)
+        self.assertEqual(overridden.target_tenants, [])
+
+        logger.info("单租户 CLI 覆盖多租户老化配置测试通过")
 
 
 class TestMultiTenantIntegration(unittest.TestCase):

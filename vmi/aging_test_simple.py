@@ -1745,6 +1745,37 @@ class AgingTestRunner:
         self._stop_workers()
 
 
+def apply_cli_overrides(config: AgingTestConfig, args) -> AgingTestConfig:
+    """将命令行参数覆盖到老化测试配置。"""
+    if args.duration is not None:
+        config.duration_hours = args.duration
+    if args.threads is not None:
+        config.concurrent_threads = args.threads
+    if args.interval is not None:
+        config.operation_interval = args.interval
+    if args.max_data is not None:
+        config.max_data_count = args.max_data
+    if args.degradation_threshold is not None:
+        config.performance_degradation_threshold = args.degradation_threshold
+    if args.report_interval is not None:
+        config.report_interval_minutes = args.report_interval
+
+    if getattr(args, "single_tenant", False):
+        config.multi_tenant_business_flow_enabled = False
+        config.target_tenants = []
+    elif getattr(args, "multi_tenant_business_flow", False):
+        config.multi_tenant_business_flow_enabled = True
+
+    if getattr(args, "target_tenants", None):
+        config.target_tenants = [
+            tenant_id.strip()
+            for tenant_id in args.target_tenants.split(",")
+            if tenant_id.strip()
+        ]
+
+    return config
+
+
 def main():
     """主函数"""
     import argparse
@@ -1783,6 +1814,11 @@ def main():
         help="启用多租户全业务链路老化模式",
     )
     parser.add_argument(
+        "--single-tenant",
+        action="store_true",
+        help="强制使用单租户老化模式，忽略配置文件中的多租户老化开关和目标租户",
+    )
+    parser.add_argument(
         "--target-tenants",
         type=str,
         default=None,
@@ -1791,27 +1827,7 @@ def main():
 
     args = parser.parse_args()
 
-    config = AgingTestConfig()
-    if args.duration is not None:
-        config.duration_hours = args.duration
-    if args.threads is not None:
-        config.concurrent_threads = args.threads
-    if args.interval is not None:
-        config.operation_interval = args.interval
-    if args.max_data is not None:
-        config.max_data_count = args.max_data
-    if args.degradation_threshold is not None:
-        config.performance_degradation_threshold = args.degradation_threshold
-    if args.report_interval is not None:
-        config.report_interval_minutes = args.report_interval
-    if args.multi_tenant_business_flow:
-        config.multi_tenant_business_flow_enabled = True
-    if args.target_tenants:
-        config.target_tenants = [
-            tenant_id.strip()
-            for tenant_id in args.target_tenants.split(",")
-            if tenant_id.strip()
-        ]
+    config = apply_cli_overrides(AgingTestConfig(), args)
 
     runner = AgingTestRunner(config)
     success = runner.run()

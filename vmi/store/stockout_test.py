@@ -70,6 +70,7 @@ class StockoutTestCase(VMITestCase):
     """Stockout 测试用例类"""
 
     namespace = ""
+    entity_definition = "store/stockout.json"
 
     @classmethod
     def setUpClass(cls):
@@ -286,11 +287,8 @@ class StockoutTestCase(VMITestCase):
         self.assertIsInstance(
             new_stockout["createTime"], (int, type(None)), "创建时间应为整数或None"
         )
+        self.assert_entity_matches_definition(new_stockout, context="创建出库单返回")
 
-        self.assertIn("namespace", new_stockout, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_stockout["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 记录创建的出库单ID以便清理
         if new_stockout and "id" in new_stockout:
@@ -309,7 +307,7 @@ class StockoutTestCase(VMITestCase):
         # 查询出库单
         queried_stockout = self.stockout_sdk.query_stockout(new_stockout["id"])
         self.assertIsNotNone(queried_stockout, "查询出库单失败")
-        self.assertEqual(queried_stockout["id"], new_stockout["id"], "出库单ID不匹配")
+        self.assert_entity_round_trip(new_stockout, queried_stockout, context="查询出库单返回")
 
     def test_update_stockout(self):
         """测试更新出库单"""
@@ -332,9 +330,12 @@ class StockoutTestCase(VMITestCase):
             updated_stockout = self.stockout_sdk.update_stockout(
                 new_stockout["id"], update_param
             )
-        self.assertIsNotNone(updated_stockout, "更新出库单失败")
-        self.assertEqual(
-            updated_stockout["description"], "更新后的描述", "描述更新失败"
+        self.assert_update_round_trip(
+            new_stockout["id"],
+            updated_stockout,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_stockout,
+            context="更新出库单返回",
         )
 
     def test_delete_stockout(self):
@@ -417,7 +418,7 @@ class StockoutTestCase(VMITestCase):
             self._record_entity_for_cleanup("stockout", new_stockout["id"])
 
         # 验证所有系统自动生成字段
-        auto_generated_fields = ["id", "sn", "creater", "createTime", "namespace"]
+        auto_generated_fields = ["id", "sn", "creater", "createTime"]
         for field in auto_generated_fields:
             self.assertIn(field, new_stockout, f"缺少系统自动生成字段: {field}")
 
@@ -440,10 +441,8 @@ class StockoutTestCase(VMITestCase):
         )
         if new_stockout["createTime"] is not None:
             self.assertGreater(new_stockout["createTime"], 0, "创建时间应为正数")
+        self.assert_entity_matches_definition(new_stockout, context="自动字段出库单返回")
 
-        self.assertIsInstance(
-            new_stockout["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
     def test_modify_time_auto_update(self):
         """测试修改时间自动更新"""
@@ -470,35 +469,26 @@ class StockoutTestCase(VMITestCase):
             updated_stockout = self.stockout_sdk.update_stockout(
                 new_stockout["id"], update_param
             )
-        self.assertIsNotNone(updated_stockout, "更新出库单失败")
-
-        # 验证修改时间 - 系统可能不返回此字段
-        updated_modify_time = updated_stockout.get("modifyTime")
-        if updated_modify_time is not None:
-            # 如果系统返回修改时间，验证其内容
-            # 验证修改时间比创建时间晚（如果两者都存在）
-            if initial_create_time and updated_modify_time:
-                self.assertGreaterEqual(
-                    updated_modify_time,
-                    initial_create_time,
-                    "修改时间应晚于或等于创建时间",
-                )
-
-            # 如果初始有修改时间，验证已更新
-            if initial_modify_time and updated_modify_time:
-                self.assertGreaterEqual(
-                    updated_modify_time, initial_modify_time, "修改时间应已更新"
-                )
-        else:
-            # 系统不返回修改时间字段，记录警告但不视为失败
-            logger.warning("更新出库单后未返回 modifyTime 字段，系统可能不返回此字段")
-
-        # 验证创建时间未改变
-        self.assertEqual(
-            updated_stockout.get("createTime"),
-            initial_create_time,
-            "创建时间不应被修改",
+        queried_stockout = self.assert_update_round_trip(
+            new_stockout["id"],
+            updated_stockout,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_stockout,
+            context="修改时间出库单更新返回",
         )
+
+        updated_modify_time = queried_stockout.get("modifyTime")
+        self.assertIsNotNone(updated_modify_time, "更新出库单后缺少 modifyTime 字段")
+        if initial_create_time and updated_modify_time:
+            self.assertGreaterEqual(
+                updated_modify_time,
+                initial_create_time,
+                "修改时间应晚于或等于创建时间",
+            )
+        if initial_modify_time and updated_modify_time:
+            self.assertGreaterEqual(
+                updated_modify_time, initial_modify_time, "修改时间应已更新"
+            )
 
 
 if __name__ == "__main__":

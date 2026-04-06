@@ -74,6 +74,7 @@ class CreditTestCase(VMITestCase):
     """Credit 测试用例类"""
 
     namespace = ""
+    entity_definition = "credit/credit.json"
 
     @classmethod
     def setUpClass(cls):
@@ -205,7 +206,7 @@ class CreditTestCase(VMITestCase):
         self.assertIsNotNone(new_credit, "创建积分信息失败")
 
         # 验证积分信息完整性 - 根据实际服务器响应调整
-        # 服务器返回的字段：createTime, creater, credit, id, level, memo, namespace, sn, type
+        # 服务器返回的字段：createTime, creater, credit, id, level, memo, sn, type
         required_fields = [
             "id",
             "credit",
@@ -214,7 +215,6 @@ class CreditTestCase(VMITestCase):
             "sn",
             "creater",
             "createTime",
-            "namespace",
         ]
         for field in required_fields:
             self.assertIn(field, new_credit, f"缺少字段: {field}")
@@ -234,10 +234,6 @@ class CreditTestCase(VMITestCase):
             new_credit["createTime"], (int, type(None)), "创建时间应为整数或None"
         )
 
-        self.assertIn("namespace", new_credit, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_credit["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 验证业务字段
         self.assertEqual(new_credit["credit"], 100, "积分值不匹配")
@@ -380,7 +376,7 @@ class CreditTestCase(VMITestCase):
             self._record_credit_for_cleanup(new_credit["id"])
 
         # 验证所有系统自动生成字段
-        auto_generated_fields = ["id", "sn", "creater", "createTime", "namespace"]
+        auto_generated_fields = ["id", "sn", "creater", "createTime"]
         for field in auto_generated_fields:
             self.assertIn(field, new_credit, f"缺少系统自动生成字段: {field}")
 
@@ -404,9 +400,6 @@ class CreditTestCase(VMITestCase):
         if new_credit["createTime"] is not None:
             self.assertGreater(new_credit["createTime"], 0, "创建时间应为正数")
 
-        self.assertIsInstance(
-            new_credit["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
     def test_credit_type_level_validation(self):
         """测试积分类型和等级字段验证"""

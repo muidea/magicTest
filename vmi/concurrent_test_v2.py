@@ -4,19 +4,24 @@
 基于当前框架重新实现并发执行测试代码
 """
 
+import argparse
 import concurrent.futures
 import json
 import logging
+import os
 import random
 import threading
 import time
 import unittest
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import urlparse
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from urllib.parse import urljoin, urlparse
+
+import requests
 
 # 配置日志
 logging.basicConfig(
@@ -53,6 +58,321 @@ class ConcurrentTestResult:
     def __post_init__(self):
         if self.timestamp is None:
             self.timestamp = datetime.now().isoformat()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+RUNTIME_ENV_ARG_MAP = {
+    "server_url": "MAGICTEST_SERVER_URL",
+    "tenant_targets": "MAGICTEST_TENANT_TARGETS",
+    "tenant_url_template": "MAGICTEST_TENANT_URL_TEMPLATE",
+    "default_tenant": "MAGICTEST_DEFAULT_TENANT",
+    "username": "MAGICTEST_USERNAME",
+    "password": "MAGICTEST_PASSWORD",
+    "namespace": "MAGICTEST_NAMESPACE",
+    "request_application": "MAGICTEST_REQUEST_APPLICATION",
+    "max_workers": "MAGICTEST_MAX_WORKERS",
+    "timeout": "MAGICTEST_TIMEOUT",
+    "workers_per_tenant": "MAGICTEST_WORKERS_PER_TENANT",
+    "iterations_per_worker": "MAGICTEST_ITERATIONS_PER_WORKER",
+    "write_every": "MAGICTEST_WRITE_EVERY",
+    "hotspot_read_rounds": "MAGICTEST_HOTSPOT_READ_ROUNDS",
+    "hotspot_query_rounds": "MAGICTEST_HOTSPOT_QUERY_ROUNDS",
+    "hotspot_prewrite_query": "MAGICTEST_HOTSPOT_PREWRITE_QUERY",
+    "hotspot_shared_context_per_tenant": (
+        "MAGICTEST_HOTSPOT_SHARED_CONTEXT_PER_TENANT"
+    ),
+    "hotspot_measure_loop_only": "MAGICTEST_HOTSPOT_MEASURE_LOOP_ONLY",
+    "prometheus_url": "MAGICTEST_PROMETHEUS_URL",
+    "remote_host": "MAGICTEST_REMOTE_HOST",
+    "remote_user": "MAGICTEST_REMOTE_USER",
+    "deployment_mode": "MAGICTEST_DEPLOYMENT_MODE",
+    "request_trust_env": "REQUEST_TRUST_ENV",
+}
+
+
+def _stringify_env_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def apply_runtime_env_overrides(args: argparse.Namespace) -> Dict[str, str]:
+    overrides: Dict[str, str] = {}
+    for arg_name, env_name in RUNTIME_ENV_ARG_MAP.items():
+        value = getattr(args, arg_name, None)
+        if value is None:
+            continue
+        rendered = _stringify_env_value(value)
+        os.environ[env_name] = rendered
+        overrides[env_name] = rendered
+    return overrides
+
+
+def ensure_request_application(args: argparse.Namespace) -> Optional[str]:
+    existing = getattr(args, "request_application", None) or os.getenv(
+        "MAGICTEST_REQUEST_APPLICATION", ""
+    ).strip()
+    if existing:
+        args.request_application = existing
+        return args.request_application
+
+    configured_prometheus_url = getattr(args, "prometheus_url", None)
+    if not configured_prometheus_url:
+        from config_helper import get_observability_config
+
+        configured_prometheus_url = get_observability_config().get("prometheus_url", "")
+
+    if not configured_prometheus_url:
+        return None
+
+    suite_name = "concurrent"
+    if getattr(args, "hotspot", False):
+        suite_name = "hotspot"
+    elif getattr(args, "full_flow", False):
+        suite_name = "fullflow"
+
+    args.request_application = (
+        f"magictest-{suite_name}-{datetime.now().strftime('%Y%m%d%H%M%S')}-"
+        f"{uuid.uuid4().hex[:6]}"
+    )
+    return args.request_application
+
+
+def build_results_report(
+    suite_name: str,
+    results: Sequence[ConcurrentTestResult],
+    metadata: Optional[Dict[str, Any]] = None,
+    prometheus_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    total_requests = sum(result.total_requests for result in results)
+    total_successful = sum(result.successful_requests for result in results)
+    total_failed = sum(result.failed_requests for result in results)
+    total_time = sum(result.total_time for result in results)
+
+    report = {
+        "suite_name": suite_name,
+        "summary": {
+            "total_runs": len(results),
+            "total_requests": total_requests,
+            "total_successful": total_successful,
+            "total_failed": total_failed,
+            "success_rate": (
+                total_successful / total_requests * 100 if total_requests > 0 else 0.0
+            ),
+            "total_time": total_time,
+            "avg_throughput": total_successful / total_time if total_time > 0 else 0.0,
+            "generated_at": datetime.now().isoformat(),
+        },
+        "metadata": metadata or {},
+        "results": [result.to_dict() for result in results],
+        "errors": [error for result in results for error in result.error_details],
+    }
+    if prometheus_summary:
+        report["prometheus_summary"] = prometheus_summary
+    return report
+
+
+def save_results_report(
+    filepath: str,
+    suite_name: str,
+    results: Sequence[ConcurrentTestResult],
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    prometheus_summary = build_prometheus_summary(metadata or {})
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(
+            build_results_report(
+                suite_name=suite_name,
+                results=results,
+                metadata=metadata,
+                prometheus_summary=prometheus_summary,
+            ),
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+    logger.info("压测报告已保存到: %s", filepath)
+
+
+def _prometheus_scalar_value(payload: Dict[str, Any]) -> float:
+    result = payload.get("result", [])
+    if not result:
+        return 0.0
+    return float(result[0].get("value", [0, "0"])[1])
+
+
+def _prometheus_vector_values(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    values: List[Dict[str, Any]] = []
+    for item in payload.get("result", []):
+        values.append(
+            {
+                "metric": item.get("metric", {}),
+                "value": float(item.get("value", [0, "0"])[1]),
+            }
+        )
+    return values
+
+
+def _aggregate_application_values(
+    values: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    totals: Dict[str, float] = defaultdict(float)
+    for item in values:
+        metric = item.get("metric", {})
+        application = str(metric.get("application", "")).strip()
+        if not application:
+            continue
+        totals[application] += float(item.get("value", 0.0))
+
+    ranked = [
+        {"application": application, "value": value}
+        for application, value in totals.items()
+    ]
+    ranked.sort(key=lambda item: item["value"], reverse=True)
+    return ranked
+
+
+def _query_prometheus(prometheus_url: str, query: str) -> Dict[str, Any]:
+    verify_ssl = os.getenv("VERIFY_SSL", "false").lower() != "false"
+    endpoint = urljoin(prometheus_url.rstrip("/") + "/", "api/v1/query")
+    trust_env = os.getenv("REQUEST_TRUST_ENV", "false").lower() != "false"
+    session = requests.Session()
+    session.trust_env = trust_env
+    response = session.get(
+        endpoint,
+        params={"query": query},
+        timeout=30,
+        verify=verify_ssl,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("status") != "success":
+        raise ValueError(f"prometheus query failed: {payload}")
+    return payload.get("data", {})
+
+
+def build_prometheus_summary(metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    observability = metadata.get("observability") or {}
+    prometheus_url = str(observability.get("prometheus_url", "")).strip()
+    request_application = str(metadata.get("request_application", "")).strip()
+    if not prometheus_url or not request_application:
+        return None
+
+    window = str(metadata.get("prometheus_window", "10m"))
+    application_label = json.dumps(request_application)
+    filtered_selector = f'job="magicbase",application={application_label}'
+    summary: Dict[str, Any] = {
+        "source": prometheus_url,
+        "window": window,
+        "application": request_application,
+        "collected_at": datetime.now().isoformat(),
+        "application_label_retained": False,
+        "correlation_mode": "request_application_missing",
+    }
+
+    queries = {
+        "http_requests_total_increase": (
+            f"sum(increase(magicBase_magicbase_http_requests_total"
+            f"{{{filtered_selector}}}[{window}]))"
+        ),
+        "http_write_success_total_increase": (
+            f"sum(increase(magicBase_magicbase_http_transactions_total"
+            f'{{{filtered_selector},kind="write",status="success"}}[{window}]))'
+        ),
+        "http_path_distribution": (
+            f"topk(10, sum by (path) (increase(magicBase_magicbase_http_requests_total"
+            f"{{{filtered_selector}}}[{window}])))"
+        ),
+        "orm_operations_total_increase": (
+            f'sum(increase(magicBase_magicorm_orm_operations_total{{job="magicbase"}}[{window}]))'
+        ),
+        "database_queries_total_increase": (
+            f'sum(increase(magicBase_magicorm_database_queries_total{{job="magicbase"}}[{window}]))'
+        ),
+        "database_executions_total_increase": (
+            f'sum(increase(magicBase_magicorm_database_executions_total{{job="magicbase"}}[{window}]))'
+        ),
+        "http_requests_total_increase_unfiltered": (
+            f'sum(increase(magicBase_magicbase_http_requests_total{{job="magicbase"}}[{window}]))'
+        ),
+        "http_top_applications_unfiltered": (
+            f"topk(10, sum by (application, path) (increase("
+            f"magicBase_magicbase_http_requests_total{{job=\"magicbase\"}}[{window}])))"
+        ),
+    }
+
+    try:
+        summary["http_requests_total_increase"] = _prometheus_scalar_value(
+            _query_prometheus(prometheus_url, queries["http_requests_total_increase"])
+        )
+        summary["http_write_success_total_increase"] = _prometheus_scalar_value(
+            _query_prometheus(
+                prometheus_url, queries["http_write_success_total_increase"]
+            )
+        )
+        summary["http_path_distribution"] = _prometheus_vector_values(
+            _query_prometheus(prometheus_url, queries["http_path_distribution"])
+        )
+        summary["orm_operations_total_increase"] = _prometheus_scalar_value(
+            _query_prometheus(prometheus_url, queries["orm_operations_total_increase"])
+        )
+        summary["database_queries_total_increase"] = _prometheus_scalar_value(
+            _query_prometheus(
+                prometheus_url, queries["database_queries_total_increase"]
+            )
+        )
+        summary["database_executions_total_increase"] = _prometheus_scalar_value(
+            _query_prometheus(
+                prometheus_url, queries["database_executions_total_increase"]
+            )
+        )
+        summary["http_requests_total_increase_unfiltered"] = _prometheus_scalar_value(
+            _query_prometheus(
+                prometheus_url, queries["http_requests_total_increase_unfiltered"]
+            )
+        )
+        if summary["http_requests_total_increase"] > 0.0:
+            summary["application_label_retained"] = True
+            summary["correlation_mode"] = "request_application"
+        else:
+            summary["http_top_applications_unfiltered"] = _prometheus_vector_values(
+                _query_prometheus(
+                    prometheus_url, queries["http_top_applications_unfiltered"]
+                )
+            )
+            if summary["http_top_applications_unfiltered"]:
+                summary["top_application_totals_unfiltered"] = (
+                    _aggregate_application_values(
+                        summary["http_top_applications_unfiltered"]
+                    )
+                )
+                if summary["top_application_totals_unfiltered"]:
+                    primary_application = summary["top_application_totals_unfiltered"][
+                        0
+                    ]
+                    summary["observed_application"] = primary_application[
+                        "application"
+                    ]
+                    total_unfiltered = summary["http_requests_total_increase_unfiltered"]
+                    summary["observed_application_share"] = (
+                        primary_application["value"] / total_unfiltered
+                        if total_unfiltered > 0
+                        else 0.0
+                    )
+                summary["correlation_mode"] = "service_application_override"
+                summary["note"] = (
+                    "magicBase HTTP metrics did not retain the requested "
+                    "request_application label; see unfiltered top applications."
+                )
+            else:
+                summary["correlation_mode"] = "shared_window_only"
+    except Exception as exc:
+        logger.warning("Prometheus 摘要采集失败: %s", exc)
+        summary["error"] = str(exc)
+
+    return summary
 
 
 class HTTPRequestMetricsCollector:
@@ -515,7 +835,15 @@ class ConcurrentTestRunner:
         if result.error_details:
             logger.info(f"\n错误详情 ({len(result.error_details)}个):")
             for i, error in enumerate(result.error_details[:5], 1):
-                logger.info(f"  {i}. 线程 {error['worker_id']}: {error['error']}")
+                scope = []
+                if "tenant_id" in error:
+                    scope.append(f"租户 {error['tenant_id']}")
+                if "worker_id" in error:
+                    scope.append(f"worker {error['worker_id']}")
+                if "iteration" in error:
+                    scope.append(f"轮次 {error['iteration']}")
+                prefix = " ".join(scope) if scope else "未知执行单元"
+                logger.info(f"  {i}. {prefix}: {error['error']}")
             if len(result.error_details) > 5:
                 logger.info(f"  ... 还有 {len(result.error_details) - 5} 个错误")
 
@@ -834,6 +1162,8 @@ class MultiTenantConcurrentRunner:
         self.results_lock = threading.Lock()
         self.results: List[ConcurrentTestResult] = []
         self.session_managers: Dict[str, Any] = {}
+        self.shared_contexts: Dict[str, Dict[str, Any]] = {}
+        self.shared_context_locks: Dict[str, threading.Lock] = {}
         self._http_request_observer = None
 
     def _get_session_manager(self, session_key: str, tenant_id: str):
@@ -925,6 +1255,80 @@ class MultiTenantConcurrentRunner:
 
         self.session_managers.clear()
 
+    def _cleanup_shared_contexts(self):
+        """清理租户级共享上下文。"""
+        for tenant_id, context in list(self.shared_contexts.items()):
+            cleanup = context.get("cleanup")
+            if not callable(cleanup):
+                continue
+
+            try:
+                cleanup()
+                logger.info("租户 %s: 共享热点资源清理完成", tenant_id)
+            except Exception as exc:
+                logger.error("租户 %s: 共享热点资源清理失败 - %s", tenant_id, exc)
+
+        self.shared_contexts.clear()
+        self.shared_context_locks.clear()
+
+    def _print_test_summary(self, result: ConcurrentTestResult):
+        """打印多租户压测摘要。"""
+        logger.info(f"\n{'='*60}")
+        logger.info(f"并发测试摘要: {result.test_name}")
+        logger.info(f"{'='*60}")
+        logger.info(f"总请求数: {result.total_requests}")
+        logger.info(f"成功: {result.successful_requests}")
+        logger.info(f"失败: {result.failed_requests}")
+        logger.info(
+            f"成功率: {result.successful_requests/result.total_requests*100:.1f}%"
+            if result.total_requests > 0
+            else "成功率: N/A"
+        )
+        logger.info(f"总时间: {result.total_time:.2f}秒")
+        logger.info(f"平均响应时间: {result.avg_response_time:.3f}秒")
+        logger.info(f"最小响应时间: {result.min_response_time:.3f}秒")
+        logger.info(f"最大响应时间: {result.max_response_time:.3f}秒")
+        logger.info(f"吞吐量: {result.throughput:.2f} 请求/秒")
+        if result.http_requests > 0:
+            logger.info(f"HTTP请求数: {result.http_requests}")
+            logger.info(f"HTTP平均响应时间: {result.http_avg_response_time:.3f}秒")
+            logger.info(f"HTTP QPS: {result.http_qps:.2f}")
+            logger.info(f"读QPS: {result.read_qps:.2f}")
+            logger.info(f"写TPS: {result.write_tps:.2f}")
+
+        if result.error_details:
+            logger.info(f"\n错误详情 ({len(result.error_details)}个):")
+            for i, error in enumerate(result.error_details[:5], 1):
+                scope = []
+                if "tenant_id" in error:
+                    scope.append(f"租户 {error['tenant_id']}")
+                if "worker_id" in error:
+                    scope.append(f"worker {error['worker_id']}")
+                if "iteration" in error:
+                    scope.append(f"轮次 {error['iteration']}")
+                prefix = " ".join(scope) if scope else "未知执行单元"
+                logger.info(f"  {i}. {prefix}: {error['error']}")
+            if len(result.error_details) > 5:
+                logger.info(f"  ... 还有 {len(result.error_details) - 5} 个错误")
+
+    def get_or_create_shared_context(
+        self,
+        tenant_id: str,
+        creator: Callable[[], Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """按租户延迟初始化共享上下文。"""
+        if tenant_id in self.shared_contexts:
+            return self.shared_contexts[tenant_id]
+
+        lock = self.shared_context_locks.setdefault(tenant_id, threading.Lock())
+        with lock:
+            if tenant_id in self.shared_contexts:
+                return self.shared_contexts[tenant_id]
+
+            context = creator()
+            self.shared_contexts[tenant_id] = context
+            return context
+
     def run_multi_tenant_test(
         self,
         test_func: Callable,
@@ -1015,6 +1419,7 @@ class MultiTenantConcurrentRunner:
             **http_metrics.snapshot(total_time),
         )
         self.results.append(result)
+        self._print_test_summary(result)
         return result
 
     def run_multi_tenant_worker_loop_test(
@@ -1023,6 +1428,8 @@ class MultiTenantConcurrentRunner:
         test_name: str,
         workers_per_tenant: int,
         iterations_per_worker: int,
+        prepare_func: Optional[Callable] = None,
+        measure_loop_only: bool = True,
     ) -> ConcurrentTestResult:
         """按租户 x worker 并发执行热点循环压测。"""
         if not self.tenant_configs:
@@ -1043,15 +1450,38 @@ class MultiTenantConcurrentRunner:
         response_times = []
         error_details = []
         total_requests = len(tasks) * iterations_per_worker
+        ready_workers = 0
+        ready_condition = threading.Condition()
+        start_event = threading.Event()
+        measurement_end: Optional[float] = None
+
+        def mark_ready():
+            nonlocal ready_workers
+            with ready_condition:
+                ready_workers += 1
+                ready_condition.notify_all()
 
         def worker(tenant_id: str, worker_id: int):
             nonlocal successful_requests, failed_requests
             session_key = f"{tenant_id}#{worker_id}"
+            setup_ok = False
 
             try:
                 session_mgr = self._get_session_manager(session_key, tenant_id)
                 if not session_mgr:
                     raise RuntimeError("无法获取租户会话")
+
+                if prepare_func is not None:
+                    prepare_func(
+                        tenant_id=tenant_id,
+                        worker_id=worker_id,
+                        session_manager=session_mgr,
+                    )
+
+                setup_ok = True
+                mark_ready()
+                if measure_loop_only and not start_event.wait(timeout=self.timeout):
+                    raise TimeoutError("等待统一起跑超时")
 
                 for iteration in range(iterations_per_worker):
                     iteration_start = time.time()
@@ -1088,6 +1518,8 @@ class MultiTenantConcurrentRunner:
                             exc,
                         )
             except Exception as exc:
+                if not setup_ok:
+                    mark_ready()
                 with self.results_lock:
                     for iteration in range(iterations_per_worker):
                         failed_requests += 1
@@ -1120,14 +1552,27 @@ class MultiTenantConcurrentRunner:
                     executor.submit(worker, tenant_id, worker_id)
                     for tenant_id, worker_id in tasks
                 ]
+                if measure_loop_only:
+                    setup_deadline = time.time() + self.timeout
+                    with ready_condition:
+                        while ready_workers < len(tasks):
+                            remaining = setup_deadline - time.time()
+                            if remaining <= 0:
+                                break
+                            ready_condition.wait(timeout=min(1.0, remaining))
+                    start_time = time.time()
+                    start_event.set()
                 concurrent.futures.wait(futures, timeout=self.timeout)
                 for future in futures:
                     if not future.done():
                         future.cancel()
+                measurement_end = time.time()
         finally:
+            self._cleanup_shared_contexts()
             self._cleanup_session_managers()
 
-        total_time = time.time() - start_time
+        end_time = measurement_end or time.time()
+        total_time = end_time - start_time
         if response_times:
             avg_response_time = sum(response_times) / len(response_times)
             min_response_time = min(response_times)
@@ -1150,6 +1595,7 @@ class MultiTenantConcurrentRunner:
             **http_metrics.snapshot(total_time),
         )
         self.results.append(result)
+        self._print_test_summary(result)
         return result
 
 
@@ -1310,6 +1756,73 @@ class MultiTenantBusinessScenarioFactory:
                     logger.warning("清理 %s(%s) 失败: %s", entity_type, entity_id, exc)
 
     @staticmethod
+    def _get_hotspot_sdks(session_manager) -> Dict[str, Any]:
+        existing_sdks = getattr(session_manager, "_vmi_hotspot_sdks", None)
+        work_session = session_manager.get_session()
+        if existing_sdks is not None:
+            cached_session = getattr(session_manager, "_vmi_hotspot_sdk_session", None)
+            if cached_session is work_session:
+                return existing_sdks
+
+            logger.warning("热点压测检测到会话已重建，重新创建 SDK 缓存")
+
+        from sdk import (GoodsInfoSDK, GoodsSDK, ProductInfoSDK, ProductSDK,
+                         ShelfSDK, StatusSDK, StoreSDK, WarehouseSDK)
+
+        sdks = {
+            "status": StatusSDK(work_session),
+            "warehouse": WarehouseSDK(work_session),
+            "shelf": ShelfSDK(work_session),
+            "store": StoreSDK(work_session),
+            "product": ProductSDK(work_session),
+            "product_info": ProductInfoSDK(work_session),
+            "goods_info": GoodsInfoSDK(work_session),
+            "goods": GoodsSDK(work_session),
+        }
+        session_manager._vmi_hotspot_sdks = sdks
+        session_manager._vmi_hotspot_sdk_session = work_session
+        return sdks
+
+    @staticmethod
+    def _warmup_hotspot_session(
+        tenant_id: str,
+        session_manager,
+        max_attempts: int = 5,
+        retry_delay: float = 0.2,
+    ) -> None:
+        """在测量窗口外预热鉴权和首个轻量读请求，避免首轮请求抖动混入压测结果。"""
+        cas_session = session_manager.get_cas_session()
+        sdks = MultiTenantBusinessScenarioFactory._get_hotspot_sdks(session_manager)
+        last_error = "session warmup not started"
+
+        for attempt in range(1, max_attempts + 1):
+            namespace_ok = cas_session.verify_session_namespace() if cas_session else False
+            statuses = (
+                sdks["status"].filter_status({"page": 1, "size": 20})
+                if namespace_ok
+                else None
+            )
+            if namespace_ok and statuses is not None:
+                return
+
+            if not namespace_ok:
+                last_error = "namespace verify failed"
+            else:
+                last_error = "status warmup failed"
+
+            if attempt < max_attempts:
+                logger.warning(
+                    "租户 %s: 会话预热失败，准备重试 attempt=%s/%s reason=%s",
+                    tenant_id,
+                    attempt,
+                    max_attempts,
+                    last_error,
+                )
+                time.sleep(retry_delay)
+
+        raise AssertionError(f"租户 {tenant_id} 会话预热失败: {last_error}")
+
+    @staticmethod
     def _query_entity(sdks: Dict[str, Any], entity_type: str, entity_id: int):
         sdk = sdks[entity_type]
         query_method = getattr(sdk, f"query_{entity_type}")
@@ -1335,7 +1848,13 @@ class MultiTenantBusinessScenarioFactory:
         listed_entities = MultiTenantBusinessScenarioFactory._filter_entities(
             sdks,
             entity_type,
+            {"id": entity_id, "page": 1, "size": 20},
         )
+        if not listed_entities:
+            listed_entities = MultiTenantBusinessScenarioFactory._filter_entities(
+                sdks,
+                entity_type,
+            )
         assert any(
             isinstance(item, dict) and int(item.get("id", 0)) == entity_id
             for item in listed_entities
@@ -2099,29 +2618,15 @@ class MultiTenantBusinessScenarioFactory:
     @staticmethod
     def _prepare_hotspot_context(
         tenant_id: str,
-        worker_id: int,
         session_manager,
     ) -> Dict[str, Any]:
         existing_context = getattr(session_manager, "_vmi_hotspot_context", None)
         if existing_context is not None:
             return existing_context
 
-        from sdk import (GoodsInfoSDK, GoodsSDK, ProductInfoSDK, ProductSDK,
-                         ShelfSDK, StatusSDK, StoreSDK, WarehouseSDK)
-
-        work_session = session_manager.get_session()
-        sdks = {
-            "status": StatusSDK(work_session),
-            "warehouse": WarehouseSDK(work_session),
-            "shelf": ShelfSDK(work_session),
-            "store": StoreSDK(work_session),
-            "product": ProductSDK(work_session),
-            "product_info": ProductInfoSDK(work_session),
-            "goods_info": GoodsInfoSDK(work_session),
-            "goods": GoodsSDK(work_session),
-        }
+        sdks = MultiTenantBusinessScenarioFactory._get_hotspot_sdks(session_manager)
         created_entities: Dict[str, List[int]] = defaultdict(list)
-        suffix = f"{tenant_id}_w{worker_id}_{uuid.uuid4().hex[:8]}"
+        suffix = f"{tenant_id}_{uuid.uuid4().hex[:8]}"
 
         statuses = MultiTenantBusinessScenarioFactory._load_statuses_with_retry(
             sdks,
@@ -2170,7 +2675,7 @@ class MultiTenantBusinessScenarioFactory:
                 "description": f"热点压测产品_{suffix}",
                 "image": [],
                 "expire": 365,
-                "tags": ["stress", tenant_id, f"worker-{worker_id}"],
+                "tags": ["stress", tenant_id, suffix],
                 "status": {"id": status_id},
             }
         )
@@ -2222,16 +2727,20 @@ class MultiTenantBusinessScenarioFactory:
             created_entities, "goods", goods
         )
 
-        def cleanup_hotspot_context():
-            if getattr(session_manager, "_vmi_hotspot_context_cleaned", False):
-                return
+        cleaned = {"done": False}
 
-            session_manager._vmi_hotspot_context_cleaned = True
-            MultiTenantBusinessScenarioFactory._cleanup_entities(sdks, created_entities)
+        def cleanup_hotspot_context():
+            if cleaned["done"]:
+                return
+            cleaned["done"] = True
+            cleanup_sdks = MultiTenantBusinessScenarioFactory._get_hotspot_sdks(
+                session_manager
+            )
+            MultiTenantBusinessScenarioFactory._cleanup_entities(
+                cleanup_sdks, created_entities
+            )
 
         context = {
-            "sdks": sdks,
-            "created_entities": created_entities,
             "status_id": status_id,
             "warehouse_id": warehouse_id,
             "shelf_id": shelf_id,
@@ -2241,11 +2750,42 @@ class MultiTenantBusinessScenarioFactory:
             "goods_info_id": goods_info_id,
             "goods_id": goods_id,
             "suffix": suffix,
+            "hotspot_update_templates": {
+                "warehouse": {
+                    "name": f"STRESS_WH_{suffix}",
+                    "description": f"热点压测仓库_{suffix}",
+                },
+                "store": {
+                    "name": f"STRESS_STORE_{suffix}",
+                    "description": f"热点压测门店_{suffix}",
+                },
+                "product": {
+                    "name": f"STRESS_PRODUCT_{suffix}",
+                    "description": f"热点压测产品_{suffix}",
+                    "image": [],
+                    "expire": 365,
+                    "tags": ["stress", tenant_id, suffix],
+                    "status": {"id": status_id},
+                },
+                "goods": {
+                    "sku": goods["sku"],
+                    "name": goods["name"],
+                    "description": goods["description"],
+                    "parameter": goods["parameter"],
+                    "serviceInfo": goods["serviceInfo"],
+                    "product": {"id": product_info_id},
+                    "count": goods["count"],
+                    "price": goods["price"],
+                    "shelf": [{"id": shelf_id}],
+                    "store": {"id": store_id},
+                    "status": {"id": status_id},
+                },
+            },
+            "cleanup": cleanup_hotspot_context,
         }
         session_manager._vmi_hotspot_context = context
-        session_manager._vmi_hotspot_context_cleaned = False
         session_manager._codex_cleanup_hook = cleanup_hotspot_context
-        logger.info("租户 %s worker %s: 热点压测资源初始化完成", tenant_id, worker_id)
+        logger.info("租户 %s: 共享热点资源初始化完成", tenant_id)
         return context
 
     @staticmethod
@@ -2253,6 +2793,8 @@ class MultiTenantBusinessScenarioFactory:
         write_every: int = 4,
         read_rounds: int = 2,
         query_rounds: int = 2,
+        prewrite_query: bool = False,
+        shared_context_provider: Optional[Callable[[str, Any], Dict[str, Any]]] = None,
     ):
         """创建更偏向 DB 热点读写重叠的多租户压测场景。"""
 
@@ -2262,14 +2804,233 @@ class MultiTenantBusinessScenarioFactory:
             iteration: int,
             session_manager,
         ):
-            context = MultiTenantBusinessScenarioFactory._prepare_hotspot_context(
-                tenant_id=tenant_id,
-                worker_id=worker_id,
-                session_manager=session_manager,
-            )
-            sdks = context["sdks"]
+            if shared_context_provider is None:
+                context = MultiTenantBusinessScenarioFactory._prepare_hotspot_context(
+                    tenant_id=tenant_id,
+                    session_manager=session_manager,
+                )
+            else:
+                context = shared_context_provider(tenant_id, session_manager)
+            sdks = MultiTenantBusinessScenarioFactory._get_hotspot_sdks(session_manager)
 
-            filter_param = {"page": 1, "size": 200}
+            filter_params = {
+                "status": {
+                    "page": 1,
+                    "size": 200,
+                    "_viewType": "lite",
+                    "_needTotal": "false",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "status",
+                            "pkgPath": "/vmi",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "name", "value": ""},
+                            ],
+                        }
+                    ),
+                },
+                "warehouse": {
+                    "page": 1,
+                    "size": 200,
+                    "_viewType": "lite",
+                    "_needTotal": "false",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "warehouse",
+                            "pkgPath": "/vmi",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "name", "value": ""},
+                                {"name": "description", "value": ""},
+                            ],
+                        }
+                    ),
+                },
+                "store": {
+                    "page": 1,
+                    "size": 200,
+                    "_viewType": "lite",
+                    "_needTotal": "false",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "store",
+                            "pkgPath": "/vmi",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "name", "value": ""},
+                                {"name": "description", "value": ""},
+                            ],
+                        }
+                    ),
+                },
+                "product": {
+                    "page": 1,
+                    "size": 200,
+                    "_viewType": "lite",
+                    "_needTotal": "false",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "product",
+                            "pkgPath": "/vmi",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "name", "value": ""},
+                                {"name": "description", "value": ""},
+                                {"name": "image", "value": []},
+                                {"name": "tags", "value": []},
+                            ],
+                        }
+                    ),
+                },
+                "product_info": {
+                    "page": 1,
+                    "size": 200,
+                    "_viewType": "lite",
+                    "_needTotal": "false",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "productInfo",
+                            "pkgPath": "/vmi/product",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "sku", "value": ""},
+                                {"name": "description", "value": ""},
+                                {"name": "image", "value": []},
+                            ],
+                        }
+                    ),
+                },
+                "goods_info": {
+                    "page": 1,
+                    "size": 200,
+                    "_viewType": "lite",
+                    "_needTotal": "false",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "goodsInfo",
+                            "pkgPath": "/vmi/store",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "sku", "value": ""},
+                                {"name": "type", "value": 0},
+                                {"name": "count", "value": 0},
+                                {"name": "price", "value": 0.0},
+                            ],
+                        }
+                    ),
+                },
+                "goods": {
+                    "page": 1,
+                    "size": 200,
+                    "_viewType": "lite",
+                    "_needTotal": "false",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "goods",
+                            "pkgPath": "/vmi/store",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "sku", "value": ""},
+                                {"name": "name", "value": ""},
+                                {"name": "price", "value": 0.0},
+                            ],
+                        }
+                    ),
+                },
+            }
+            query_params = {
+                "warehouse": {
+                    "_viewType": "lite",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "warehouse",
+                            "pkgPath": "/vmi",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "name", "value": ""},
+                                {"name": "description", "value": ""},
+                            ],
+                        }
+                    ),
+                },
+                "store": {
+                    "_viewType": "lite",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "store",
+                            "pkgPath": "/vmi",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "name", "value": ""},
+                                {"name": "description", "value": ""},
+                            ],
+                        }
+                    ),
+                },
+                "product": {
+                    "_viewType": "lite",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "product",
+                            "pkgPath": "/vmi",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "name", "value": ""},
+                                {"name": "description", "value": ""},
+                                {"name": "image", "value": []},
+                                {"name": "tags", "value": []},
+                            ],
+                        }
+                    ),
+                },
+                "product_info": {
+                    "_viewType": "lite",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "productInfo",
+                            "pkgPath": "/vmi/product",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "sku", "value": ""},
+                                {"name": "description", "value": ""},
+                                {"name": "image", "value": []},
+                            ],
+                        }
+                    ),
+                },
+                "goods_info": {
+                    "_viewType": "lite",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "goodsInfo",
+                            "pkgPath": "/vmi/store",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "sku", "value": ""},
+                                {"name": "type", "value": 0},
+                                {"name": "count", "value": 0},
+                                {"name": "price", "value": 0.0},
+                            ],
+                        }
+                    ),
+                },
+                "goods": {
+                    "_viewType": "lite",
+                    "_valueMask": json.dumps(
+                        {
+                            "name": "goods",
+                            "pkgPath": "/vmi/store",
+                            "fields": [
+                                {"name": "id", "value": 0},
+                                {"name": "sku", "value": ""},
+                                {"name": "name", "value": ""},
+                                {"name": "price", "value": 0.0},
+                            ],
+                        }
+                    ),
+                },
+            }
             warehouse_id = context["warehouse_id"]
             store_id = context["store_id"]
             product_id = context["product_id"]
@@ -2278,63 +3039,54 @@ class MultiTenantBusinessScenarioFactory:
             goods_id = context["goods_id"]
 
             for _ in range(max(1, read_rounds)):
-                assert sdks["status"].filter_status(filter_param) is not None
-                assert sdks["warehouse"].filter_warehouse(filter_param) is not None
-                assert sdks["store"].filter_store(filter_param) is not None
-                assert sdks["product"].filter_product(filter_param) is not None
-                assert sdks["product_info"].filter_product_info(filter_param) is not None
-                assert sdks["goods_info"].filter_goods_info(filter_param) is not None
-                assert sdks["goods"].filter_goods(filter_param) is not None
+                assert sdks["status"].filter_status(filter_params["status"]) is not None
+                assert sdks["warehouse"].filter_warehouse(filter_params["warehouse"]) is not None
+                assert sdks["store"].filter_store(filter_params["store"]) is not None
+                assert sdks["product"].filter_product(filter_params["product"]) is not None
+                assert sdks["product_info"].filter_product_info(filter_params["product_info"]) is not None
+                assert sdks["goods_info"].filter_goods_info(filter_params["goods_info"]) is not None
+                assert sdks["goods"].filter_goods(filter_params["goods"]) is not None
 
             for _ in range(max(1, query_rounds)):
-                assert sdks["warehouse"].query_warehouse(warehouse_id) is not None
-                assert sdks["store"].query_store(store_id) is not None
-                assert sdks["product"].query_product(product_id) is not None
-                assert sdks["product_info"].query_product_info(product_info_id) is not None
-                assert sdks["goods_info"].query_goods_info(goods_info_id) is not None
-                assert sdks["goods"].query_goods(goods_id) is not None
+                assert sdks["warehouse"].query(warehouse_id, query_params["warehouse"]) is not None
+                assert sdks["store"].query(store_id, query_params["store"]) is not None
+                assert sdks["product"].query(product_id, query_params["product"]) is not None
+                assert sdks["product_info"].query(product_info_id, query_params["product_info"]) is not None
+                assert sdks["goods_info"].query(goods_info_id, query_params["goods_info"]) is not None
+                assert sdks["goods"].query(goods_id, query_params["goods"]) is not None
 
             if (iteration + 1) % max(1, write_every) != 0:
                 return
 
             update_suffix = f"{context['suffix']}_{iteration}"
+            warehouse_update = {"description": f"热点压测更新仓库_{update_suffix}"}
+            store_update = {"description": f"热点压测更新门店_{update_suffix}"}
+            product_update = {"description": f"热点压测更新产品_{update_suffix}"}
+            goods_update = {
+                "description": f"热点压测更新商品_{update_suffix}",
+                "count": 160 + ((iteration + worker_id) % 17),
+            }
 
-            warehouse_payload = dict(sdks["warehouse"].query_warehouse(warehouse_id))
-            warehouse_payload["description"] = f"热点压测更新仓库_{update_suffix}"
-            updated_warehouse = sdks["warehouse"].update_warehouse(
-                warehouse_id, warehouse_payload
-            )
-            assert updated_warehouse is not None
+            if prewrite_query:
+                warehouse_payload = dict(sdks["warehouse"].query_warehouse(warehouse_id))
+                warehouse_payload.update(warehouse_update)
 
-            store_payload = dict(sdks["store"].query_store(store_id))
-            store_payload["description"] = f"热点压测更新门店_{update_suffix}"
-            updated_store = sdks["store"].update_store(store_id, store_payload)
-            assert updated_store is not None
+                store_payload = dict(sdks["store"].query_store(store_id))
+                store_payload.update(store_update)
 
-            product_payload = dict(sdks["product"].query_product(product_id))
-            product_payload["description"] = f"热点压测更新产品_{update_suffix}"
-            updated_product = sdks["product"].update_product(product_id, product_payload)
-            assert updated_product is not None
+                product_payload = dict(sdks["product"].query_product(product_id))
+                product_payload.update(product_update)
 
-            current_goods = sdks["goods"].query_goods(goods_id)
-            assert current_goods is not None
-            updated_goods = MultiTenantBusinessScenarioFactory._update_entity(
-                sdks,
-                "goods",
-                goods_id,
-                {
-                    "description": f"热点压测更新商品_{update_suffix}",
-                    "count": 160 + ((iteration + worker_id) % 17),
-                },
-                tenant_id,
-                fallback_payload={
+                current_goods = sdks["goods"].query_goods(goods_id)
+                assert current_goods is not None
+                goods_fallback_payload = {
                     "sku": current_goods.get(
                         "sku", MultiTenantBusinessScenarioFactory._build_numeric_code()
                     ),
                     "name": current_goods.get(
                         "name", f"STRESS_GOODS_{context['suffix']}"
                     ),
-                    "description": f"热点压测更新商品_{update_suffix}",
+                    "description": goods_update["description"],
                     "parameter": current_goods.get(
                         "parameter", f"参数_{context['suffix']}"
                     ),
@@ -2342,104 +3094,400 @@ class MultiTenantBusinessScenarioFactory:
                         "serviceInfo", f"服务_{context['suffix']}"
                     ),
                     "product": {"id": product_info_id},
-                    "count": 160 + ((iteration + worker_id) % 17),
+                    "count": goods_update["count"],
                     "price": current_goods.get("price", 128.88),
                     "shelf": [{"id": context['shelf_id']}],
                     "store": {"id": store_id},
                     "status": {"id": context["status_id"]},
-                },
+                }
+            else:
+                hotspot_update_templates = context["hotspot_update_templates"]
+                warehouse_payload = deepcopy(hotspot_update_templates["warehouse"])
+                warehouse_payload.update(warehouse_update)
+                updated_warehouse = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "warehouse",
+                    warehouse_id,
+                    warehouse_update,
+                    tenant_id,
+                    fallback_payload=warehouse_payload,
+                )
+                assert updated_warehouse is not None
+
+                store_payload = deepcopy(hotspot_update_templates["store"])
+                store_payload.update(store_update)
+                updated_store = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "store",
+                    store_id,
+                    store_update,
+                    tenant_id,
+                    fallback_payload=store_payload,
+                )
+                assert updated_store is not None
+
+                product_payload = deepcopy(hotspot_update_templates["product"])
+                product_payload.update(product_update)
+                updated_product = MultiTenantBusinessScenarioFactory._update_entity(
+                    sdks,
+                    "product",
+                    product_id,
+                    product_update,
+                    tenant_id,
+                    fallback_payload=product_payload,
+                )
+                assert updated_product is not None
+
+                goods_fallback_payload = deepcopy(hotspot_update_templates["goods"])
+                goods_fallback_payload.update(goods_update)
+
+            if prewrite_query:
+                updated_warehouse = sdks["warehouse"].update_warehouse(
+                    warehouse_id, warehouse_payload
+                )
+            assert updated_warehouse is not None
+
+            if prewrite_query:
+                updated_store = sdks["store"].update_store(store_id, store_payload)
+            assert updated_store is not None
+
+            if prewrite_query:
+                updated_product = sdks["product"].update_product(
+                    product_id, product_payload
+                )
+            assert updated_product is not None
+
+            updated_goods = MultiTenantBusinessScenarioFactory._update_entity(
+                sdks,
+                "goods",
+                goods_id,
+                goods_update,
+                tenant_id,
+                fallback_payload=goods_fallback_payload,
             )
             assert updated_goods is not None
 
         return test_hotspot_stress
 
 
+def run_multi_tenant_hotspot_stress_test() -> ConcurrentTestResult:
+    from config_helper import get_concurrent_config, get_timeout
+    from tenant_config_helper import (
+        get_concurrent_tenant_configs,
+        get_preferred_concurrent_tenant_ids,
+    )
+
+    preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
+    tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
+    if not tenant_configs:
+        raise unittest.SkipTest("多租户未启用，跳过多租户热点压测")
+
+    concurrent_config = get_concurrent_config()
+    workers_per_tenant = int(concurrent_config.get("workers_per_tenant", 4))
+    iterations_per_worker = int(concurrent_config.get("iterations_per_worker", 12))
+    write_every = int(concurrent_config.get("write_every", 4))
+    read_rounds = int(concurrent_config.get("hotspot_read_rounds", 2))
+    query_rounds = int(concurrent_config.get("hotspot_query_rounds", 2))
+    prewrite_query = bool(concurrent_config.get("hotspot_prewrite_query", False))
+    shared_context_per_tenant = bool(
+        concurrent_config.get("hotspot_shared_context_per_tenant", True)
+    )
+    measure_loop_only = bool(concurrent_config.get("hotspot_measure_loop_only", True))
+
+    runner = MultiTenantConcurrentRunner(
+        tenant_configs=tenant_configs,
+        max_workers=max(1, len(tenant_configs) * workers_per_tenant),
+        timeout=max(get_timeout(), 300),
+    )
+
+    def shared_context_provider(tenant_id: str, session_manager):
+        return runner.get_or_create_shared_context(
+            tenant_id,
+            lambda: MultiTenantBusinessScenarioFactory._prepare_hotspot_context(
+                tenant_id=tenant_id,
+                session_manager=session_manager,
+            ),
+        )
+
+    def prepare_hotspot_worker(tenant_id: str, worker_id: int, session_manager):
+        del worker_id
+        if shared_context_per_tenant:
+            shared_context_provider(tenant_id, session_manager)
+        MultiTenantBusinessScenarioFactory._warmup_hotspot_session(
+            tenant_id,
+            session_manager,
+        )
+
+    return runner.run_multi_tenant_worker_loop_test(
+        test_func=MultiTenantBusinessScenarioFactory.create_hotspot_stress_test(
+            write_every=write_every,
+            read_rounds=read_rounds,
+            query_rounds=query_rounds,
+            prewrite_query=prewrite_query,
+            shared_context_provider=(
+                shared_context_provider if shared_context_per_tenant else None
+            ),
+        ),
+        test_name="multi_tenant_hotspot_stress",
+        workers_per_tenant=workers_per_tenant,
+        iterations_per_worker=iterations_per_worker,
+        prepare_func=prepare_hotspot_worker,
+        measure_loop_only=measure_loop_only,
+    )
+
+
+def assert_hotspot_result(result: ConcurrentTestResult) -> None:
+    assert result.failed_requests == 0, f"失败详情: {result.error_details[:5]}"
+    assert (
+        result.successful_requests == result.total_requests
+    ), f"存在请求执行失败: {result.error_details[:5]}"
+    assert result.http_qps > 5.0, "多租户热点压测 HTTP QPS 应大于5"
+    assert result.write_tps > 0.5, "多租户热点压测写TPS应大于0.5"
+    assert result.avg_response_time > 0, "平均响应时间应大于0"
+
+
+def run_multi_tenant_full_flow_coverage_test() -> ConcurrentTestResult:
+    from config_helper import get_max_workers, get_timeout
+    from tenant_config_helper import (
+        get_concurrent_tenant_configs,
+        get_preferred_concurrent_tenant_ids,
+    )
+
+    preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
+    tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
+    if not tenant_configs:
+        raise unittest.SkipTest("多租户未启用，跳过 t001-t005 并发业务测试")
+
+    missing_tenants = [
+        tenant_id for tenant_id in preferred_tenant_ids if tenant_id not in tenant_configs
+    ]
+    if missing_tenants:
+        raise unittest.SkipTest(f"目标租户配置不完整，缺少: {missing_tenants}")
+
+    runner = MultiTenantConcurrentRunner(
+        tenant_configs=tenant_configs,
+        max_workers=max(len(tenant_configs), get_max_workers()),
+        timeout=max(get_timeout(), 120),
+    )
+    return runner.run_multi_tenant_test(
+        test_func=MultiTenantBusinessScenarioFactory.create_full_business_flow_test(),
+        test_name="concurrent_multi_tenant_full_vmi_coverage",
+    )
+
+
+def assert_full_flow_result(result: ConcurrentTestResult) -> None:
+    from tenant_config_helper import get_preferred_concurrent_tenant_ids
+
+    preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
+    assert result.total_requests == len(preferred_tenant_ids)
+    assert (
+        result.successful_requests == len(preferred_tenant_ids)
+    ), f"存在租户执行失败: {result.error_details}"
+    assert result.failed_requests == 0, f"失败详情: {result.error_details}"
+    assert result.avg_response_time > 0, "平均响应时间应大于0"
+
+
 class TestConcurrentMultiTenantBusinessOperations(unittest.TestCase):
     """多租户并发业务覆盖测试。"""
 
     def test_multi_tenant_hotspot_stress(self):
-        from config_helper import get_concurrent_config, get_timeout
-        from tenant_config_helper import (get_concurrent_tenant_configs,
-                                          get_preferred_concurrent_tenant_ids)
-
-        preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
-        tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
-
-        if not tenant_configs:
-            self.skipTest("多租户未启用，跳过多租户热点压测")
-
-        concurrent_config = get_concurrent_config()
-        workers_per_tenant = int(concurrent_config.get("workers_per_tenant", 4))
-        iterations_per_worker = int(concurrent_config.get("iterations_per_worker", 12))
-        write_every = int(concurrent_config.get("write_every", 4))
-        read_rounds = int(concurrent_config.get("hotspot_read_rounds", 2))
-        query_rounds = int(concurrent_config.get("hotspot_query_rounds", 2))
-
-        runner = MultiTenantConcurrentRunner(
-            tenant_configs=tenant_configs,
-            max_workers=max(1, len(tenant_configs) * workers_per_tenant),
-            timeout=max(get_timeout(), 300),
-        )
-
-        result = runner.run_multi_tenant_worker_loop_test(
-            test_func=MultiTenantBusinessScenarioFactory.create_hotspot_stress_test(
-                write_every=write_every,
-                read_rounds=read_rounds,
-                query_rounds=query_rounds,
-            ),
-            test_name="multi_tenant_hotspot_stress",
-            workers_per_tenant=workers_per_tenant,
-            iterations_per_worker=iterations_per_worker,
-        )
-
-        self.assertEqual(result.failed_requests, 0, f"失败详情: {result.error_details[:5]}")
-        self.assertEqual(
-            result.successful_requests,
-            result.total_requests,
-            f"存在请求执行失败: {result.error_details[:5]}",
-        )
-        self.assertGreater(result.http_qps, 5.0, "多租户热点压测 HTTP QPS 应大于5")
-        self.assertGreater(result.write_tps, 0.5, "多租户热点压测写TPS应大于0.5")
-        self.assertGreater(result.avg_response_time, 0, "平均响应时间应大于0")
+        result = run_multi_tenant_hotspot_stress_test()
+        assert_hotspot_result(result)
 
     def test_concurrent_multi_tenant_full_vmi_coverage(self):
-        from config_helper import get_max_workers, get_timeout
-        from tenant_config_helper import (get_concurrent_tenant_configs,
-                                          get_preferred_concurrent_tenant_ids)
+        result = run_multi_tenant_full_flow_coverage_test()
+        assert_full_flow_result(result)
 
-        preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
-        tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
 
-        if not tenant_configs:
-            self.skipTest("多租户未启用，跳过 t001-t005 并发业务测试")
+def build_runtime_metadata(env_overrides: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    from config_helper import (
+        get_concurrent_config,
+        get_credentials,
+        get_default_tenant,
+        get_observability_config,
+        get_request_application,
+        get_server_url,
+        get_target_config,
+        get_tenant_targets,
+    )
+    from tenant_config_helper import get_preferred_concurrent_tenant_ids
 
-        missing_tenants = [
-            tenant_id
-            for tenant_id in preferred_tenant_ids
-            if tenant_id not in tenant_configs
-        ]
-        if missing_tenants:
-            self.skipTest(f"目标租户配置不完整，缺少: {missing_tenants}")
+    metadata = {
+        "server_url": get_server_url(),
+        "default_tenant": get_default_tenant(),
+        "tenant_targets": get_tenant_targets(),
+        "preferred_concurrent_tenants": get_preferred_concurrent_tenant_ids(),
+        "username": get_credentials().get("username", ""),
+        "request_application": get_request_application(),
+        "prometheus_window": "10m",
+        "concurrent_config": get_concurrent_config(),
+        "target": get_target_config(),
+        "observability": get_observability_config(),
+    }
 
-        runner = MultiTenantConcurrentRunner(
-            tenant_configs=tenant_configs,
-            max_workers=max(len(tenant_configs), get_max_workers()),
-            timeout=max(get_timeout(), 120),
-        )
+    if env_overrides:
+        metadata["env_overrides"] = dict(env_overrides)
 
-        result = runner.run_multi_tenant_test(
-            test_func=MultiTenantBusinessScenarioFactory.create_full_business_flow_test(),
-            test_name="concurrent_multi_tenant_full_vmi_coverage",
-        )
+    return metadata
 
-        self.assertEqual(result.total_requests, len(preferred_tenant_ids))
-        self.assertEqual(
-            result.successful_requests,
-            len(preferred_tenant_ids),
-            f"存在租户执行失败: {result.error_details}",
-        )
-        self.assertEqual(result.failed_requests, 0, f"失败详情: {result.error_details}")
-        self.assertGreater(result.avg_response_time, 0, "平均响应时间应大于0")
+
+def create_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="VMI 并发压测入口")
+    parser.add_argument(
+        "--hotspot",
+        action="store_true",
+        help="只运行多租户热点读写压测",
+    )
+    parser.add_argument(
+        "--full-flow",
+        action="store_true",
+        help="只运行多租户全业务链路并发覆盖",
+    )
+    parser.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="重复执行选中的压测轮次，默认 1",
+    )
+    parser.add_argument(
+        "--report-file",
+        help="将执行结果写入 JSON 报告文件",
+    )
+    parser.add_argument("--server-url", dest="server_url", help="临时覆盖默认服务地址")
+    parser.add_argument(
+        "--tenant-targets",
+        help="临时覆盖并发租户列表，格式 t001,t002,t003",
+    )
+    parser.add_argument(
+        "--tenant-url-template",
+        dest="tenant_url_template",
+        help="临时覆盖租户 URL 模板",
+    )
+    parser.add_argument(
+        "--default-tenant",
+        dest="default_tenant",
+        help="临时覆盖默认租户",
+    )
+    parser.add_argument("--username", help="临时覆盖登录用户名")
+    parser.add_argument("--password", help="临时覆盖登录密码")
+    parser.add_argument("--namespace", help="临时覆盖请求命名空间")
+    parser.add_argument(
+        "--request-application",
+        dest="request_application",
+        help="为本轮压测绑定唯一 application/run_id，便于 Prometheus 对账",
+    )
+    parser.add_argument("--prometheus-url", dest="prometheus_url", help="记录 Prometheus 入口")
+    parser.add_argument("--remote-host", dest="remote_host", help="记录远端目标主机")
+    parser.add_argument("--remote-user", dest="remote_user", help="记录远端 SSH 用户")
+    parser.add_argument(
+        "--deployment-mode",
+        dest="deployment_mode",
+        help="记录部署形态，例如 docker",
+    )
+    parser.add_argument(
+        "--ignore-env-proxy",
+        dest="request_trust_env",
+        action="store_false",
+        default=None,
+        help="HTTP 会话不继承系统代理环境变量",
+    )
+    parser.add_argument(
+        "--trust-env-proxy",
+        dest="request_trust_env",
+        action="store_true",
+        help="HTTP 会话继承系统代理环境变量",
+    )
+    parser.add_argument("--max-workers", type=int, dest="max_workers")
+    parser.add_argument("--timeout", type=int, dest="timeout")
+    parser.add_argument("--workers-per-tenant", type=int, dest="workers_per_tenant")
+    parser.add_argument(
+        "--iterations-per-worker", type=int, dest="iterations_per_worker"
+    )
+    parser.add_argument("--write-every", type=int, dest="write_every")
+    parser.add_argument(
+        "--hotspot-read-rounds", type=int, dest="hotspot_read_rounds"
+    )
+    parser.add_argument(
+        "--hotspot-query-rounds", type=int, dest="hotspot_query_rounds"
+    )
+    parser.add_argument(
+        "--hotspot-prewrite-query",
+        dest="hotspot_prewrite_query",
+        action="store_true",
+        default=None,
+        help="热点压测写入前先 query 当前对象，再构造完整更新载荷",
+    )
+    parser.add_argument(
+        "--hotspot-no-prewrite-query",
+        dest="hotspot_prewrite_query",
+        action="store_false",
+        help="热点压测写入前不额外 query 对象，失败时才回退完整模板",
+    )
+    parser.add_argument(
+        "--shared-context-per-tenant",
+        dest="hotspot_shared_context_per_tenant",
+        action="store_true",
+        default=None,
+        help="热点压测共享同租户上下文",
+    )
+    parser.add_argument(
+        "--isolated-context-per-worker",
+        dest="hotspot_shared_context_per_tenant",
+        action="store_false",
+        help="热点压测每个 worker 独立准备上下文",
+    )
+    parser.add_argument(
+        "--measure-loop-only",
+        dest="hotspot_measure_loop_only",
+        action="store_true",
+        default=None,
+        help="只统计压测循环窗口，不含预热和资源准备",
+    )
+    parser.add_argument(
+        "--include-setup-time",
+        dest="hotspot_measure_loop_only",
+        action="store_false",
+        help="统计包含预热和资源准备的完整耗时",
+    )
+    return parser
+
+
+def run_selected_suites(
+    hotspot_only: bool,
+    full_flow_only: bool,
+    repeat: int,
+) -> Tuple[bool, List[ConcurrentTestResult], str]:
+    if repeat < 1:
+        raise ValueError("repeat 必须大于等于 1")
+
+    results: List[ConcurrentTestResult] = []
+
+    if hotspot_only and full_flow_only:
+        raise ValueError("--hotspot 和 --full-flow 不能同时限定")
+
+    if hotspot_only:
+        suite_name = "multi_tenant_hotspot_stress"
+        for round_index in range(repeat):
+            logger.info("开始热点压测轮次 %s/%s", round_index + 1, repeat)
+            result = run_multi_tenant_hotspot_stress_test()
+            assert_hotspot_result(result)
+            results.append(result)
+        return True, results, suite_name
+
+    if full_flow_only:
+        suite_name = "concurrent_multi_tenant_full_vmi_coverage"
+        for round_index in range(repeat):
+            logger.info("开始全链路并发覆盖轮次 %s/%s", round_index + 1, repeat)
+            result = run_multi_tenant_full_flow_coverage_test()
+            assert_full_flow_result(result)
+            results.append(result)
+        return True, results, suite_name
+
+    if repeat != 1:
+        raise ValueError("运行全部并发测试套件时暂不支持 --repeat，请改用 --hotspot 或 --full-flow")
+
+    unittest_result = run_all_concurrent_tests()
+    return unittest_result.wasSuccessful(), [], "all_concurrent_tests"
 
 
 def run_all_concurrent_tests():
@@ -2479,11 +3527,34 @@ def run_all_concurrent_tests():
 
 
 if __name__ == "__main__":
+    parser = create_argument_parser()
+    cli_args = parser.parse_args()
+    request_application = ensure_request_application(cli_args)
+    env_overrides = apply_runtime_env_overrides(cli_args)
     logger.info("基于会话管理器的并发测试V2")
     logger.info("%s", "=" * 60)
+    if request_application:
+        logger.info("本轮 request_application: %s", request_application)
 
-    # 运行所有并发测试
-    result = run_all_concurrent_tests()
+    try:
+        success, results, suite_name = run_selected_suites(
+            hotspot_only=cli_args.hotspot,
+            full_flow_only=cli_args.full_flow,
+            repeat=cli_args.repeat,
+        )
+    except unittest.SkipTest as exc:
+        logger.warning("%s", exc)
+        raise SystemExit(0)
+    except Exception as exc:
+        logger.exception("并发压测执行失败: %s", exc)
+        raise SystemExit(1)
 
-    # 退出码
-    exit(0 if result.wasSuccessful() else 1)
+    if cli_args.report_file and results:
+        save_results_report(
+            filepath=cli_args.report_file,
+            suite_name=suite_name,
+            results=results,
+            metadata=build_runtime_metadata(env_overrides=env_overrides),
+        )
+
+    raise SystemExit(0 if success else 1)

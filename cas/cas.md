@@ -1,6 +1,6 @@
 # magicTest CAS E2E 基线
 
-这组 e2e 测试以 [design-cas-auth.md](../../magicCas/docs/design-cas-auth.md) 和 [design-modules.md](../../magicCas/docs/design-modules.md) 为准，当前固定采用以下业务口径：
+这组 e2e 测试以 [design-cas-auth.md](../../docs/design-cas-auth.md) 和 [design-modules.md](../../magicCas/docs/design-modules.md) 为准，当前固定采用以下业务口径：
 
 ## 核心语义
 
@@ -37,7 +37,8 @@
 - 外部访问通过 `AuthSecret` 绑定到 `Endpoint` 进行平台授信访问。
 - 默认 `panel` namespace 启动后，应自动具备 `superRole`、`administrator`、`defaultEndpoint` 这条基线初始化链。
 - 运行态鉴权必须回源校验当前 `Endpoint` / `Account` / `Role` 的有效性，不能只信任旧 token 快照。
-- `JWT refresh` 必须按当前 namespace 最新 `Scope` 重新签发新 token。
+- `JWT refresh` 必须按当前 CAS 运行态快照重新签发新 token。
+- namespace 管理变更通过事件传播到 CAS，scope 生效允许延迟，不要求在 namespace 更新返回后立即反映到 refresh 结果。
 
 ## 运行方式
 

@@ -4,6 +4,7 @@
 """
 
 import logging
+import os
 import threading
 import time
 from typing import Optional, Tuple
@@ -36,6 +37,7 @@ class SessionManager:
         refresh_interval: int = 540,  # 9分钟刷新一次（服务器要求不超过10分钟）
         session_timeout: int = 1800,
         request_observer=None,
+        request_application: Optional[str] = None,
     ):  # 30分钟会话超时
         """初始化会话管理器
 
@@ -54,6 +56,9 @@ class SessionManager:
         self.refresh_interval = refresh_interval
         self.session_timeout = session_timeout
         self.request_observer = request_observer
+        self.request_application = request_application or os.getenv(
+            "MAGICTEST_REQUEST_APPLICATION", ""
+        ).strip()
 
         # 会话相关对象
         self.work_session = None
@@ -67,6 +72,26 @@ class SessionManager:
         # 刷新线程
         self.refresh_thread = None
         self.stop_refresh = threading.Event()
+        self._session_lock = threading.RLock()
+
+    @staticmethod
+    def _session_has_auth(session: Optional[MagicSession]) -> bool:
+        if session is None:
+            return False
+        if getattr(session, "session_token", None):
+            return True
+        return bool(
+            getattr(session, "session_auth_endpoint", None)
+            and getattr(session, "session_auth_token", None)
+        )
+
+    @staticmethod
+    def _summarize_session(session: Optional[MagicSession]) -> str:
+        if session is None:
+            return "session=None"
+        if hasattr(session, "auth_summary"):
+            return session.auth_summary()
+        return f"session_obj=0x{id(session):x}"
 
     def create_session(self) -> bool:
         """创建会话并登录
@@ -74,31 +99,75 @@ class SessionManager:
         Returns:
             登录是否成功
         """
-        try:
-            # 创建会话
-            self.work_session = MagicSession(self.server_url, self.namespace)
-            self.cas_session = Cas(self.work_session)
+        with self._session_lock:
+            next_session = None
+            try:
+                # 先在局部对象上完成登录，避免失败时暴露未认证 session。
+                # 若当前已有业务线程持有 work_session，则登录成功后复用该对象，
+                # 避免长事务/长场景继续引用旧 session。
+                current_session = self.work_session
+                next_session = MagicSession(self.server_url, self.namespace)
+                next_cas_session = Cas(next_session)
 
-            # 登录
-            if not self.cas_session.login(self.username, self.password):
-                logger.error("会话管理器: 登录失败")
+                # 登录
+                if not next_cas_session.login(self.username, self.password):
+                    logger.error("会话管理器: 登录失败")
+                    try:
+                        next_session.close()
+                    except Exception:
+                        pass
+                    return False
+
+                session_token = next_cas_session.get_session_token()
+                next_session.bind_token(session_token)
+                if self.request_application:
+                    next_session.bind_application(self.request_application)
+                if self.request_observer and hasattr(next_session, "set_request_observer"):
+                    next_session.set_request_observer(self.request_observer)
+
+                if not self._session_has_auth(next_session):
+                    logger.error("会话管理器: 登录成功但未获得认证信息")
+                    try:
+                        next_session.close()
+                    except Exception:
+                        pass
+                    return False
+
+                if current_session is not None and current_session is not next_session:
+                    current_session.sync_from(next_session)
+                    try:
+                        next_session.close()
+                    except Exception:
+                        pass
+                    next_cas_session.session = current_session
+                    self.work_session = current_session
+                else:
+                    self.work_session = next_session
+
+                self.cas_session = next_cas_session
+
+                # 更新状态
+                self.last_activity_time = time.time()
+                self.last_refresh_time = time.time()
+                self.is_logged_in = True
+
+                logger.info(
+                    "会话管理器: 登录成功%s state=%s",
+                    f", application={self.request_application}"
+                    if self.request_application
+                    else "",
+                    self._summarize_session(self.work_session),
+                )
+                return True
+
+            except Exception as e:
+                logger.error(f"会话管理器: 创建会话失败 - {e}")
+                if next_session is not None:
+                    try:
+                        next_session.close()
+                    except Exception:
+                        pass
                 return False
-
-            self.work_session.bind_token(self.cas_session.get_session_token())
-            if self.request_observer and hasattr(self.work_session, "set_request_observer"):
-                self.work_session.set_request_observer(self.request_observer)
-
-            # 更新状态
-            self.last_activity_time = time.time()
-            self.last_refresh_time = time.time()
-            self.is_logged_in = True
-
-            logger.info("会话管理器: 登录成功")
-            return True
-
-        except Exception as e:
-            logger.error(f"会话管理器: 创建会话失败 - {e}")
-            return False
 
     def refresh_session(self) -> bool:
         """刷新会话
@@ -106,31 +175,47 @@ class SessionManager:
         Returns:
             刷新是否成功
         """
-        if not self.is_logged_in or not self.cas_session:
-            logger.warning("会话管理器: 尝试刷新未登录的会话")
-            return False
+        with self._session_lock:
+            if not self.is_logged_in or not self.cas_session:
+                logger.warning("会话管理器: 尝试刷新未登录的会话")
+                return False
 
-        try:
-            session_token = self.cas_session.get_session_token()
-            if not session_token:
-                logger.warning("会话管理器: 会话令牌为空，需要重新登录")
+            try:
+                session_token = self.cas_session.get_session_token()
+                if not session_token:
+                    logger.warning(
+                        "会话管理器: 会话令牌为空，需要重新登录 state=%s",
+                        self._summarize_session(self.work_session),
+                    )
+                    return self.reconnect()
+
+                # 调用刷新API
+                old_summary = self._summarize_session(self.work_session)
+                new_token = self.cas_session.refresh(session_token)
+                if new_token:
+                    self.work_session.bind_token(new_token)
+                    self.last_refresh_time = time.time()
+                    self.last_activity_time = time.time()
+                    logger.info(
+                        "会话管理器: 会话刷新成功 old_state=%s new_state=%s",
+                        old_summary,
+                        self._summarize_session(self.work_session),
+                    )
+                    return True
+
+                logger.warning(
+                    "会话管理器: 会话刷新失败，尝试重新登录 state=%s",
+                    self._summarize_session(self.work_session),
+                )
                 return self.reconnect()
 
-            # 调用刷新API
-            new_token = self.cas_session.refresh(session_token)
-            if new_token:
-                self.work_session.bind_token(new_token)
-                self.last_refresh_time = time.time()
-                self.last_activity_time = time.time()
-                logger.debug("会话管理器: 会话刷新成功")
-                return True
-            else:
-                logger.warning("会话管理器: 会话刷新失败，尝试重新登录")
+            except Exception as e:
+                logger.error(
+                    "会话管理器: 刷新会话异常 - %s state=%s",
+                    e,
+                    self._summarize_session(self.work_session),
+                )
                 return self.reconnect()
-
-        except Exception as e:
-            logger.error(f"会话管理器: 刷新会话异常 - {e}")
-            return self.reconnect()
 
     def reconnect(self) -> bool:
         """重新连接（重新登录）
@@ -138,15 +223,26 @@ class SessionManager:
         Returns:
             重新登录是否成功
         """
-        logger.info("会话管理器: 尝试重新登录")
+        with self._session_lock:
+            logger.info(
+                "会话管理器: 尝试重新登录 state=%s",
+                self._summarize_session(self.work_session),
+            )
 
-        # 关闭现有会话
-        self.close_session()
+            in_refresh_thread = self.refresh_thread is threading.current_thread()
 
-        # 创建新会话
-        return self.create_session()
+            # 创建新会话
+            success = self.create_session()
+            if success and in_refresh_thread:
+                self.stop_refresh.clear()
+            logger.info(
+                "会话管理器: 重新登录完成 success=%s state=%s",
+                success,
+                self._summarize_session(self.work_session),
+            )
+            return success
 
-    def close_session(self):
+    def _close_session_locked(self, stop_refresh_thread: bool = True):
         """关闭会话"""
         if self.work_session:
             try:
@@ -157,10 +253,21 @@ class SessionManager:
         self.work_session = None
         self.cas_session = None
         self.is_logged_in = False
-        self.stop_refresh.set()
+        if stop_refresh_thread:
+            self.stop_refresh.set()
 
-        if self.refresh_thread and self.refresh_thread.is_alive():
+        current_thread = threading.current_thread()
+        if (
+            stop_refresh_thread
+            and self.refresh_thread
+            and self.refresh_thread.is_alive()
+            and self.refresh_thread is not current_thread
+        ):
             self.refresh_thread.join(timeout=5)
+
+    def close_session(self):
+        with self._session_lock:
+            self._close_session_locked(stop_refresh_thread=True)
 
     def start_auto_refresh(self):
         """启动自动刷新线程"""
@@ -233,8 +340,16 @@ class SessionManager:
         Returns:
             work_session对象
         """
-        self.update_activity()
-        return self.work_session
+        with self._session_lock:
+            self.update_activity()
+            if not self.is_logged_in or not self._session_has_auth(self.work_session):
+                logger.warning(
+                    "会话管理器: 当前会话未认证，拒绝向业务侧暴露 session state=%s is_logged_in=%s",
+                    self._summarize_session(self.work_session),
+                    self.is_logged_in,
+                )
+                return None
+            return self.work_session
 
     def get_cas_session(self):
         """获取CAS会话

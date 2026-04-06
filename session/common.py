@@ -86,18 +86,19 @@ class MagicEntity:
         response = self.session.get(url, filter_val)
         return self._handle_response(response, '过滤', url, filter_val=filter_val)
 
-    def query(self, id_val: Union[str, int]) -> Optional[Any]:
+    def query(self, id_val: Union[str, int], params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
         """Query single entity by ID.
         
         Args:
             id_val: Entity ID
+            params: Optional query parameters
             
         Returns:
             Entity data on success, None on error
         """
         url = f'{self.base_url}s/{id_val}'
-        response = self.session.get(url)
-        return self._handle_response(response, '查询', url, id_val=id_val)
+        response = self.session.get(url, params)
+        return self._handle_response(response, '查询', url, id_val=id_val, params=params)
 
     def insert(self, param_val: Dict[str, Any]) -> Optional[Any]:
         """Insert new entity.

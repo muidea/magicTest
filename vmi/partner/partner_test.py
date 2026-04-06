@@ -77,6 +77,7 @@ class PartnerTestCase(VMITestCase):
     """Partner 测试用例类"""
 
     namespace = ""
+    entity_definition = "partner.json"
 
     @classmethod
     def setUpClass(cls):
@@ -217,11 +218,8 @@ class PartnerTestCase(VMITestCase):
         self.assertIsInstance(
             new_partner["createTime"], (int, type(None)), "创建时间应为整数或None"
         )
+        self.assert_entity_matches_definition(new_partner, context="创建合作伙伴返回")
 
-        self.assertIn("namespace", new_partner, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_partner["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 记录创建的合作伙伴ID以便清理
         if new_partner and "id" in new_partner:
@@ -240,9 +238,8 @@ class PartnerTestCase(VMITestCase):
         # 查询合作伙伴
         queried_partner = self.partner_sdk.query_partner(new_partner["id"])
         self.assertIsNotNone(queried_partner, "查询合作伙伴失败")
-        self.assertEqual(queried_partner["id"], new_partner["id"], "合作伙伴ID不匹配")
-        self.assertEqual(
-            queried_partner["name"], new_partner["name"], "合作伙伴名不匹配"
+        self.assert_entity_round_trip(
+            new_partner, queried_partner, context="查询合作伙伴返回"
         )
 
     def test_update_partner(self):
@@ -262,8 +259,13 @@ class PartnerTestCase(VMITestCase):
         updated_partner = self.partner_sdk.update_partner(
             new_partner["id"], update_param
         )
-        self.assertIsNotNone(updated_partner, "更新合作伙伴失败")
-        self.assertEqual(updated_partner["description"], "更新后的描述", "描述更新失败")
+        self.assert_update_round_trip(
+            new_partner["id"],
+            updated_partner,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_partner,
+            context="更新合作伙伴返回",
+        )
 
     def test_delete_partner(self):
         """测试删除合作伙伴
@@ -515,7 +517,7 @@ class PartnerTestCase(VMITestCase):
             self._record_partner_for_cleanup(new_partner["id"])
 
         # 验证所有系统自动生成字段
-        auto_generated_fields = ["id", "code", "creater", "createTime", "namespace"]
+        auto_generated_fields = ["id", "code", "creater", "createTime"]
         for field in auto_generated_fields:
             self.assertIn(field, new_partner, f"缺少系统自动生成字段: {field}")
 
@@ -538,10 +540,8 @@ class PartnerTestCase(VMITestCase):
         )
         if new_partner["createTime"] is not None:
             self.assertGreater(new_partner["createTime"], 0, "创建时间应为正数")
+        self.assert_entity_matches_definition(new_partner, context="自动字段合作伙伴返回")
 
-        self.assertIsInstance(
-            new_partner["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
     def test_modify_time_auto_update(self):
         """测试修改时间自动更新"""
@@ -564,10 +564,16 @@ class PartnerTestCase(VMITestCase):
         updated_partner = self.partner_sdk.update_partner(
             new_partner["id"], update_param
         )
-        self.assertIsNotNone(updated_partner, "更新合作伙伴失败")
+        queried_partner = self.assert_update_round_trip(
+            new_partner["id"],
+            updated_partner,
+            expected_updates={"description": "更新后的描述"},
+            original_entity=new_partner,
+            context="修改时间合作伙伴更新返回",
+        )
 
         # 验证修改时间已更新
-        updated_modify_time = updated_partner.get("modifyTime")
+        updated_modify_time = queried_partner.get("modifyTime")
         self.assertIsNotNone(updated_modify_time, "更新后缺少修改时间字段")
 
         # 验证修改时间比创建时间晚（如果两者都存在）
@@ -578,7 +584,7 @@ class PartnerTestCase(VMITestCase):
 
         # 验证创建时间未改变
         self.assertEqual(
-            updated_partner.get("createTime"), initial_create_time, "创建时间不应被修改"
+            queried_partner.get("createTime"), initial_create_time, "创建时间不应被修改"
         )
 
         # 如果初始有修改时间，验证已更新

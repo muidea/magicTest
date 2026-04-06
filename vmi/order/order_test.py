@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 class OrderTestCase(VMITestCase):
     namespace = ""
+    entity_definition = "order/order.json"
 
     @classmethod
     def setUpClass(cls):
@@ -135,10 +136,10 @@ class OrderTestCase(VMITestCase):
             "status",
             "creater",
             "createTime",
-            "namespace",
         ]
         for field in required_fields:
             self.assertIn(field, order, f"订单缺少必填字段: {field}")
+        self.assert_entity_matches_definition(order, context="创建订单返回")
         self.test_data.append(order)
         self.log_test_success(f"✓ 订单创建成功: ID={order.get('id')}")
 
@@ -158,7 +159,7 @@ class OrderTestCase(VMITestCase):
         self.assertIsNotNone(created_order, "创建订单失败")
         queried_order = self.order_sdk.query_order(created_order["id"])
         self.assertIsNotNone(queried_order, "查询订单失败")
-        self.assertEqual(queried_order["id"], created_order["id"], "ID不匹配")
+        self.assert_entity_round_trip(created_order, queried_order, context="查询订单返回")
         self.test_data.append(created_order)
         self.log_test_success(f"✓ 订单查询成功: ID={queried_order.get('id')}")
 
@@ -178,11 +179,14 @@ class OrderTestCase(VMITestCase):
         self.assertIsNotNone(created_order, "创建订单失败")
         update_param = {"cost": 250.0, "memo": "更新测试"}
         updated_order = self.order_sdk.update_order(created_order["id"], update_param)
-        if updated_order:
-            self.assertEqual(updated_order["cost"], 250.0, "更新后金额不匹配")
-            self.log_test_success(f"✓ 订单更新成功: ID={updated_order.get('id')}")
-        else:
-            self.log_test_observation("⚠ 订单更新未返回结果")
+        queried_order = self.assert_update_round_trip(
+            created_order["id"],
+            updated_order,
+            expected_updates={"cost": 250.0, "memo": "更新测试"},
+            original_entity=created_order,
+            context="更新订单返回",
+        )
+        self.log_test_success(f"✓ 订单更新成功: ID={queried_order.get('id')}")
         self.test_data.append(created_order)
 
     def test_delete_order(self):
@@ -316,9 +320,10 @@ class OrderTestCase(VMITestCase):
         }
         order = self.order_sdk.create_order(order_param)
         self.assertIsNotNone(order, "创建订单失败")
-        auto_fields = ["id", "sn", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "sn", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, order, f"缺少自动生成字段: {field}")
+        self.assert_entity_matches_definition(order, context="自动字段订单返回")
         self.test_data.append(order)
         self.log_test_success(f"✓ 系统自动生成字段验证成功: SN={order.get('sn')}")
 
@@ -365,23 +370,25 @@ class OrderTestCase(VMITestCase):
             updated_order = self.order_sdk.update_order(
                 created_order["id"], update_param
             )
-            self.assertIsNotNone(updated_order, "更新订单失败")
+            queried_order = self.assert_update_round_trip(
+                created_order["id"],
+                updated_order,
+                expected_updates={"cost": 150.0},
+                original_entity=created_order,
+                context="修改时间订单更新返回",
+            )
 
-            if "modifyTime" in updated_order:
-                updated_modify_time = updated_order["modifyTime"]
-
-                # 验证modifyTime已自动更新
-                self.assertNotEqual(
-                    updated_modify_time,
-                    original_modify_time,
-                    "modifyTime字段在更新后未自动刷新",
-                )
-                self.log_test_success("✓ 修改时间自动更新验证成功")
-                self.log_test_success(
-                    f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}"
-                )
-            else:
-                self.fail("更新操作未返回modifyTime字段")
+            updated_modify_time = queried_order.get("modifyTime")
+            self.assertIsNotNone(updated_modify_time, "更新操作未返回modifyTime字段")
+            self.assertNotEqual(
+                updated_modify_time,
+                original_modify_time,
+                "modifyTime字段在更新后未自动刷新",
+            )
+            self.log_test_success("✓ 修改时间自动更新验证成功")
+            self.log_test_success(
+                f"✓ 时间戳变化: {original_modify_time} -> {updated_modify_time}"
+            )
         else:
             self.fail("创建的数据不包含modifyTime字段")
 

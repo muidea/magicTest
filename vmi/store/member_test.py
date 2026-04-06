@@ -69,6 +69,7 @@ class MemberTestCase(VMITestCase):
     """Member 测试用例类"""
 
     namespace = ""
+    entity_definition = "store/member.json"
 
     @classmethod
     def setUpClass(cls):
@@ -194,10 +195,6 @@ class MemberTestCase(VMITestCase):
             new_member["createTime"], (int, type(None)), "创建时间应为整数或None"
         )
 
-        self.assertIn("namespace", new_member, "缺少命名空间字段")
-        self.assertIsInstance(
-            new_member["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
         # 记录创建的店铺成员ID以便清理
         if new_member and "id" in new_member:
@@ -360,7 +357,7 @@ class MemberTestCase(VMITestCase):
             self._record_member_for_cleanup(new_member["id"])
 
         # 验证所有系统自动生成字段
-        auto_generated_fields = ["id", "creater", "createTime", "namespace"]
+        auto_generated_fields = ["id", "creater", "createTime"]
         for field in auto_generated_fields:
             self.assertIn(field, new_member, f"缺少系统自动生成字段: {field}")
 
@@ -378,9 +375,6 @@ class MemberTestCase(VMITestCase):
         if new_member["createTime"] is not None:
             self.assertGreater(new_member["createTime"], 0, "创建时间应为正数")
 
-        self.assertIsInstance(
-            new_member["namespace"], (str, type(None)), "命名空间应为字符串或None"
-        )
 
     def test_modify_time_auto_update(self):
         """测试修改时间自动更新"""

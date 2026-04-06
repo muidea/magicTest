@@ -36,7 +36,8 @@
 ## 当前固定语义
 
 - `login()` 返回的是账号 JWT，会把当前 `Account` 实体写入 `current_entity`。
-- `refresh()` 会基于当前运行态重新签发 token，新的 JWT scope 应跟随最新 namespace scope，而不是沿用旧 token 快照。
+- `refresh()` 会基于当前 CAS 运行态快照重新签发 token，不沿用旧 token 快照。
+- namespace 管理变更通过事件传播到 CAS，scope 生效允许延迟，不承诺在 namespace 更新返回后立即体现在新 JWT 中。
 - `allocate_auth_secret()` 是 endpoint 凭证签发入口：
   - 输入 `Account` 实体时，可以显式覆盖 role。
   - 输入 `Endpoint` 实体时，会沿用源 endpoint 的 account 和 role 绑定。

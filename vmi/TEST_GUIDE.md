@@ -16,7 +16,7 @@ cd ../magicTest/vmi
 source ../venv/bin/activate
 ```
 
-如果环境中设置了代理，建议回归前按实际目标域名显式清空，例如：
+访问 `remote.vpc` 时要求临时禁用代理；本地 `*.local.vpc` 回归通常也建议按实际目标域名显式清空代理，例如：
 
 ```bash
 HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
@@ -36,6 +36,7 @@ python3 run_tests.py --quick
 python3 run_tests.py --validation
 python3 run_tests.py --multi-tenant
 python3 run_tests.py --concurrent
+python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --report-file hotspot-report.json
 python3 run_tests.py --scenario
 python3 run_tests.py --module
 python3 run_tests.py --aging 30
@@ -53,6 +54,8 @@ python3 run_tests.py --pytest --all
   跑多租户配置和管理器测试。
 - `--concurrent`
   跑并发测试；若启用多租户，会额外并发执行 `t001`-`t005` 的全业务链路覆盖。
+- `--hotspot`
+  只跑多租户热点读写压测；支持通过 `--workers-per-tenant`、`--iterations-per-worker`、`--write-every`、`--hotspot-read-rounds`、`--hotspot-query-rounds`、`--hotspot-prewrite-query`、`--repeat`、`--request-application` 和 `--report-file` 临时调整压测参数并导出 JSON 报告。默认走更偏性能口径的热点模型：`read/query` 轮次各 1 次，写入前不额外回读对象，只有局部更新失败时才回退完整模板。若配置了 Prometheus 入口，报告会附带按 `request_application` 对账的 `magicBase` 监控摘要。
 - `--scenario`
   跑业务场景测试。
 - `--module`

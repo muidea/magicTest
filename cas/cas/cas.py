@@ -31,6 +31,14 @@ class Cas:
     def get_last_error(self):
         return self.last_error
 
+    @staticmethod
+    def _mask_token(token: Optional[str]) -> str:
+        if not token:
+            return ""
+        if len(token) <= 12:
+            return token
+        return f"{token[:8]}...{token[-4:]}"
+
     def _set_response(self, val):
         self.last_response = val
         self.last_error = None if val is None else val.get('error')
@@ -91,9 +99,18 @@ class Cas:
             logger.error('登录失败: 响应值为空, 账户: %s', account)
             return False
         self.session_token = value.get('sessionToken')
+        if not self.session_token:
+            logger.error('登录失败: 响应缺少 sessionToken, 账户: %s', account)
+            return False
         self.current_entity = value.get('entity')
         self.session.bind_token(self.session_token)
-        logger.info('登录成功, 账户: %s, 实体: %s', account, self.current_entity)
+        logger.info(
+            '登录成功, 账户: %s, 实体: %s, token=%s, session_obj=0x%x',
+            account,
+            self.current_entity,
+            self._mask_token(self.session_token),
+            id(self.session),
+        )
         return self.session_token is not None
 
     def logout(self, session_token):
@@ -115,24 +132,49 @@ class Cas:
 
     def refresh(self, session_token):
         """verify"""
-        self.session.bind_token(session_token)
-        val = self._set_response(self.session.get('/api/v1/cas/session/refresh/'))
-        if val is None or val.get('error') is not None:
-            if val:
-                logger.error('会话刷新失败')
-                logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
-            else:
-                logger.error('会话刷新失败: 无响应')
-            return None
-        value = val.get('value')
-        if value is None:
-            logger.error('会话刷新失败: 响应值为空')
-            return None
-        self.session_token = value.get('sessionToken')
-        self.current_entity = value.get('entity')
-        self.session.bind_token(self.session_token)
-        logger.info('会话刷新成功, 实体: %s', self.current_entity)
-        return self.session_token
+        refresh_session = self.session.new_session()
+        try:
+            logger.info(
+                '会话刷新开始 old_token=%s target_session_obj=0x%x temp_session_obj=0x%x',
+                self._mask_token(session_token),
+                id(self.session),
+                id(refresh_session),
+            )
+            refresh_session.bind_token(session_token)
+            val = self._set_response(refresh_session.get('/api/v1/cas/session/refresh/'))
+            if val is None or val.get('error') is not None:
+                if val:
+                    logger.error('会话刷新失败')
+                    logger.error('错误代码: %s, 错误消息: %s', val['error']['code'], val['error']['message'])
+                else:
+                    logger.error('会话刷新失败: 无响应')
+                return None
+            value = val.get('value')
+            if value is None:
+                logger.error('会话刷新失败: 响应值为空')
+                return None
+            new_token = value.get('sessionToken')
+            if not new_token:
+                logger.error('会话刷新失败: 响应缺少 sessionToken')
+                return None
+            self.session_token = new_token
+            self.current_entity = value.get('entity')
+            if hasattr(self.session, 'sync_cookies_from'):
+                self.session.sync_cookies_from(refresh_session)
+            self.session.bind_token(self.session_token)
+            logger.info(
+                '会话刷新成功, 实体: %s, old_token=%s, new_token=%s, target_session_obj=0x%x',
+                self.current_entity,
+                self._mask_token(session_token),
+                self._mask_token(self.session_token),
+                id(self.session),
+            )
+            return self.session_token
+        finally:
+            try:
+                refresh_session.close()
+            except Exception:
+                logger.debug('关闭临时 refresh session 失败', exc_info=True)
 
     def get_system_all_privileges(self):
         """get_system_all_privileges"""

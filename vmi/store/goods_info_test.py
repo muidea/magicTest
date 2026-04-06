@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 class GoodsInfoTestCase(VMITestCase):
     namespace = ""
+    entity_definition = "store/goodsInfo.json"
 
     @classmethod
     def setUpClass(cls):
@@ -135,10 +136,10 @@ class GoodsInfoTestCase(VMITestCase):
             "price",
             "creater",
             "createTime",
-            "namespace",
         ]
         for field in required_fields:
             self.assertIn(field, goods_info, f"商品SKU缺少必填字段: {field}")
+        self.assert_entity_matches_definition(goods_info, context="创建商品SKU返回")
         self._record_goods_info_for_cleanup(goods_info)
         self.log_test_success(
             f"✓ 商品SKU创建成功: ID={goods_info.get('id')}, SKU={goods_info.get('sku')}"
@@ -153,7 +154,7 @@ class GoodsInfoTestCase(VMITestCase):
         self.assertIsNotNone(created_info, "创建商品SKU失败")
         queried_info = self.goods_info_sdk.query_goods_info(created_info["id"])
         self.assertIsNotNone(queried_info, "查询商品SKU失败")
-        self.assertEqual(queried_info["id"], created_info["id"], "ID不匹配")
+        self.assert_entity_round_trip(created_info, queried_info, context="查询商品SKU返回")
         self._record_goods_info_for_cleanup(created_info)
         self.log_test_success(f"✓ 商品SKU查询成功: ID={queried_info.get('id')}")
 
@@ -168,11 +169,14 @@ class GoodsInfoTestCase(VMITestCase):
         updated_info = self.goods_info_sdk.update_goods_info(
             created_info["id"], update_param
         )
-        if updated_info:
-            self.assertEqual(updated_info["count"], 5, "更新后数量不匹配")
-            self.log_test_success(f"✓ 商品SKU更新成功: ID={updated_info.get('id')}")
-        else:
-            self.log_test_observation("⚠ 商品SKU更新未返回结果")
+        queried_info = self.assert_update_round_trip(
+            created_info["id"],
+            updated_info,
+            expected_updates={"count": 5, "price": 250.0},
+            original_entity=created_info,
+            context="更新商品SKU返回",
+        )
+        self.log_test_success(f"✓ 商品SKU更新成功: ID={queried_info.get('id')}")
         self._record_goods_info_for_cleanup(created_info)
 
     def test_delete_goods_info(self):
@@ -250,9 +254,10 @@ class GoodsInfoTestCase(VMITestCase):
         )
         goods_info = self.goods_info_sdk.create_goods_info(goods_info_param)
         self.assertIsNotNone(goods_info, "创建商品SKU失败")
-        auto_fields = ["id", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, goods_info, f"缺少自动生成字段: {field}")
+        self.assert_entity_matches_definition(goods_info, context="自动字段商品SKU返回")
         self._record_goods_info_for_cleanup(goods_info)
         self.log_test_success(f"✓ 系统自动生成字段验证成功: ID={goods_info.get('id')}")
 

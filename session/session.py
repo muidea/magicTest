@@ -3,10 +3,14 @@
 import json
 import logging
 import os
+import threading
 import time
+import base64
 from typing import Any, Callable, Dict, Optional, Union
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
+from requests.cookies import RequestsCookieJar
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -48,7 +52,115 @@ class MagicSession:
         self.application = None
         self.verify_ssl = os.getenv('VERIFY_SSL', 'false').lower() != 'false'
         self.timeout = float(os.getenv('REQUEST_TIMEOUT', '30.0'))
+        self.trust_env = self._resolve_trust_env()
+        self.http_pool_connections = int(os.getenv('REQUEST_POOL_CONNECTIONS', '100'))
+        self.http_pool_maxsize = int(os.getenv('REQUEST_POOL_MAXSIZE', '100'))
         self.request_observer: Optional[Callable[..., None]] = None
+        self._auth_lock = threading.RLock()
+        self._configure_transport()
+
+    @staticmethod
+    def _resolve_trust_env() -> bool:
+        explicit = os.getenv('REQUEST_TRUST_ENV')
+        if explicit is not None:
+            return explicit.lower() != 'false'
+        return False
+
+    def _configure_transport(self) -> None:
+        """Apply session transport settings for high-concurrency workloads."""
+        self.current_session.trust_env = self.trust_env
+        adapter = HTTPAdapter(
+            pool_connections=self.http_pool_connections,
+            pool_maxsize=self.http_pool_maxsize,
+            max_retries=0,
+            pool_block=False,
+        )
+        self.current_session.mount('http://', adapter)
+        self.current_session.mount('https://', adapter)
+
+    @staticmethod
+    def _mask_token(token: Optional[str]) -> str:
+        if not token:
+            return ""
+        if len(token) <= 12:
+            return token
+        return f"{token[:8]}...{token[-4:]}"
+
+    @classmethod
+    def _describe_authorization(cls, header: str) -> str:
+        if not header:
+            return "none"
+        if header.startswith("Bearer "):
+            token = header[len("Bearer "):]
+            session_id = ""
+            expire_at = ""
+            try:
+                parts = token.split(".")
+                if len(parts) == 3:
+                    payload = parts[1] + "=" * (-len(parts[1]) % 4)
+                    claims = json.loads(
+                        base64.urlsafe_b64decode(payload.encode("utf-8")).decode("utf-8")
+                    )
+                    session_id = claims.get("_sessionID", "") or ""
+                    expire_val = claims.get("authExpireTime") or claims.get(
+                        "innerExpireTime"
+                    )
+                    expire_at = str(expire_val or "")
+            except Exception:
+                session_id = ""
+                expire_at = ""
+            return (
+                f"bearer token={cls._mask_token(token)} "
+                f"session_id={session_id} expire={expire_at}"
+            ).strip()
+        if header.startswith("Sig "):
+            return f"sig {header[len('Sig '):]}"
+        return header
+
+    def _auth_state_snapshot(self) -> Dict[str, Any]:
+        with self._auth_lock:
+            return {
+                "base_url": self.base_url,
+                "namespace": self.namespace,
+                "session_token": self.session_token,
+                "session_auth_endpoint": self.session_auth_endpoint,
+                "session_auth_token": self.session_auth_token,
+                "application": self.application,
+                "verify_ssl": self.verify_ssl,
+                "timeout": self.timeout,
+                "trust_env": self.trust_env,
+                "http_pool_connections": self.http_pool_connections,
+                "http_pool_maxsize": self.http_pool_maxsize,
+                "request_observer": self.request_observer,
+            }
+
+    def _clone_cookie_jar(self) -> RequestsCookieJar:
+        jar = RequestsCookieJar()
+        jar.update(self.current_session.cookies)
+        return jar
+
+    def sync_cookies_from(self, other: 'MagicSession') -> None:
+        if other is None:
+            return
+        with self._auth_lock:
+            self.current_session.cookies = other._clone_cookie_jar()
+
+    def auth_summary(self) -> str:
+        snapshot = self._auth_state_snapshot()
+        auth_mode = "none"
+        auth_ref = ""
+        if snapshot["session_auth_endpoint"] and snapshot["session_auth_token"]:
+            auth_mode = "sig"
+            auth_ref = snapshot["session_auth_endpoint"]
+        elif snapshot["session_token"]:
+            auth_mode = "bearer"
+            auth_ref = self._mask_token(snapshot["session_token"])
+        return (
+            f"session_obj=0x{id(self):x} "
+            f"namespace={snapshot['namespace'] or ''} "
+            f"auth_mode={auth_mode} "
+            f"auth_ref={auth_ref}"
+        )
 
     def new_session(self) -> 'MagicSession':
         """Create a new session with same configuration.
@@ -56,11 +168,20 @@ class MagicSession:
         Returns:
             A new MagicSession instance
         """
-        new_session = MagicSession(self.base_url, self.namespace)
-        new_session.verify_ssl = self.verify_ssl
-        new_session.timeout = self.timeout
-        new_session.application = self.application
-        new_session.request_observer = self.request_observer
+        snapshot = self._auth_state_snapshot()
+        new_session = MagicSession(snapshot["base_url"], snapshot["namespace"])
+        new_session.verify_ssl = snapshot["verify_ssl"]
+        new_session.timeout = snapshot["timeout"]
+        new_session.application = snapshot["application"]
+        new_session.trust_env = snapshot["trust_env"]
+        new_session.http_pool_connections = snapshot["http_pool_connections"]
+        new_session.http_pool_maxsize = snapshot["http_pool_maxsize"]
+        new_session.session_token = snapshot["session_token"]
+        new_session.session_auth_endpoint = snapshot["session_auth_endpoint"]
+        new_session.session_auth_token = snapshot["session_auth_token"]
+        new_session._configure_transport()
+        new_session.current_session.cookies = self._clone_cookie_jar()
+        new_session.request_observer = snapshot["request_observer"]
         return new_session
 
     def set_request_observer(self, observer: Optional[Callable[..., None]]) -> None:
@@ -73,10 +194,19 @@ class MagicSession:
         Args:
             token: Bearer token string
         """
-        self.session_token = token
-        if token:
-            self.session_auth_endpoint = None
-            self.session_auth_token = None
+        with self._auth_lock:
+            old_token = self.session_token
+            self.session_token = token
+            if token:
+                self.session_auth_endpoint = None
+                self.session_auth_token = None
+        if old_token != token:
+            logger.info(
+                "MagicSession bind_token changed %s old=%s new=%s",
+                self.auth_summary(),
+                self._mask_token(old_token),
+                self._mask_token(token),
+            )
 
     def bind_auth_secret(self, endpoint: str, auth_token: str) -> None:
         """Bind signature authentication credentials.
@@ -85,10 +215,16 @@ class MagicSession:
             endpoint: Authentication endpoint
             auth_token: Authentication token
         """
-        self.session_auth_endpoint = endpoint
-        self.session_auth_token = auth_token
-        if endpoint and auth_token:
-            self.session_token = None
+        with self._auth_lock:
+            self.session_auth_endpoint = endpoint
+            self.session_auth_token = auth_token
+            if endpoint and auth_token:
+                self.session_token = None
+        logger.info(
+            "MagicSession bind_auth_secret updated %s endpoint=%s",
+            self.auth_summary(),
+            endpoint,
+        )
 
     def bind_application(self, application: str) -> None:
         """Bind application identifier.
@@ -96,7 +232,53 @@ class MagicSession:
         Args:
             application: Application identifier string
         """
-        self.application = application
+        with self._auth_lock:
+            self.application = application
+
+    def sync_from(self, other: 'MagicSession') -> None:
+        """Synchronize runtime/auth state from another session instance."""
+        if other is None:
+            return
+
+        if other is self:
+            return
+
+        first, second = (self, other) if id(self) <= id(other) else (other, self)
+        with first._auth_lock:
+            with second._auth_lock:
+                before_summary = self.auth_summary()
+                before_token = self._mask_token(self.session_token)
+                before_sig = self.session_auth_endpoint
+
+                self.base_url = other.base_url
+                self.namespace = other.namespace
+                self.session_token = other.session_token
+                self.session_auth_endpoint = other.session_auth_endpoint
+                self.session_auth_token = other.session_auth_token
+                self.application = other.application
+                self.verify_ssl = other.verify_ssl
+                self.timeout = other.timeout
+                self.trust_env = other.trust_env
+                self.http_pool_connections = other.http_pool_connections
+                self.http_pool_maxsize = other.http_pool_maxsize
+                self.request_observer = other.request_observer
+                self._configure_transport()
+                self.current_session.cookies = other._clone_cookie_jar()
+        logger.info(
+            "MagicSession sync_from updated session_obj=0x%x from_session_obj=0x%x old_token=%s old_sig=%s new_state=%s",
+            id(self),
+            id(other),
+            before_token,
+            before_sig or "",
+            self.auth_summary(),
+        )
+
+    def close(self) -> None:
+        """Close the underlying HTTP session."""
+        try:
+            self.current_session.close()
+        except Exception:
+            logger.debug('Close requests session failed', exc_info=True)
 
     def header(self) -> Dict[str, str]:
         """Generate request headers with authentication.
@@ -104,22 +286,23 @@ class MagicSession:
         Returns:
             Dictionary of HTTP headers
         """
+        snapshot = self._auth_state_snapshot()
         header = {}
 
-        if self.namespace and self.namespace != '':
-            header['X-Mp-Namespace'] = self.namespace
+        if snapshot["namespace"] and snapshot["namespace"] != '':
+            header['X-Mp-Namespace'] = snapshot["namespace"]
 
-        if self.application and self.application != '':
-            header['X-Mp-Application'] = self.application
+        if snapshot["application"] and snapshot["application"] != '':
+            header['X-Mp-Application'] = snapshot["application"]
 
         # Priority: signature auth over bearer token
-        if self.session_auth_endpoint and self.session_auth_token:
-            credential_val = f"Credential={self.session_auth_endpoint}"
-            signature_val = f"Signature={self.session_auth_token}"
+        if snapshot["session_auth_endpoint"] and snapshot["session_auth_token"]:
+            credential_val = f"Credential={snapshot['session_auth_endpoint']}"
+            signature_val = f"Signature={snapshot['session_auth_token']}"
             token_val = f"{credential_val},{signature_val}"
             header["Authorization"] = f'Sig {token_val}'
-        elif self.session_token:
-            header["Authorization"] = f'Bearer {self.session_token}'
+        elif snapshot["session_token"]:
+            header["Authorization"] = f"Bearer {snapshot['session_token']}"
 
         return header
 
@@ -167,7 +350,15 @@ class MagicSession:
         kwargs.setdefault('headers', self.header())
         kwargs.setdefault('verify', self.verify_ssl)
         kwargs.setdefault('timeout', self.timeout)
-        
+        auth_header = kwargs.get('headers', {}).get('Authorization', '')
+        if not auth_header and '/api/v1/cas/session/login/' not in url:
+            logger.warning(
+                'Request without Authorization %s method=%s url=%s',
+                self.auth_summary(),
+                method.upper(),
+                url,
+            )
+
         try:
             logger.debug('Making %s request to %s', method.upper(), full_url)
             response = self.current_session.request(method, full_url, **kwargs)
@@ -222,6 +413,14 @@ class MagicSession:
         except requests.exceptions.RequestException as e:
             logger.error('HTTP request failed: %s', e)
             status_code = getattr(e.response, 'status_code', 0) if hasattr(e, 'response') else 0
+            if status_code in (401, 403):
+                logger.error(
+                    'Auth failure request_state=%s sent_auth=%s method=%s url=%s',
+                    self.auth_summary(),
+                    self._describe_authorization(auth_header),
+                    method.upper(),
+                    url,
+                )
             payload = {
                 "error": {
                     "code": 100,

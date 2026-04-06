@@ -19,7 +19,10 @@ ensure_test_paths(__file__)
 
 from session import MagicSession
 from cas.cas import Cas
+import json
 import logging
+import os
+import re
 import unittest
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
@@ -34,6 +37,10 @@ except Exception:  # pragma: no cover - optional dependency in local tooling onl
 
 logger = logging.getLogger(__name__)
 
+ENTITY_DEFINITION_ROOT = "/home/rangh/codespace/magicOrm/test/vmi/entity"
+_ENTITY_DEFINITION_CACHE: Dict[str, Dict[str, Any]] = {}
+_ENTITY_DEFINITION_INDEX: Optional[Dict[Tuple[str, str], Dict[str, Any]]] = None
+
 
 class VMITestCase(unittest.TestCase):
     """VMI 模块测试基类
@@ -46,8 +53,270 @@ class VMITestCase(unittest.TestCase):
     """
 
     namespace = ""
+    entity_definition: Optional[str] = None
 
     _cleanup_ids: Dict[str, List[str]] = {}
+
+    @staticmethod
+    def _camel_to_snake(name: str) -> str:
+        return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+    @classmethod
+    def _load_entity_definition(cls, relative_path: str) -> Dict[str, Any]:
+        if relative_path not in _ENTITY_DEFINITION_CACHE:
+            file_path = os.path.join(ENTITY_DEFINITION_ROOT, relative_path)
+            with open(file_path, "r", encoding="utf-8") as handle:
+                _ENTITY_DEFINITION_CACHE[relative_path] = json.load(handle)
+        return _ENTITY_DEFINITION_CACHE[relative_path]
+
+    @classmethod
+    def _entity_definition_index(cls) -> Dict[Tuple[str, str], Dict[str, Any]]:
+        global _ENTITY_DEFINITION_INDEX
+        if _ENTITY_DEFINITION_INDEX is None:
+            index: Dict[Tuple[str, str], Dict[str, Any]] = {}
+            for root, _, files in os.walk(ENTITY_DEFINITION_ROOT):
+                for name in files:
+                    if not name.endswith(".json"):
+                        continue
+                    file_path = os.path.join(root, name)
+                    relative_path = os.path.relpath(file_path, ENTITY_DEFINITION_ROOT)
+                    definition = cls._load_entity_definition(relative_path)
+                    index[(definition.get("pkgPath", ""), definition.get("name", ""))] = definition
+            _ENTITY_DEFINITION_INDEX = index
+        return _ENTITY_DEFINITION_INDEX
+
+    @classmethod
+    def get_entity_definition(cls) -> Dict[str, Any]:
+        if not cls.entity_definition:
+            raise AssertionError(f"{cls.__name__} 未声明 entity_definition")
+        return cls._load_entity_definition(cls.entity_definition)
+
+    @classmethod
+    def _definition_entity_key(cls) -> str:
+        definition = cls.get_entity_definition()
+        return cls._camel_to_snake(definition["name"])
+
+    @classmethod
+    def get_entity_sdk(cls):
+        sdk_attr = f"{cls._definition_entity_key()}_sdk"
+        if not hasattr(cls, sdk_attr):
+            raise AssertionError(f"{cls.__name__} 缺少 SDK: {sdk_attr}")
+        return getattr(cls, sdk_attr)
+
+    @classmethod
+    def get_entity_query_method_name(cls) -> str:
+        return f"query_{cls._definition_entity_key()}"
+
+    @classmethod
+    def _view_fields(cls, definition: Dict[str, Any], view_name: str) -> List[Dict[str, Any]]:
+        fields = []
+        for field in definition.get("fields", []):
+            spec = field.get("spec", {})
+            if view_name in (spec.get("viewDeclare") or []):
+                fields.append(field)
+        return fields
+
+    @classmethod
+    def _detail_fields(cls, definition: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return cls._view_fields(definition, "detail")
+
+    @classmethod
+    def _lite_field_names(cls, definition: Dict[str, Any]) -> set:
+        return {field["name"] for field in cls._view_fields(definition, "lite")}
+
+    @classmethod
+    def _detail_field_names(cls, definition: Dict[str, Any]) -> set:
+        return {field["name"] for field in cls._detail_fields(definition)}
+
+    @classmethod
+    def _readonly_detail_fields(cls, definition: Dict[str, Any]) -> List[str]:
+        names: List[str] = []
+        for field in cls._detail_fields(definition):
+            constraint = field.get("spec", {}).get("constraint", "")
+            if "ro" in str(constraint).split(","):
+                names.append(field["name"])
+        return names
+
+    @classmethod
+    def _field_type_info(cls, field_definition: Dict[str, Any]) -> Dict[str, Any]:
+        field_type = field_definition.get("type", {})
+        elem_type = field_type.get("elemType")
+        if isinstance(elem_type, dict) and elem_type.get("pkgPath"):
+            return elem_type
+        return field_type
+
+    @classmethod
+    def _resolve_related_definition(
+        cls, field_definition: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        type_info = cls._field_type_info(field_definition)
+        pkg_path = type_info.get("pkgPath") or ""
+        name = type_info.get("name") or ""
+        if not pkg_path or not name:
+            return None
+        return cls._entity_definition_index().get((pkg_path, name))
+
+    @staticmethod
+    def _normalize_contract_value(value: Any) -> Any:
+        if isinstance(value, dict):
+            if "id" in value:
+                return value.get("id")
+            return value
+        if isinstance(value, list):
+            normalized = []
+            for item in value:
+                if isinstance(item, dict) and "id" in item:
+                    normalized.append(item.get("id"))
+                else:
+                    normalized.append(item)
+            return normalized
+        return value
+
+    def assert_entity_matches_definition(
+        self,
+        entity: Dict[str, Any],
+        *,
+        context: str = "实体响应",
+        required_fields: Optional[List[str]] = None,
+    ) -> None:
+        definition = self.get_entity_definition()
+        self.assertIsInstance(entity, dict, f"{context}必须为对象")
+
+        expected_fields = self._detail_field_names(definition)
+        actual_fields = set(entity.keys())
+        unexpected_fields = sorted(actual_fields - expected_fields)
+
+        self.assertFalse(
+            unexpected_fields,
+            f"{context}返回了未声明为 detail 的字段: {unexpected_fields}",
+        )
+
+        if required_fields:
+            missing_required_fields = sorted(set(required_fields) - actual_fields)
+            self.assertFalse(
+                missing_required_fields,
+                f"{context}缺少必须返回字段: {missing_required_fields}",
+            )
+
+        for field_definition in self._detail_fields(definition):
+            field_name = field_definition["name"]
+            relation_definition = self._resolve_related_definition(field_definition)
+            if not relation_definition or field_name not in entity:
+                continue
+
+            allowed_relation_fields = self._lite_field_names(relation_definition)
+            if not allowed_relation_fields:
+                continue
+
+            value = entity.get(field_name)
+            if isinstance(value, dict):
+                unexpected_relation_fields = sorted(set(value.keys()) - allowed_relation_fields)
+                self.assertFalse(
+                    unexpected_relation_fields,
+                    f"{context}.{field_name}超出 lite 视图: {unexpected_relation_fields}",
+                )
+            elif isinstance(value, list):
+                for index, item in enumerate(value):
+                    if not isinstance(item, dict):
+                        continue
+                    unexpected_relation_fields = sorted(set(item.keys()) - allowed_relation_fields)
+                    self.assertFalse(
+                        unexpected_relation_fields,
+                        f"{context}.{field_name}[{index}]超出 lite 视图: {unexpected_relation_fields}",
+                    )
+
+    def assert_entity_round_trip(
+        self,
+        created_entity: Dict[str, Any],
+        queried_entity: Dict[str, Any],
+        *,
+        context: str = "查询返回",
+        required_fields: Optional[List[str]] = None,
+    ) -> None:
+        self.assert_entity_matches_definition(created_entity, context="创建返回")
+        self.assert_entity_matches_definition(
+            queried_entity, context=context, required_fields=required_fields
+        )
+        self.assertEqual(
+            queried_entity.get("id"),
+            created_entity.get("id"),
+            f"{context}ID与创建结果不一致",
+        )
+
+        definition = self.get_entity_definition()
+        for field_definition in self._detail_fields(definition):
+            field_name = field_definition["name"]
+            if field_name not in created_entity:
+                continue
+            expected = self._normalize_contract_value(created_entity.get(field_name))
+            actual = self._normalize_contract_value(queried_entity.get(field_name))
+            self.assertEqual(
+                actual,
+                expected,
+                f"{context}字段{field_name}与创建结果不一致",
+            )
+
+    def assert_update_round_trip(
+        self,
+        entity_id: Union[int, str],
+        updated_entity: Dict[str, Any],
+        *,
+        expected_updates: Dict[str, Any],
+        original_entity: Optional[Dict[str, Any]] = None,
+        context: str = "更新返回",
+        required_fields: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        self.assertIsNotNone(updated_entity, f"{context}为空")
+        update_required_fields = list(expected_updates.keys())
+        if required_fields:
+            update_required_fields.extend(required_fields)
+        self.assert_entity_matches_definition(
+            updated_entity,
+            context=context,
+            required_fields=update_required_fields,
+        )
+
+        for field_name, expected_value in expected_updates.items():
+            self.assertEqual(
+                self._normalize_contract_value(updated_entity.get(field_name)),
+                self._normalize_contract_value(expected_value),
+                f"{context}字段{field_name}不匹配",
+            )
+
+        query_method = getattr(self.get_entity_sdk(), self.get_entity_query_method_name())
+        queried_entity = query_method(entity_id)
+        self.assertIsNotNone(queried_entity, f"更新后查询失败: {entity_id}")
+        self.assert_entity_matches_definition(
+            queried_entity,
+            context="更新后查询",
+            required_fields=update_required_fields,
+        )
+
+        for field_name, expected_value in expected_updates.items():
+            self.assertEqual(
+                self._normalize_contract_value(queried_entity.get(field_name)),
+                self._normalize_contract_value(expected_value),
+                f"更新后查询字段{field_name}不匹配",
+            )
+
+        if original_entity:
+            definition = self.get_entity_definition()
+            for field_name in self._readonly_detail_fields(definition):
+                if field_name not in original_entity:
+                    continue
+                expected_value = self._normalize_contract_value(original_entity.get(field_name))
+                self.assertEqual(
+                    self._normalize_contract_value(updated_entity.get(field_name)),
+                    expected_value,
+                    f"{context}只读字段{field_name}被修改",
+                )
+                self.assertEqual(
+                    self._normalize_contract_value(queried_entity.get(field_name)),
+                    expected_value,
+                    f"更新后查询只读字段{field_name}被修改",
+                )
+
+        return queried_entity
 
     @classmethod
     def log_suite_start(cls, message: Optional[str] = None) -> None:

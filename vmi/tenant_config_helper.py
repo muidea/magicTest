@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONCURRENT_TENANT_IDS = ["t001", "t002", "t003", "t004", "t005"]
 
 
+def _render_tenant_url(template: str, tenant_id: str) -> str:
+    """Render a tenant URL template, accepting both {tenant} and {tenant_id}."""
+    return template.format(tenant=tenant_id, tenant_id=tenant_id)
+
+
 def _normalize_tenant_ids(raw_value: Any) -> List[str]:
     if raw_value is None:
         return []
@@ -84,7 +89,7 @@ def get_multi_tenant_config() -> Dict[str, Any]:
             continue
         tenants[tenant_id] = _build_tenant_entry(
             tenant_id=tenant_id,
-            server_url=tenant_url_template.format(tenant=tenant_id),
+            server_url=_render_tenant_url(tenant_url_template, tenant_id),
             username=credentials["username"],
             password=credentials["password"],
         )
@@ -206,6 +211,7 @@ def create_multi_tenant_config_template() -> Dict[str, Any]:
         "environment": "remote",
         "default_tenant": "autotest",
         "request_namespace": "",
+        "request_application": "",
         "default_server_url": "https://autotest.remote.vpc",
         "tenant_targets": list(DEFAULT_CONCURRENT_TENANT_IDS),
         "tenant_url_template": "https://{tenant}.remote.vpc",
@@ -213,14 +219,30 @@ def create_multi_tenant_config_template() -> Dict[str, Any]:
             "username": "administrator",
             "password": "administrator",
         },
+        "target": {
+            "remote_host": "",
+            "remote_user": "",
+            "deployment_mode": "",
+        },
+        "observability": {
+            "prometheus_url": "",
+        },
         "session": {
             "refresh_interval": 540,
             "timeout": 1800,
         },
         "concurrent": {
-            "max_workers": 10,
-            "timeout": 30,
+            "max_workers": 40,
+            "timeout": 900,
             "retry_count": 3,
+            "workers_per_tenant": 8,
+            "iterations_per_worker": 16,
+            "write_every": 2,
+            "hotspot_read_rounds": 1,
+            "hotspot_query_rounds": 1,
+            "hotspot_prewrite_query": False,
+            "hotspot_shared_context_per_tenant": True,
+            "hotspot_measure_loop_only": True,
         },
         "aging": {
             "duration_hours": 24,

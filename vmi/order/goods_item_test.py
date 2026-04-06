@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class GoodsItemTestCase(VMITestCase):
+    entity_definition = "order/goodsItem.json"
 
     @classmethod
     def _init_sdk(cls):
@@ -65,9 +66,10 @@ class GoodsItemTestCase(VMITestCase):
         }
         goods_item = self.goods_item_sdk.create_goods_item(goods_item_param)
         self.assertIsNotNone(goods_item, "创建商品条目失败")
-        required_fields = ["id", "sku", "name", "price", "count", "namespace"]
+        required_fields = ["id", "sku", "name", "price", "count"]
         for field in required_fields:
             self.assertIn(field, goods_item, f"商品条目缺少必填字段: {field}")
+        self.assert_entity_matches_definition(goods_item, context="创建商品条目返回")
         self.test_data.append(goods_item)
         self.log_test_success(f"✓ 商品条目创建成功: ID={goods_item.get('id')}")
 
@@ -83,7 +85,7 @@ class GoodsItemTestCase(VMITestCase):
         self.assertIsNotNone(created_item, "创建商品条目失败")
         queried_item = self.goods_item_sdk.query_goods_item(created_item["id"])
         self.assertIsNotNone(queried_item, "查询商品条目失败")
-        self.assertEqual(queried_item["id"], created_item["id"], "ID不匹配")
+        self.assert_entity_round_trip(created_item, queried_item, context="查询商品条目返回")
         self.test_data.append(created_item)
         self.log_test_success(f"✓ 商品条目查询成功: ID={queried_item.get('id')}")
 
@@ -101,11 +103,14 @@ class GoodsItemTestCase(VMITestCase):
         updated_item = self.goods_item_sdk.update_goods_item(
             created_item["id"], update_param
         )
-        if updated_item:
-            self.assertEqual(updated_item["name"], "更新后商品", "更新后名称不匹配")
-            self.log_test_success(f"✓ 商品条目更新成功: ID={updated_item.get('id')}")
-        else:
-            self.log_test_observation("⚠ 商品条目更新未返回结果")
+        queried_item = self.assert_update_round_trip(
+            created_item["id"],
+            updated_item,
+            expected_updates={"name": "更新后商品", "price": 250.0},
+            original_entity=created_item,
+            context="更新商品条目返回",
+        )
+        self.log_test_success(f"✓ 商品条目更新成功: ID={queried_item.get('id')}")
         self.test_data.append(created_item)
 
     def test_delete_goods_item(self):
@@ -220,9 +225,10 @@ class GoodsItemTestCase(VMITestCase):
         }
         goods_item = self.goods_item_sdk.create_goods_item(goods_item_param)
         self.assertIsNotNone(goods_item, "创建商品条目失败")
-        auto_fields = ["id", "namespace"]
+        auto_fields = ["id"]
         for field in auto_fields:
             self.assertIn(field, goods_item, f"缺少自动生成字段: {field}")
+        self.assert_entity_matches_definition(goods_item, context="自动字段商品条目返回")
         self.test_data.append(goods_item)
         self.log_test_success(f"✓ 系统自动生成字段验证成功: ID={goods_item.get('id')}")
 

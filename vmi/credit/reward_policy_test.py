@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 class RewardPolicyTestCase(VMITestCase):
     namespace = ""
+    entity_definition = "credit/rewardPolicy/rewardPolicy.json"
 
     @classmethod
     def setUpClass(cls):
@@ -89,10 +90,10 @@ class RewardPolicyTestCase(VMITestCase):
             "status",
             "creater",
             "createTime",
-            "namespace",
         ]
         for field in required_fields:
             self.assertIn(field, reward_policy, f"积分策略缺少必填字段: {field}")
+        self.assert_entity_matches_definition(reward_policy, context="创建积分策略返回")
         self.test_data.append(reward_policy)
         self.log_test_success(f"✓ 积分策略创建成功: ID={reward_policy.get('id')}")
 
@@ -112,7 +113,9 @@ class RewardPolicyTestCase(VMITestCase):
             created_policy["id"]
         )
         self.assertIsNotNone(queried_policy, "查询积分策略失败")
-        self.assertEqual(queried_policy["id"], created_policy["id"], "ID不匹配")
+        self.assert_entity_round_trip(
+            created_policy, queried_policy, context="查询积分策略返回"
+        )
         self.test_data.append(created_policy)
         self.log_test_success(f"✓ 积分策略查询成功: ID={queried_policy.get('id')}")
 
@@ -132,11 +135,14 @@ class RewardPolicyTestCase(VMITestCase):
         updated_policy = self.reward_policy_sdk.update_reward_policy(
             created_policy["id"], update_param
         )
-        if updated_policy:
-            self.assertEqual(updated_policy["name"], "更新后策略", "更新后名称不匹配")
-            self.log_test_success(f"✓ 积分策略更新成功: ID={updated_policy.get('id')}")
-        else:
-            self.log_test_observation("⚠ 积分策略更新未返回结果")
+        queried_policy = self.assert_update_round_trip(
+            created_policy["id"],
+            updated_policy,
+            expected_updates={"name": "更新后策略", "description": "更新后描述"},
+            original_entity=created_policy,
+            context="更新积分策略返回",
+        )
+        self.log_test_success(f"✓ 积分策略更新成功: ID={queried_policy.get('id')}")
         self.test_data.append(created_policy)
 
     def test_delete_reward_policy(self):
@@ -239,9 +245,10 @@ class RewardPolicyTestCase(VMITestCase):
         }
         reward_policy = self.reward_policy_sdk.create_reward_policy(reward_policy_param)
         self.assertIsNotNone(reward_policy, "创建积分策略失败")
-        auto_fields = ["id", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, reward_policy, f"缺少自动生成字段: {field}")
+        self.assert_entity_matches_definition(reward_policy, context="自动字段积分策略返回")
         self.test_data.append(reward_policy)
         self.log_test_success(f"✓ 系统自动生成字段验证成功: ID={reward_policy.get('id')}")
 
@@ -257,10 +264,9 @@ class RewardPolicyTestCase(VMITestCase):
             reward_policy_param
         )
         self.assertIsNotNone(created_policy, "创建积分策略失败")
-        if "modifyTime" in created_policy:
-            self.log_test_observation("⚠ 当前服务返回了未在定义中声明的 modifyTime 字段，测试仅记录现象")
-        else:
-            self.log_test_success("✓ 当前定义未声明 modifyTime，返回结果与定义一致")
+        self.assert_entity_matches_definition(created_policy, context="修改时间积分策略创建返回")
+        self.assertNotIn("modifyTime", created_policy, "定义未声明 modifyTime，不应返回该字段")
+        self.log_test_success("✓ 当前定义未声明 modifyTime，返回结果与定义一致")
         self.test_data.append(created_policy)
 
     def test_reward_policy_status_validation(self):

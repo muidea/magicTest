@@ -7,7 +7,7 @@ import json
 import logging
 import os
 from copy import deepcopy
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -15,16 +15,26 @@ CONFIG_FILE = os.path.join(os.path.dirname(__file__), "test_config.json")
 DEFAULT_TENANT_TARGETS = ["t001", "t002", "t003", "t004", "t005"]
 
 _config_cache = None
+ENV_OVERRIDE_PREFIX = "MAGICTEST_"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "mode": "single_tenant",
     "environment": "local",
     "default_tenant": "autotest",
     "request_namespace": "",
+    "request_application": "",
     "default_server_url": "https://autotest.local.vpc",
     "tenant_targets": [],
     "tenant_url_template": "https://{tenant}.local.vpc",
     "credentials": {"username": "administrator", "password": "administrator"},
+    "target": {
+        "remote_host": "",
+        "remote_user": "",
+        "deployment_mode": "",
+    },
+    "observability": {
+        "prometheus_url": "",
+    },
     "session": {"refresh_interval": 540, "timeout": 1800},
     "pytest": {
         "markers": [
@@ -39,7 +49,19 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "addopts": ["-v", "--tb=short", "--strict-markers", "--durations=10"],
         "log_level": "INFO",
     },
-    "concurrent": {"max_workers": 10, "timeout": 30, "retry_count": 3},
+    "concurrent": {
+        "max_workers": 40,
+        "timeout": 900,
+        "retry_count": 3,
+        "workers_per_tenant": 8,
+        "iterations_per_worker": 16,
+        "write_every": 2,
+        "hotspot_read_rounds": 1,
+        "hotspot_query_rounds": 1,
+        "hotspot_prewrite_query": False,
+        "hotspot_shared_context_per_tenant": True,
+        "hotspot_measure_loop_only": True,
+    },
     "aging": {
         "duration_hours": 24,
         "concurrent_threads": 10,
@@ -96,7 +118,119 @@ def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     normalized["tenant_targets"] = _normalize_tenant_targets(
         normalized.get("tenant_targets")
     )
+    _apply_env_overrides(normalized)
     return normalized
+
+
+def _env_value(name: str) -> Optional[str]:
+    value = os.getenv(f"{ENV_OVERRIDE_PREFIX}{name}")
+    if value is None:
+        return None
+
+    stripped = value.strip()
+    return stripped if stripped != "" else None
+
+
+def _env_int(name: str) -> Optional[int]:
+    value = _env_value(name)
+    if value is None:
+        return None
+
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning("忽略无效整型环境变量 %s%s=%s", ENV_OVERRIDE_PREFIX, name, value)
+        return None
+
+
+def _env_bool(name: str) -> Optional[bool]:
+    value = _env_value(name)
+    if value is None:
+        return None
+
+    lowered = value.lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+
+    logger.warning("忽略无效布尔环境变量 %s%s=%s", ENV_OVERRIDE_PREFIX, name, value)
+    return None
+
+
+def _apply_env_if_present(
+    target: Dict[str, Any], env_name: str, key: str, caster=None
+) -> None:
+    if caster is None:
+        value = _env_value(env_name)
+    else:
+        value = caster(env_name)
+
+    if value is not None:
+        target[key] = value
+
+
+def _apply_env_overrides(config: Dict[str, Any]) -> None:
+    _apply_env_if_present(config, "MODE", "mode")
+    _apply_env_if_present(config, "ENVIRONMENT", "environment")
+    _apply_env_if_present(config, "DEFAULT_TENANT", "default_tenant")
+    _apply_env_if_present(config, "SERVER_URL", "default_server_url")
+    _apply_env_if_present(config, "NAMESPACE", "request_namespace")
+    _apply_env_if_present(config, "REQUEST_APPLICATION", "request_application")
+    _apply_env_if_present(config, "TENANT_URL_TEMPLATE", "tenant_url_template")
+
+    tenant_targets = _env_value("TENANT_TARGETS")
+    if tenant_targets is not None:
+        config["tenant_targets"] = _normalize_tenant_targets(tenant_targets)
+
+    credentials = config.setdefault("credentials", {})
+    _apply_env_if_present(credentials, "USERNAME", "username")
+    _apply_env_if_present(credentials, "PASSWORD", "password")
+
+    target = config.setdefault("target", {})
+    _apply_env_if_present(target, "REMOTE_HOST", "remote_host")
+    _apply_env_if_present(target, "REMOTE_USER", "remote_user")
+    _apply_env_if_present(target, "DEPLOYMENT_MODE", "deployment_mode")
+
+    observability = config.setdefault("observability", {})
+    _apply_env_if_present(observability, "PROMETHEUS_URL", "prometheus_url")
+
+    session = config.setdefault("session", {})
+    _apply_env_if_present(session, "SESSION_REFRESH_INTERVAL", "refresh_interval", _env_int)
+    _apply_env_if_present(session, "SESSION_TIMEOUT", "timeout", _env_int)
+
+    concurrent = config.setdefault("concurrent", {})
+    _apply_env_if_present(concurrent, "MAX_WORKERS", "max_workers", _env_int)
+    _apply_env_if_present(concurrent, "TIMEOUT", "timeout", _env_int)
+    _apply_env_if_present(concurrent, "RETRY_COUNT", "retry_count", _env_int)
+    _apply_env_if_present(
+        concurrent, "WORKERS_PER_TENANT", "workers_per_tenant", _env_int
+    )
+    _apply_env_if_present(
+        concurrent, "ITERATIONS_PER_WORKER", "iterations_per_worker", _env_int
+    )
+    _apply_env_if_present(concurrent, "WRITE_EVERY", "write_every", _env_int)
+    _apply_env_if_present(
+        concurrent, "HOTSPOT_READ_ROUNDS", "hotspot_read_rounds", _env_int
+    )
+    _apply_env_if_present(
+        concurrent, "HOTSPOT_QUERY_ROUNDS", "hotspot_query_rounds", _env_int
+    )
+    _apply_env_if_present(
+        concurrent, "HOTSPOT_PREWRITE_QUERY", "hotspot_prewrite_query", _env_bool
+    )
+    _apply_env_if_present(
+        concurrent,
+        "HOTSPOT_SHARED_CONTEXT_PER_TENANT",
+        "hotspot_shared_context_per_tenant",
+        _env_bool,
+    )
+    _apply_env_if_present(
+        concurrent,
+        "HOTSPOT_MEASURE_LOOP_ONLY",
+        "hotspot_measure_loop_only",
+        _env_bool,
+    )
 
 
 def get_config() -> Dict[str, Any]:
@@ -153,6 +287,11 @@ def get_default_tenant() -> str:
     return str(get_config().get("default_tenant", "autotest"))
 
 
+def get_request_application() -> str:
+    """获取压测请求 application/run_id 标签。"""
+    return str(get_config().get("request_application", ""))
+
+
 def get_tenant_targets() -> List[str]:
     """获取启用的多租户目标列表。"""
     return list(get_config().get("tenant_targets", []))
@@ -173,6 +312,16 @@ def get_aging_params() -> Dict[str, Any]:
 def get_session_config() -> Dict[str, Any]:
     """获取会话配置。"""
     return dict(get_config().get("session", {}))
+
+
+def get_target_config() -> Dict[str, Any]:
+    """获取目标服务器信息。"""
+    return dict(get_config().get("target", {}))
+
+
+def get_observability_config() -> Dict[str, Any]:
+    """获取监控入口配置。"""
+    return dict(get_config().get("observability", {}))
 
 
 def get_concurrent_config() -> Dict[str, Any]:

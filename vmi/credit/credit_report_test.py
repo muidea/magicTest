@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 class CreditReportTestCase(VMITestCase):
     namespace = ""
+    entity_definition = "credit/creditReport.json"
 
     @classmethod
     def setUpClass(cls):
@@ -100,7 +101,6 @@ class CreditReportTestCase(VMITestCase):
             "available",
             "creater",
             "createTime",
-            "namespace",
         ]
         for field in required_fields:
             self.assertIn(field, credit_report, f"积分报表缺少必填字段: {field}")
@@ -250,7 +250,7 @@ class CreditReportTestCase(VMITestCase):
         }
         credit_report = self.credit_report_sdk.create_credit_report(credit_report_param)
         self.assertIsNotNone(credit_report, "创建积分报表失败")
-        auto_fields = ["id", "sn", "creater", "createTime", "namespace"]
+        auto_fields = ["id", "sn", "creater", "createTime"]
         for field in auto_fields:
             self.assertIn(field, credit_report, f"缺少自动生成字段: {field}")
         self.test_data.append(credit_report)
