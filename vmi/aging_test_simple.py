@@ -1577,30 +1577,42 @@ class AgingTestRunner:
             m["metrics"].get("total_entities", 0) for m in effective_history
         ]
 
+        def classify_trend(first, last, *, higher_is_better, tolerance=1e-9):
+            if abs(last - first) <= tolerance:
+                return "stable"
+            if higher_is_better:
+                return "improving" if last > first else "declining"
+            return "improving" if last < first else "worsening"
+
+        def classify_growth(first, last, tolerance=1e-9):
+            if abs(last - first) <= tolerance:
+                return "stable"
+            return "growing" if last > first else "shrinking"
+
         analysis = {
             "trend_analysis": {
                 "success_rate_trend": (
                     "stable"
                     if len(success_rates) < 2
-                    else (
-                        "improving"
-                        if success_rates[-1] > success_rates[0]
-                        else "declining"
+                    else classify_trend(
+                        success_rates[0],
+                        success_rates[-1],
+                        higher_is_better=True,
                     )
                 ),
                 "duration_trend": (
                     "stable"
                     if len(durations) < 2
-                    else ("improving" if durations[-1] < durations[0] else "worsening")
+                    else classify_trend(
+                        durations[0],
+                        durations[-1],
+                        higher_is_better=False,
+                    )
                 ),
                 "entity_growth_trend": (
                     "stable"
                     if len(entity_counts) < 2
-                    else (
-                        "growing"
-                        if entity_counts[-1] > entity_counts[0]
-                        else "shrinking"
-                    )
+                    else classify_growth(entity_counts[0], entity_counts[-1])
                 ),
                 "final_success_rate": success_rates[-1] if success_rates else 0,
                 "final_avg_duration": durations[-1] if durations else 0,
