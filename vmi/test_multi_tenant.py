@@ -291,6 +291,78 @@ class TestMultiTenantConfig(unittest.TestCase):
 
         logger.info("运行时环境变量覆盖测试通过")
 
+    def test_server_url_override_infers_remote_tenant_template(self):
+        """测试仅覆盖 server_url 时会自动切换并发租户地址模板。"""
+        self._write_config(
+            _build_config(
+                tenant_targets=["t001", "t002"],
+                tenant_url_template="https://{tenant}.local.vpc",
+                default_server_url="https://autotest.local.vpc",
+            )
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "MAGICTEST_SERVER_URL": "https://autotest.remote.vpc",
+                "MAGICTEST_TENANT_TARGETS": "t001,t002",
+            },
+            clear=False,
+        ):
+            _clear_config_cache()
+
+            from config_helper import get_server_url, get_tenant_url_template
+            from tenant_config_helper import get_concurrent_tenant_configs
+
+            self.assertEqual(get_server_url(), "https://autotest.remote.vpc")
+            self.assertEqual(
+                get_tenant_url_template(), "https://{tenant}.remote.vpc"
+            )
+
+            tenant_configs = get_concurrent_tenant_configs()
+            self.assertEqual(
+                tenant_configs["t001"]["server_url"], "https://t001.remote.vpc"
+            )
+            self.assertEqual(
+                tenant_configs["t002"]["server_url"], "https://t002.remote.vpc"
+            )
+
+        logger.info("server_url 自动推导远端租户模板测试通过")
+
+    def test_explicit_tenant_template_override_has_priority(self):
+        """测试显式 tenant_url_template 覆盖优先于 server_url 自动推导。"""
+        self._write_config(
+            _build_config(
+                tenant_targets=["t001"],
+                tenant_url_template="https://{tenant}.local.vpc",
+                default_server_url="https://autotest.local.vpc",
+            )
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "MAGICTEST_SERVER_URL": "https://autotest.remote.vpc",
+                "MAGICTEST_TENANT_URL_TEMPLATE": "https://{tenant}.custom.vpc",
+                "MAGICTEST_TENANT_TARGETS": "t001",
+            },
+            clear=False,
+        ):
+            _clear_config_cache()
+
+            from config_helper import get_tenant_url_template
+            from tenant_config_helper import get_concurrent_tenant_configs
+
+            self.assertEqual(
+                get_tenant_url_template(), "https://{tenant}.custom.vpc"
+            )
+            self.assertEqual(
+                get_concurrent_tenant_configs()["t001"]["server_url"],
+                "https://t001.custom.vpc",
+            )
+
+        logger.info("显式租户模板覆盖优先级测试通过")
+
     def test_single_tenant_cli_override_disables_multi_tenant_aging(self):
         """测试单租户 CLI 开关可覆盖默认多租户老化配置。"""
         self._write_config(_build_config(tenant_targets=["t001", "t002"]))

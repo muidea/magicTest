@@ -32,6 +32,7 @@ class MagicSession:
         session_auth_endpoint: Endpoint for signature authentication
         session_auth_token: Token for signature authentication
         application: Application identifier
+        source: Request source identifier used for monitoring correlation
         verify_ssl: Whether to verify SSL certificates
         timeout: Request timeout in seconds
     """
@@ -50,6 +51,7 @@ class MagicSession:
         self.session_auth_endpoint = None
         self.session_auth_token = None
         self.application = None
+        self.source = None
         self.verify_ssl = os.getenv('VERIFY_SSL', 'false').lower() != 'false'
         self.timeout = float(os.getenv('REQUEST_TIMEOUT', '30.0'))
         self.trust_env = self._resolve_trust_env()
@@ -126,6 +128,7 @@ class MagicSession:
                 "session_auth_endpoint": self.session_auth_endpoint,
                 "session_auth_token": self.session_auth_token,
                 "application": self.application,
+                "source": self.source,
                 "verify_ssl": self.verify_ssl,
                 "timeout": self.timeout,
                 "trust_env": self.trust_env,
@@ -173,6 +176,7 @@ class MagicSession:
         new_session.verify_ssl = snapshot["verify_ssl"]
         new_session.timeout = snapshot["timeout"]
         new_session.application = snapshot["application"]
+        new_session.source = snapshot["source"]
         new_session.trust_env = snapshot["trust_env"]
         new_session.http_pool_connections = snapshot["http_pool_connections"]
         new_session.http_pool_maxsize = snapshot["http_pool_maxsize"]
@@ -235,6 +239,11 @@ class MagicSession:
         with self._auth_lock:
             self.application = application
 
+    def bind_source(self, source: str) -> None:
+        """Bind request source identifier for monitoring correlation."""
+        with self._auth_lock:
+            self.source = source
+
     def sync_from(self, other: 'MagicSession') -> None:
         """Synchronize runtime/auth state from another session instance."""
         if other is None:
@@ -256,6 +265,7 @@ class MagicSession:
                 self.session_auth_endpoint = other.session_auth_endpoint
                 self.session_auth_token = other.session_auth_token
                 self.application = other.application
+                self.source = other.source
                 self.verify_ssl = other.verify_ssl
                 self.timeout = other.timeout
                 self.trust_env = other.trust_env
@@ -294,6 +304,9 @@ class MagicSession:
 
         if snapshot["application"] and snapshot["application"] != '':
             header['X-Mp-Application'] = snapshot["application"]
+
+        if snapshot["source"] and snapshot["source"] != '':
+            header['X-Mp-Source'] = snapshot["source"]
 
         # Priority: signature auth over bearer token
         if snapshot["session_auth_endpoint"] and snapshot["session_auth_token"]:

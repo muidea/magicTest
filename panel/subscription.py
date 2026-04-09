@@ -23,14 +23,14 @@ class SubscriptionClient:
         logger.error("%s失败: %s", action, err.get("message"))
 
     def filter_subscriptions(self, filter_param: Optional[Dict[str, Any]] = None) -> Optional[List[Dict[str, Any]]]:
-        response = self.session.get("/panel/hub/subscription/filter/", filter_param)
+        response = self.session.get("/panel/hub/subscriptions/", filter_param)
         if self._error(response) is not None:
             self._log_error("过滤订阅", response)
             return None
         return response.get("values", [])
 
     def query_subscription(self, subscription_id: int) -> Optional[Dict[str, Any]]:
-        response = self.session.get(f"/panel/hub/subscription/query/{subscription_id}")
+        response = self.session.get(f"/panel/hub/subscriptions/{subscription_id}")
         if self._error(response) is not None:
             self._log_error("查询订阅", response)
             return None
@@ -58,7 +58,7 @@ class SubscriptionClient:
         return response.get("value")
 
     def filter_endpoints(self, filter_param: Optional[Dict[str, Any]] = None) -> Optional[List[Dict[str, Any]]]:
-        response = self.session.get("/panel/hub/subscription/endpoint/filter/", filter_param)
+        response = self.session.get("/panel/hub/subscription/endpoints/", filter_param)
         if self._error(response) is not None:
             self._log_error("过滤订阅 endpoint", response)
             return None
@@ -66,7 +66,7 @@ class SubscriptionClient:
 
     def query_endpoint(self, subscription_id: int, endpoint_name: str) -> Optional[Dict[str, Any]]:
         response = self.session.get(
-            f"/panel/hub/subscription/endpoint/query/{subscription_id}",
+            f"/panel/hub/subscription/endpoints/{subscription_id}",
             {"endpointName": endpoint_name},
         )
         if self._error(response) is not None:
@@ -76,7 +76,7 @@ class SubscriptionClient:
 
     def create_endpoint(self, subscription_id: int, endpoint_name: str) -> Optional[Dict[str, Any]]:
         response = self.session.post(
-            "/panel/hub/subscription/endpoint/insert/",
+            "/panel/hub/subscription/endpoints/",
             {"subscription": subscription_id, "endpointName": endpoint_name},
         )
         if self._error(response) is not None:
@@ -86,7 +86,7 @@ class SubscriptionClient:
 
     def delete_endpoint(self, subscription_id: int, endpoint_name: str) -> Optional[Dict[str, Any]]:
         response = self.session.delete(
-            f"/panel/hub/subscription/endpoint/delete/{subscription_id}",
+            f"/panel/hub/subscription/endpoints/{subscription_id}",
             {"endpointName": endpoint_name},
         )
         if self._error(response) is not None:

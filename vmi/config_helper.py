@@ -8,6 +8,7 @@ import logging
 import os
 from copy import deepcopy
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 
@@ -170,14 +171,64 @@ def _apply_env_if_present(
         target[key] = value
 
 
+def infer_tenant_url_template(
+    server_url: str,
+    default_tenant: str = "autotest",
+) -> Optional[str]:
+    """Infer a tenant URL template from the default tenant server URL."""
+    candidate = str(server_url).strip()
+    if not candidate:
+        return None
+
+    parsed = urlsplit(candidate)
+    hostname = parsed.hostname
+    if not hostname:
+        return None
+
+    labels = hostname.split(".")
+    if not labels:
+        return None
+
+    if default_tenant and labels[0] == default_tenant:
+        labels[0] = "{tenant}"
+    else:
+        labels[0] = "{tenant}"
+
+    template_host = ".".join(labels)
+    template_netloc = template_host
+    if parsed.port is not None:
+        template_netloc = f"{template_host}:{parsed.port}"
+
+    return urlunsplit(
+        (
+            parsed.scheme,
+            template_netloc,
+            parsed.path,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
 def _apply_env_overrides(config: Dict[str, Any]) -> None:
     _apply_env_if_present(config, "MODE", "mode")
     _apply_env_if_present(config, "ENVIRONMENT", "environment")
     _apply_env_if_present(config, "DEFAULT_TENANT", "default_tenant")
-    _apply_env_if_present(config, "SERVER_URL", "default_server_url")
+    server_url_override = _env_value("SERVER_URL")
+    if server_url_override is not None:
+        config["default_server_url"] = server_url_override
     _apply_env_if_present(config, "NAMESPACE", "request_namespace")
     _apply_env_if_present(config, "REQUEST_APPLICATION", "request_application")
-    _apply_env_if_present(config, "TENANT_URL_TEMPLATE", "tenant_url_template")
+    tenant_url_template_override = _env_value("TENANT_URL_TEMPLATE")
+    if tenant_url_template_override is not None:
+        config["tenant_url_template"] = tenant_url_template_override
+    elif server_url_override is not None:
+        inferred_template = infer_tenant_url_template(
+            config.get("default_server_url", ""),
+            str(config.get("default_tenant", "autotest")),
+        )
+        if inferred_template:
+            config["tenant_url_template"] = inferred_template
 
     tenant_targets = _env_value("TENANT_TARGETS")
     if tenant_targets is not None:

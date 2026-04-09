@@ -8,6 +8,7 @@ VMI 统一测试入口
     python3 run_tests.py --quick         # 快速验证
     python3 run_tests.py --concurrent    # 并发测试
     python3 run_tests.py --hotspot       # 多租户热点压测
+    python3 run_tests.py --goods-hotspot # goods 专项热点压测
     python3 run_tests.py --hotspot --workers-per-tenant 12 --iterations-per-worker 20 --report-file hotspot-report.json
     python3 run_tests.py --scenario      # 场景测试
     python3 run_tests.py --aging 60      # 老化测试（60分钟）
@@ -110,11 +111,14 @@ def summarize_runtime_overrides(args: argparse.Namespace) -> Dict[str, Any]:
 def build_concurrent_cli_args(
     args: argparse.Namespace,
     hotspot_only: bool = False,
+    goods_hotspot_only: bool = False,
     full_flow_only: bool = False,
 ) -> List[str]:
     cmd = [python_cmd(), "concurrent_test_v2.py"]
     if hotspot_only:
         cmd.append("--hotspot")
+    if goods_hotspot_only:
+        cmd.append("--goods-hotspot")
     if full_flow_only:
         cmd.append("--full-flow")
     repeat = getattr(args, "repeat", None)
@@ -258,8 +262,38 @@ def run_hotspot_tests(
             f"{python_cmd()} -m unittest "
             "concurrent_test_v2.TestConcurrentMultiTenantBusinessOperations."
             "test_multi_tenant_hotspot_stress -v"
-        )
+    )
     return run_command(cmd, "多租户热点压测", env=env)
+
+
+def run_goods_hotspot_tests(
+    pytest_mode: bool = False,
+    env: Optional[Dict[str, str]] = None,
+    cli_args: Optional[argparse.Namespace] = None,
+) -> Tuple[bool, float]:
+    """运行 goods 专项热点压测"""
+    logger.info("运行 goods 专项热点压测")
+
+    if pytest_mode:
+        return run_pytest_command(
+            [
+                "concurrent_test_v2.py",
+                "-k",
+                "goods_hotspot",
+                "-v",
+                "--tb=short",
+            ],
+            "goods 专项热点压测 (pytest)",
+            env=env,
+        )
+
+    if cli_args is not None:
+        cmd = _shell_quote_args(
+            build_concurrent_cli_args(cli_args, goods_hotspot_only=True)
+        )
+    else:
+        cmd = f"{python_cmd()} concurrent_test_v2.py --goods-hotspot"
+    return run_command(cmd, "goods 专项热点压测", env=env)
 
 
 def run_scenario_tests(
@@ -448,6 +482,7 @@ def main():
     python3 run_tests.py --module        # 模块测试
     python3 run_tests.py --concurrent    # 并发测试
     python3 run_tests.py --hotspot       # 多租户热点压测
+    python3 run_tests.py --goods-hotspot # goods 专项热点压测
     python3 run_tests.py --hotspot --workers-per-tenant 12 --iterations-per-worker 20 --report-file hotspot-report.json
     python3 run_tests.py --scenario      # 场景测试
     python3 run_tests.py --aging 30      # 30分钟老化测试
@@ -461,6 +496,7 @@ def main():
     parser.add_argument("--validation", action="store_true", help="运行框架验证测试")
     parser.add_argument("--concurrent", action="store_true", help="运行并发测试")
     parser.add_argument("--hotspot", action="store_true", help="运行多租户热点压测")
+    parser.add_argument("--goods-hotspot", action="store_true", help="运行 goods 专项热点压测")
     parser.add_argument("--scenario", action="store_true", help="运行场景测试")
     parser.add_argument(
         "--aging",
@@ -634,6 +670,15 @@ def main():
                 (
                     "多租户热点压测",
                     *run_hotspot_tests(args.pytest, env=runtime_env, cli_args=args),
+                )
+            )
+        if args.goods_hotspot:
+            results.append(
+                (
+                    "goods 专项热点压测",
+                    *run_goods_hotspot_tests(
+                        args.pytest, env=runtime_env, cli_args=args
+                    ),
                 )
             )
         if args.scenario:

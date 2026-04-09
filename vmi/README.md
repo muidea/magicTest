@@ -139,6 +139,8 @@ python3 run_tests.py --hotspot
 python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --report-file hotspot-report.json
 python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --report-file hotspot-report.json
 python3 concurrent_test_v2.py --hotspot --ignore-env-proxy --server-url https://autotest.remote.vpc --tenant-targets t001,t002,t003,t004,t005 --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --prometheus-url https://apm.remote.vpc/prometheus/ --remote-user fedquery --remote-host 192.168.19.231 --deployment-mode docker --report-file hotspot-report.json
+
+当通过 `--server-url` 或 `MAGICTEST_SERVER_URL` 切换环境时，测试框架会自动按默认租户地址推导 `tenant_url_template`。只有在租户域名规则与默认入口不一致时，才需要显式传 `--tenant-url-template`。
 python3 run_tests.py --scenario
 python3 concurrent_test_v2.py
 ```

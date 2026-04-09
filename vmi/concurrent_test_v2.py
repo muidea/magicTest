@@ -54,10 +54,15 @@ class ConcurrentTestResult:
     http_qps: float = 0.0
     read_qps: float = 0.0
     write_tps: float = 0.0
+    http_host_distribution: List[Dict[str, Any]] = None
+    http_remote_requests: int = 0
+    http_local_requests: int = 0
 
     def __post_init__(self):
         if self.timestamp is None:
             self.timestamp = datetime.now().isoformat()
+        if self.http_host_distribution is None:
+            self.http_host_distribution = []
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -234,6 +239,21 @@ def _aggregate_application_values(
     return ranked
 
 
+def _prometheus_target_values(
+    values: Sequence[Dict[str, Any]],
+    label_names: Sequence[str],
+) -> List[Dict[str, Any]]:
+    targets: List[Dict[str, Any]] = []
+    for item in values:
+        metric = item.get("metric", {})
+        target = {label_name: str(metric.get(label_name, "")).strip() for label_name in label_names}
+        target["value"] = float(item.get("value", 0.0))
+        targets.append(target)
+
+    targets.sort(key=lambda item: item["value"], reverse=True)
+    return targets
+
+
 def _query_prometheus(prometheus_url: str, query: str) -> Dict[str, Any]:
     verify_ssl = os.getenv("VERIFY_SSL", "false").lower() != "false"
     endpoint = urljoin(prometheus_url.rstrip("/") + "/", "api/v1/query")
@@ -262,7 +282,6 @@ def build_prometheus_summary(metadata: Dict[str, Any]) -> Optional[Dict[str, Any
 
     window = str(metadata.get("prometheus_window", "10m"))
     application_label = json.dumps(request_application)
-    filtered_selector = f'job="magicbase",application={application_label}'
     summary: Dict[str, Any] = {
         "source": prometheus_url,
         "window": window,
@@ -275,31 +294,38 @@ def build_prometheus_summary(metadata: Dict[str, Any]) -> Optional[Dict[str, Any
     queries = {
         "http_requests_total_increase": (
             f"sum(increase(magicBase_magicbase_http_requests_total"
-            f"{{{filtered_selector}}}[{window}]))"
+            f"{{application={application_label}}}[{window}]))"
         ),
         "http_write_success_total_increase": (
             f"sum(increase(magicBase_magicbase_http_transactions_total"
-            f'{{{filtered_selector},kind="write",status="success"}}[{window}]))'
+            f'{{application={application_label},kind="write",status="success"}}[{window}]))'
         ),
         "http_path_distribution": (
             f"topk(10, sum by (path) (increase(magicBase_magicbase_http_requests_total"
-            f"{{{filtered_selector}}}[{window}])))"
+            f"{{application={application_label}}}[{window}])))"
         ),
         "orm_operations_total_increase": (
-            f'sum(increase(magicBase_magicorm_orm_operations_total{{job="magicbase"}}[{window}]))'
+            f"sum(increase(magicBase_magicorm_orm_operations_total[{window}]))"
         ),
         "database_queries_total_increase": (
-            f'sum(increase(magicBase_magicorm_database_queries_total{{job="magicbase"}}[{window}]))'
+            f"sum(increase(magicBase_magicorm_database_queries_total[{window}]))"
         ),
         "database_executions_total_increase": (
-            f'sum(increase(magicBase_magicorm_database_executions_total{{job="magicbase"}}[{window}]))'
+            f"sum(increase(magicBase_magicorm_database_executions_total[{window}]))"
         ),
         "http_requests_total_increase_unfiltered": (
-            f'sum(increase(magicBase_magicbase_http_requests_total{{job="magicbase"}}[{window}]))'
+            f"sum(increase(magicBase_magicbase_http_requests_total[{window}]))"
         ),
         "http_top_applications_unfiltered": (
             f"topk(10, sum by (application, path) (increase("
-            f"magicBase_magicbase_http_requests_total{{job=\"magicbase\"}}[{window}])))"
+            f"magicBase_magicbase_http_requests_total[{window}])))"
+        ),
+        "scrape_targets_up": 'up',
+        "http_metric_targets": (
+            "topk(20, sum by (job, instance) (magicBase_magicbase_http_requests_total))"
+        ),
+        "orm_metric_targets": (
+            "topk(20, sum by (job, instance) (magicBase_magicorm_orm_operations_total))"
         ),
     }
 
@@ -333,6 +359,31 @@ def build_prometheus_summary(metadata: Dict[str, Any]) -> Optional[Dict[str, Any
                 prometheus_url, queries["http_requests_total_increase_unfiltered"]
             )
         )
+        summary["scrape_targets_up"] = _prometheus_target_values(
+            _prometheus_vector_values(
+                _query_prometheus(prometheus_url, queries["scrape_targets_up"])
+            ),
+            ("job", "instance"),
+        )
+        summary["http_metric_targets"] = _prometheus_target_values(
+            _prometheus_vector_values(
+                _query_prometheus(prometheus_url, queries["http_metric_targets"])
+            ),
+            ("job", "instance"),
+        )
+        summary["orm_metric_targets"] = _prometheus_target_values(
+            _prometheus_vector_values(
+                _query_prometheus(prometheus_url, queries["orm_metric_targets"])
+            ),
+            ("job", "instance"),
+        )
+
+        if len(summary["http_metric_targets"]) <= 1:
+            summary["coverage_note"] = (
+                "HTTP metrics are currently exported by a very limited set of scrape "
+                "targets; cross-service pressure traffic may be only partially covered."
+            )
+
         if summary["http_requests_total_increase"] > 0.0:
             summary["application_label_retained"] = True
             summary["correlation_mode"] = "request_application"
@@ -386,6 +437,9 @@ class HTTPRequestMetricsCollector:
         self.read_requests = 0
         self.write_requests = 0
         self.total_elapsed = 0.0
+        self.host_counts: Dict[str, int] = defaultdict(int)
+        self.remote_requests = 0
+        self.local_requests = 0
 
     def observe(
         self,
@@ -397,12 +451,14 @@ class HTTPRequestMetricsCollector:
         response: Any,
         error: Optional[BaseException] = None,
     ) -> None:
-        path = urlparse(full_url or url).path or url
+        parsed_url = urlparse(full_url or url)
+        path = parsed_url.path or url
         if self._should_ignore_path(path):
             return
 
         request_kind = self._classify_request_kind(method, path)
         success = self._is_success(status_code, response, error)
+        host = parsed_url.netloc or parsed_url.hostname or ""
 
         with self.lock:
             self.total_requests += 1
@@ -417,11 +473,25 @@ class HTTPRequestMetricsCollector:
             else:
                 self.write_requests += 1
 
+            if host:
+                self.host_counts[host] += 1
+                hostname = host.split(":", 1)[0].lower()
+                if hostname.endswith(".remote.vpc"):
+                    self.remote_requests += 1
+                elif hostname.endswith(".local.vpc"):
+                    self.local_requests += 1
+
     def snapshot(self, total_time: float) -> Dict[str, float]:
         with self.lock:
             avg_response_time = (
                 self.total_elapsed / self.total_requests if self.total_requests else 0.0
             )
+            host_distribution = [
+                {"host": host, "count": count}
+                for host, count in sorted(
+                    self.host_counts.items(), key=lambda item: item[1], reverse=True
+                )
+            ]
             return {
                 "http_requests": self.total_requests,
                 "http_successful_requests": self.successful_requests,
@@ -432,6 +502,9 @@ class HTTPRequestMetricsCollector:
                 "http_qps": self.total_requests / total_time if total_time > 0 else 0.0,
                 "read_qps": self.read_requests / total_time if total_time > 0 else 0.0,
                 "write_tps": self.write_requests / total_time if total_time > 0 else 0.0,
+                "http_host_distribution": host_distribution,
+                "http_remote_requests": self.remote_requests,
+                "http_local_requests": self.local_requests,
             }
 
     @staticmethod
@@ -831,6 +904,13 @@ class ConcurrentTestRunner:
             logger.info(f"HTTP QPS: {result.http_qps:.2f}")
             logger.info(f"读QPS: {result.read_qps:.2f}")
             logger.info(f"写TPS: {result.write_tps:.2f}")
+            logger.info(f"remote.vpc 请求数: {result.http_remote_requests}")
+            logger.info(f"local.vpc 请求数: {result.http_local_requests}")
+            if result.http_host_distribution:
+                logger.info(
+                    "HTTP Host分布: %s",
+                    result.http_host_distribution[:10],
+                )
 
         if result.error_details:
             logger.info(f"\n错误详情 ({len(result.error_details)}个):")
@@ -1295,6 +1375,13 @@ class MultiTenantConcurrentRunner:
             logger.info(f"HTTP QPS: {result.http_qps:.2f}")
             logger.info(f"读QPS: {result.read_qps:.2f}")
             logger.info(f"写TPS: {result.write_tps:.2f}")
+            logger.info(f"remote.vpc 请求数: {result.http_remote_requests}")
+            logger.info(f"local.vpc 请求数: {result.http_local_requests}")
+            if result.http_host_distribution:
+                logger.info(
+                    "HTTP Host分布: %s",
+                    result.http_host_distribution[:10],
+                )
 
         if result.error_details:
             logger.info(f"\n错误详情 ({len(result.error_details)}个):")
@@ -3170,6 +3257,126 @@ class MultiTenantBusinessScenarioFactory:
         return test_hotspot_stress
 
 
+    @staticmethod
+    def create_goods_hotspot_stress_test(
+        write_every: int = 4,
+        read_rounds: int = 2,
+        query_rounds: int = 2,
+        prewrite_query: bool = False,
+        shared_context_provider: Optional[Callable[[str, Any], Dict[str, Any]]] = None,
+    ):
+        """创建只针对 goods 的热点读写压测场景。"""
+
+        def test_goods_hotspot_stress(
+            tenant_id: str,
+            worker_id: int,
+            iteration: int,
+            session_manager,
+        ):
+            if shared_context_provider is None:
+                context = MultiTenantBusinessScenarioFactory._prepare_hotspot_context(
+                    tenant_id=tenant_id,
+                    session_manager=session_manager,
+                )
+            else:
+                context = shared_context_provider(tenant_id, session_manager)
+            sdks = MultiTenantBusinessScenarioFactory._get_hotspot_sdks(session_manager)
+
+            filter_params = {
+                "page": 1,
+                "size": 200,
+                "_viewType": "lite",
+                "_needTotal": "false",
+                "_valueMask": json.dumps(
+                    {
+                        "name": "goods",
+                        "pkgPath": "/vmi/store",
+                        "fields": [
+                            {"name": "id", "value": 0},
+                            {"name": "sku", "value": ""},
+                            {"name": "name", "value": ""},
+                            {"name": "price", "value": 0.0},
+                        ],
+                    }
+                ),
+            }
+            query_params = {
+                "_viewType": "lite",
+                "_valueMask": json.dumps(
+                    {
+                        "name": "goods",
+                        "pkgPath": "/vmi/store",
+                        "fields": [
+                            {"name": "id", "value": 0},
+                            {"name": "sku", "value": ""},
+                            {"name": "name", "value": ""},
+                            {"name": "price", "value": 0.0},
+                        ],
+                    }
+                ),
+            }
+            goods_id = context["goods_id"]
+            product_info_id = context["product_info_id"]
+            store_id = context["store_id"]
+
+            for _ in range(max(1, read_rounds)):
+                assert sdks["goods"].filter_goods(filter_params) is not None
+
+            for _ in range(max(1, query_rounds)):
+                assert sdks["goods"].query(goods_id, query_params) is not None
+
+            if (iteration + 1) % max(1, write_every) != 0:
+                return
+
+            update_suffix = f"{context['suffix']}_{iteration}"
+            goods_update = {
+                "description": f"专项压测更新商品_{update_suffix}",
+                "count": 160 + ((iteration + worker_id) % 17),
+            }
+
+            if prewrite_query:
+                current_goods = sdks["goods"].query_goods(goods_id)
+                assert current_goods is not None
+                goods_fallback_payload = {
+                    "sku": current_goods.get(
+                        "sku", MultiTenantBusinessScenarioFactory._build_numeric_code()
+                    ),
+                    "name": current_goods.get(
+                        "name", f"STRESS_GOODS_{context['suffix']}"
+                    ),
+                    "description": goods_update["description"],
+                    "parameter": current_goods.get(
+                        "parameter", f"参数_{context['suffix']}"
+                    ),
+                    "serviceInfo": current_goods.get(
+                        "serviceInfo", f"服务_{context['suffix']}"
+                    ),
+                    "product": {"id": product_info_id},
+                    "count": goods_update["count"],
+                    "price": current_goods.get("price", 128.88),
+                    "shelf": [{"id": context["shelf_id"]}],
+                    "store": {"id": store_id},
+                    "status": {"id": context["status_id"]},
+                }
+            else:
+                goods_fallback_payload = deepcopy(
+                    context["hotspot_update_templates"]["goods"]
+                )
+                goods_fallback_payload.update(goods_update)
+
+            updated_goods = MultiTenantBusinessScenarioFactory._update_entity(
+                sdks,
+                "goods",
+                goods_id,
+                goods_update,
+                tenant_id,
+                fallback_payload=goods_fallback_payload,
+            )
+            assert updated_goods is not None
+
+        return test_goods_hotspot_stress
+
+
 def run_multi_tenant_hotspot_stress_test() -> ConcurrentTestResult:
     from config_helper import get_concurrent_config, get_timeout
     from tenant_config_helper import (
@@ -3229,6 +3436,72 @@ def run_multi_tenant_hotspot_stress_test() -> ConcurrentTestResult:
             ),
         ),
         test_name="multi_tenant_hotspot_stress",
+        workers_per_tenant=workers_per_tenant,
+        iterations_per_worker=iterations_per_worker,
+        prepare_func=prepare_hotspot_worker,
+        measure_loop_only=measure_loop_only,
+    )
+
+
+def run_multi_tenant_goods_hotspot_stress_test() -> ConcurrentTestResult:
+    from config_helper import get_concurrent_config, get_timeout
+    from tenant_config_helper import (
+        get_concurrent_tenant_configs,
+        get_preferred_concurrent_tenant_ids,
+    )
+
+    preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
+    tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
+    if not tenant_configs:
+        raise unittest.SkipTest("多租户未启用，跳过 goods 专项热点压测")
+
+    concurrent_config = get_concurrent_config()
+    workers_per_tenant = int(concurrent_config.get("workers_per_tenant", 4))
+    iterations_per_worker = int(concurrent_config.get("iterations_per_worker", 12))
+    write_every = int(concurrent_config.get("write_every", 4))
+    read_rounds = int(concurrent_config.get("hotspot_read_rounds", 2))
+    query_rounds = int(concurrent_config.get("hotspot_query_rounds", 2))
+    prewrite_query = bool(concurrent_config.get("hotspot_prewrite_query", False))
+    shared_context_per_tenant = bool(
+        concurrent_config.get("hotspot_shared_context_per_tenant", True)
+    )
+    measure_loop_only = bool(concurrent_config.get("hotspot_measure_loop_only", True))
+
+    runner = MultiTenantConcurrentRunner(
+        tenant_configs=tenant_configs,
+        max_workers=max(1, len(tenant_configs) * workers_per_tenant),
+        timeout=max(get_timeout(), 300),
+    )
+
+    def shared_context_provider(tenant_id: str, session_manager):
+        return runner.get_or_create_shared_context(
+            tenant_id,
+            lambda: MultiTenantBusinessScenarioFactory._prepare_hotspot_context(
+                tenant_id=tenant_id,
+                session_manager=session_manager,
+            ),
+        )
+
+    def prepare_hotspot_worker(tenant_id: str, worker_id: int, session_manager):
+        del worker_id
+        if shared_context_per_tenant:
+            shared_context_provider(tenant_id, session_manager)
+        MultiTenantBusinessScenarioFactory._warmup_hotspot_session(
+            tenant_id,
+            session_manager,
+        )
+
+    return runner.run_multi_tenant_worker_loop_test(
+        test_func=MultiTenantBusinessScenarioFactory.create_goods_hotspot_stress_test(
+            write_every=write_every,
+            read_rounds=read_rounds,
+            query_rounds=query_rounds,
+            prewrite_query=prewrite_query,
+            shared_context_provider=(
+                shared_context_provider if shared_context_per_tenant else None
+            ),
+        ),
+        test_name="multi_tenant_goods_hotspot_stress",
         workers_per_tenant=workers_per_tenant,
         iterations_per_worker=iterations_per_worker,
         prepare_func=prepare_hotspot_worker,
@@ -3337,6 +3610,11 @@ def create_argument_parser() -> argparse.ArgumentParser:
         "--hotspot",
         action="store_true",
         help="只运行多租户热点读写压测",
+    )
+    parser.add_argument(
+        "--goods-hotspot",
+        action="store_true",
+        help="只运行 goods 专项热点读写压测",
     )
     parser.add_argument(
         "--full-flow",
@@ -3454,6 +3732,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 def run_selected_suites(
     hotspot_only: bool,
+    goods_hotspot_only: bool,
     full_flow_only: bool,
     repeat: int,
 ) -> Tuple[bool, List[ConcurrentTestResult], str]:
@@ -3462,14 +3741,24 @@ def run_selected_suites(
 
     results: List[ConcurrentTestResult] = []
 
-    if hotspot_only and full_flow_only:
-        raise ValueError("--hotspot 和 --full-flow 不能同时限定")
+    selected_suite_count = sum(bool(flag) for flag in (hotspot_only, goods_hotspot_only, full_flow_only))
+    if selected_suite_count > 1:
+        raise ValueError("--hotspot、--goods-hotspot 和 --full-flow 不能同时限定")
 
     if hotspot_only:
         suite_name = "multi_tenant_hotspot_stress"
         for round_index in range(repeat):
             logger.info("开始热点压测轮次 %s/%s", round_index + 1, repeat)
             result = run_multi_tenant_hotspot_stress_test()
+            assert_hotspot_result(result)
+            results.append(result)
+        return True, results, suite_name
+
+    if goods_hotspot_only:
+        suite_name = "multi_tenant_goods_hotspot_stress"
+        for round_index in range(repeat):
+            logger.info("开始 goods 专项热点压测轮次 %s/%s", round_index + 1, repeat)
+            result = run_multi_tenant_goods_hotspot_stress_test()
             assert_hotspot_result(result)
             results.append(result)
         return True, results, suite_name
@@ -3539,6 +3828,7 @@ if __name__ == "__main__":
     try:
         success, results, suite_name = run_selected_suites(
             hotspot_only=cli_args.hotspot,
+            goods_hotspot_only=cli_args.goods_hotspot,
             full_flow_only=cli_args.full_flow,
             repeat=cli_args.repeat,
         )

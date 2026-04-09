@@ -122,6 +122,8 @@ class SessionManager:
                 next_session.bind_token(session_token)
                 if self.request_application:
                     next_session.bind_application(self.request_application)
+                    if hasattr(next_session, "bind_source"):
+                        next_session.bind_source(self.request_application)
                 if self.request_observer and hasattr(next_session, "set_request_observer"):
                     next_session.set_request_observer(self.request_observer)
 

@@ -386,6 +386,87 @@ class TestFrameworkValidation(unittest.TestCase):
         self.assertIs(second_sdks["status"][1], second_session)
         self.assertIsNot(first_sdks, second_sdks)
 
+    def test_goods_hotspot_only_hits_goods_sdk(self):
+        """测试 goods 专项热点压测只访问 goods 链路。"""
+        from concurrent_test_v2 import MultiTenantBusinessScenarioFactory
+
+        context = {
+            "status_id": 1,
+            "shelf_id": 12,
+            "store_id": 13,
+            "product_info_id": 15,
+            "goods_id": 17,
+            "suffix": "unit",
+            "hotspot_update_templates": {
+                "goods": {
+                    "sku": "sku-1",
+                    "name": "goods",
+                    "description": "seed",
+                    "parameter": "p",
+                    "serviceInfo": "s",
+                    "product": {"id": 15},
+                    "count": 160,
+                    "price": 128.88,
+                    "shelf": [{"id": 12}],
+                    "store": {"id": 13},
+                    "status": {"id": 1},
+                },
+            },
+        }
+
+        goods_sdk = Mock()
+        goods_sdk.filter_goods.return_value = []
+        goods_sdk.query.return_value = {"id": 17}
+        goods_sdk.update_goods.return_value = {"id": 17}
+        sdks = {
+            "status": Mock(),
+            "warehouse": Mock(),
+            "store": Mock(),
+            "product": Mock(),
+            "product_info": Mock(),
+            "goods_info": Mock(),
+            "goods": goods_sdk,
+        }
+
+        test_func = MultiTenantBusinessScenarioFactory.create_goods_hotspot_stress_test(
+            write_every=1,
+            read_rounds=1,
+            query_rounds=1,
+            prewrite_query=False,
+            shared_context_provider=lambda tenant_id, session_manager: context,
+        )
+
+        with patch.object(
+            MultiTenantBusinessScenarioFactory,
+            "_get_hotspot_sdks",
+            return_value=sdks,
+        ):
+            test_func("t001", 0, 0, Mock())
+
+        goods_sdk.filter_goods.assert_called_once()
+        goods_sdk.query.assert_called_once_with(
+            17,
+            unittest.mock.ANY,
+        )
+        goods_sdk.update_goods.assert_called_once_with(
+            17,
+            {
+                "description": "专项压测更新商品_unit_0",
+                "count": 160,
+            },
+        )
+        sdks["status"].filter_status.assert_not_called()
+        sdks["warehouse"].filter_warehouse.assert_not_called()
+        sdks["warehouse"].query.assert_not_called()
+        sdks["store"].filter_store.assert_not_called()
+        sdks["store"].query.assert_not_called()
+        sdks["product"].filter_product.assert_not_called()
+        sdks["product"].query.assert_not_called()
+        sdks["product_info"].filter_product_info.assert_not_called()
+        sdks["product_info"].query.assert_not_called()
+        sdks["goods_info"].filter_goods_info.assert_not_called()
+        sdks["goods_info"].query.assert_not_called()
+
     def test_multi_tenant_list_assertion_prefers_id_filter(self):
         """测试多租户全业务流的列表校验优先使用按 id 过滤，避免高位 ID 被分页吞掉。"""
         from concurrent_test_v2 import MultiTenantBusinessScenarioFactory
@@ -422,6 +503,7 @@ class TestFrameworkValidation(unittest.TestCase):
         self.assertIn("--quick", content)
         self.assertIn("--all", content)
         self.assertIn("--hotspot", content)
+        self.assertIn("--goods-hotspot", content)
         self.assertIn("--report-file", content)
         self.assertIn("--request-application", content)
 
@@ -599,6 +681,7 @@ class TestFrameworkValidation(unittest.TestCase):
         source = MagicSession("https://autotest.local.vpc", "")
         source.bind_auth_secret("/api/v1/cas/session/login/", "sig-token")
         source.bind_application("perf-run-001")
+        source.bind_source("perf-run-001")
 
         target = MagicSession("https://stale.local.vpc", "legacy")
         target.bind_token("old-token")
@@ -612,6 +695,7 @@ class TestFrameworkValidation(unittest.TestCase):
             "Sig Credential=/api/v1/cas/session/login/,Signature=sig-token",
         )
         self.assertEqual(headers.get("X-Mp-Application"), "perf-run-001")
+        self.assertEqual(headers.get("X-Mp-Source"), "perf-run-001")
         self.assertNotIn("X-Mp-Namespace", headers)
 
     def test_magic_session_new_session_copies_current_auth_snapshot(self):
@@ -621,6 +705,7 @@ class TestFrameworkValidation(unittest.TestCase):
         session = MagicSession("https://autotest.local.vpc", "")
         session.bind_token("bearer-token")
         session.bind_application("perf-run-002")
+        session.bind_source("perf-run-002")
         session.current_session.cookies.set("session_token", "cookie-token", domain="autotest.local.vpc", path="/")
 
         cloned = session.new_session()
@@ -628,6 +713,7 @@ class TestFrameworkValidation(unittest.TestCase):
 
         self.assertEqual(headers.get("Authorization"), "Bearer bearer-token")
         self.assertEqual(headers.get("X-Mp-Application"), "perf-run-002")
+        self.assertEqual(headers.get("X-Mp-Source"), "perf-run-002")
         self.assertEqual(cloned.current_session.cookies.get("session_token"), "cookie-token")
 
     def test_magic_session_sync_from_copies_cookie_jar(self):
@@ -658,6 +744,24 @@ class TestFrameworkValidation(unittest.TestCase):
                 return {"result": []}
             if 'application="perf-run-verify"' in query and "sum by (path)" in query:
                 return {"result": []}
+            if query == "up":
+                return {
+                    "result": [
+                        {"metric": {"job": "magicbase", "instance": "magicbase:9090"}, "value": [0, "1"]},
+                    ]
+                }
+            if "sum by (job, instance) (magicBase_magicbase_http_requests_total)" in query:
+                return {
+                    "result": [
+                        {"metric": {"job": "magicbase", "instance": "magicbase:9090"}, "value": [0, "20"]},
+                    ]
+                }
+            if "sum by (job, instance) (magicBase_magicorm_orm_operations_total)" in query:
+                return {
+                    "result": [
+                        {"metric": {"job": "magicbase", "instance": "magicbase:9090"}, "value": [0, "12"]},
+                    ]
+                }
             if "sum by (application, path)" in query:
                 return {
                     "result": [
@@ -690,7 +794,7 @@ class TestFrameworkValidation(unittest.TestCase):
                 return {"result": [{"value": [0, "18"]}]}
             if "magicBase_magicorm_database_executions_total" in query:
                 return {"result": [{"value": [0, "6"]}]}
-            if "http_requests_total{job=\"magicbase\"}" in query:
+            if "sum(increase(magicBase_magicbase_http_requests_total[10m]))" in query:
                 return {"result": [{"value": [0, "20"]}]}
             self.fail(f"unexpected query: {query}")
 
@@ -711,6 +815,11 @@ class TestFrameworkValidation(unittest.TestCase):
         self.assertEqual(summary["correlation_mode"], "service_application_override")
         self.assertEqual(summary["observed_application"], "svc-app-001")
         self.assertAlmostEqual(summary["observed_application_share"], 17 / 20)
+        self.assertEqual(
+            summary["scrape_targets_up"],
+            [{"job": "magicbase", "instance": "magicbase:9090", "value": 1.0}],
+        )
+        self.assertIn("coverage_note", summary)
         self.assertEqual(
             summary["top_application_totals_unfiltered"],
             [
@@ -749,6 +858,39 @@ class TestFrameworkValidation(unittest.TestCase):
             logger.info("集成测试通过")
         except Exception as e:
             self.fail(f"集成测试失败: {e}")
+
+    def test_http_request_metrics_collects_host_distribution(self):
+        from concurrent_test_v2 import HTTPRequestMetricsCollector
+
+        collector = HTTPRequestMetricsCollector()
+        collector.observe(
+            method="GET",
+            url="/api/v1/vmi/stores/",
+            full_url="https://t001.remote.vpc/api/v1/vmi/stores/",
+            elapsed=0.2,
+            status_code=200,
+            response={"error": None, "values": []},
+        )
+        collector.observe(
+            method="POST",
+            url="/api/v1/vmi/stores/",
+            full_url="https://t002.local.vpc/api/v1/vmi/stores/",
+            elapsed=0.3,
+            status_code=200,
+            response={"error": None, "value": {"id": 1}},
+        )
+
+        snapshot = collector.snapshot(total_time=1.0)
+        self.assertEqual(snapshot["http_requests"], 2)
+        self.assertEqual(snapshot["http_remote_requests"], 1)
+        self.assertEqual(snapshot["http_local_requests"], 1)
+        self.assertEqual(
+            snapshot["http_host_distribution"],
+            [
+                {"host": "t001.remote.vpc", "count": 1},
+                {"host": "t002.local.vpc", "count": 1},
+            ],
+        )
 
 
 def run_validation():

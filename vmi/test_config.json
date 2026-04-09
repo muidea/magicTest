@@ -5,7 +5,13 @@
   "request_namespace": "",
   "request_application": "",
   "default_server_url": "https://autotest.local.vpc",
-  "tenant_targets": ["t001", "t002", "t003", "t004", "t005"],
+  "tenant_targets": [
+    "t001",
+    "t002",
+    "t003",
+    "t004",
+    "t005"
+  ],
   "tenant_url_template": "https://{tenant}.local.vpc",
   "credentials": {
     "username": "administrator",
@@ -64,7 +70,9 @@
     "multi_tenant_business_flow_enabled": true
   },
   "coverage": {
-    "source": ["."],
+    "source": [
+      "."
+    ],
     "omit": [
       "*/test_*.py",
       "*/__pycache__/*",
