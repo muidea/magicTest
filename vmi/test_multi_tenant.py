@@ -27,6 +27,7 @@ def _build_config(
     tenant_url_template="https://{tenant}.test.vpc",
     default_server_url="https://autotest.test.vpc",
     mode="aging_multi_tenant",
+    tenant_user_pool=None,
 ) -> dict:
     return {
         "mode": mode,
@@ -38,6 +39,16 @@ def _build_config(
         "tenant_targets": tenant_targets or [],
         "tenant_url_template": tenant_url_template,
         "credentials": {"username": "administrator", "password": "administrator"},
+        "tenant_user_pool": tenant_user_pool
+        or {
+            "enabled": False,
+            "users_per_tenant": 0,
+            "account_prefix": "e2euser",
+            "default_password": "Test@123",
+            "role_name_template": "e2e_multi_user_{tenant}",
+            "include_default_tenant": False,
+            "verify_login": True,
+        },
         "session": {"refresh_interval": 540, "timeout": 1800},
         "concurrent": {"max_workers": 10, "timeout": 30, "retry_count": 3},
         "aging": {
@@ -139,6 +150,7 @@ class TestMultiTenantCore(unittest.TestCase):
         self.assertIn("default_server_url", config)
         self.assertIn("default_tenant", config)
         self.assertIn("tenant_targets", config)
+        self.assertIn("tenant_user_pool", config)
         self.assertNotIn("server", config)
         self.assertNotIn("multi_tenant", config)
 
@@ -265,6 +277,12 @@ class TestMultiTenantConfig(unittest.TestCase):
                 "MAGICTEST_REMOTE_HOST": "192.168.19.231",
                 "MAGICTEST_REMOTE_USER": "fedquery",
                 "MAGICTEST_PROMETHEUS_URL": "https://apm.remote.vpc/prometheus/",
+                "MAGICTEST_TENANT_USER_POOL_ENABLED": "true",
+                "MAGICTEST_USERS_PER_TENANT": "3",
+                "MAGICTEST_TENANT_USER_PREFIX": "loaduser",
+                "MAGICTEST_TENANT_USER_PASSWORD": "Load@Test123",
+                "MAGICTEST_TENANT_USER_ROLE_TEMPLATE": "load_role_{tenant}",
+                "MAGICTEST_TENANT_USER_INCLUDE_DEFAULT_TENANT": "true",
             },
             clear=False,
         ):
@@ -274,7 +292,8 @@ class TestMultiTenantConfig(unittest.TestCase):
                                        get_observability_config,
                                        get_request_application,
                                        get_server_url, get_target_config,
-                                       get_tenant_targets)
+                                       get_tenant_targets,
+                                       get_tenant_user_pool_config)
 
             self.assertEqual(get_server_url(), "https://autotest.remote.vpc")
             self.assertEqual(get_tenant_targets(), ["t101", "t102"])
@@ -288,6 +307,13 @@ class TestMultiTenantConfig(unittest.TestCase):
                 get_observability_config()["prometheus_url"],
                 "https://apm.remote.vpc/prometheus/",
             )
+            user_pool = get_tenant_user_pool_config()
+            self.assertTrue(user_pool["enabled"])
+            self.assertEqual(user_pool["users_per_tenant"], 3)
+            self.assertEqual(user_pool["account_prefix"], "loaduser")
+            self.assertEqual(user_pool["default_password"], "Load@Test123")
+            self.assertEqual(user_pool["role_name_template"], "load_role_{tenant}")
+            self.assertTrue(user_pool["include_default_tenant"])
 
         logger.info("运行时环境变量覆盖测试通过")
 
@@ -392,6 +418,43 @@ class TestMultiTenantConfig(unittest.TestCase):
         self.assertEqual(overridden.target_tenants, [])
 
         logger.info("单租户 CLI 覆盖多租户老化配置测试通过")
+
+    def test_multi_tenant_user_config_generation(self):
+        """测试多租户多用户矩阵生成。"""
+        self._write_config(
+            _build_config(
+                tenant_targets=["t001", "t002"],
+                tenant_url_template="https://{tenant}.remote.vpc",
+                default_server_url="https://autotest.remote.vpc",
+                tenant_user_pool={
+                    "enabled": True,
+                    "users_per_tenant": 2,
+                    "account_prefix": "loaduser",
+                    "default_password": "Load@Test123",
+                    "role_name_template": "load_role_{tenant}",
+                    "include_default_tenant": True,
+                    "verify_login": False,
+                },
+            )
+        )
+
+        from tenant_config_helper import (get_flat_multi_tenant_user_configs,
+                                          get_multi_tenant_user_configs)
+
+        user_configs = get_multi_tenant_user_configs()
+        self.assertEqual(set(user_configs.keys()), {"autotest", "t001", "t002"})
+        self.assertEqual(len(user_configs["t001"]), 2)
+        self.assertEqual(user_configs["t001"][0]["username"], "loaduser_t001_001")
+        self.assertEqual(user_configs["t001"][1]["username"], "loaduser_t001_002")
+        self.assertEqual(user_configs["t002"][0]["role_name"], "load_role_t002")
+        self.assertEqual(
+            user_configs["autotest"][0]["server_url"], "https://autotest.remote.vpc"
+        )
+
+        flattened = get_flat_multi_tenant_user_configs()
+        self.assertEqual(len(flattened), 6)
+
+        logger.info("多租户多用户矩阵生成测试通过")
 
 
 class TestMultiTenantIntegration(unittest.TestCase):

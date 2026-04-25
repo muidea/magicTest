@@ -1,7 +1,7 @@
 ---
 name: magictest-vmi-regression
 description: 用于处理 magicTest/vmi 的全量回归、负向校验噪声清理、定义对齐和远端服务验证。涉及 unittest discover、autotest.local.vpc、VMI 断言和清理噪声时使用。
-version: 1.0.0
+version: 1.0.1
 ---
 
 # magicTest VMI Regression
@@ -25,7 +25,7 @@ version: 1.0.0
 ## 推荐验证
 
 ```bash
-source /home/rangh/codespace/venv/bin/activate
+source ../venv/bin/activate
 HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
 python3 -m unittest discover -s . -p '*_test.py' -v
 ```

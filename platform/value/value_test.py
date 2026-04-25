@@ -148,6 +148,61 @@ class ValueTestCase(unittest.TestCase):
         )
         self.assertIsNone(queried_value, "查询不存在的值应失败")
 
+    def test_insert_duplicate_value(self):
+        """测试插入重复值"""
+        inserted_value = self._insert_value()
+
+        # 使用相同参数再次插入
+        entity_value = value.mock_entity_value(self.current_entity)
+        second_insert = self.value_instance.insert_value(entity_value)
+        self.assertIsNotNone(second_insert, "第二次插入值应成功（允许多条）")
+
+    def test_delete_nonexistent_value(self):
+        """测试删除不存在的值（异常测试）"""
+        deleted_value = self.value_instance.delete_value(
+            {
+                "name": "ghost_value",
+                "pkgPath": "ghost_pkg",
+                "fields": [],
+            }
+        )
+        self.assertIsNone(deleted_value, "删除不存在的值应失败")
+
+    def test_update_nonexistent_value(self):
+        """测试更新不存在的值（异常测试）"""
+        updated_value = self.value_instance.update_value(
+            {
+                "name": "ghost_value",
+                "pkgPath": "ghost_pkg",
+                "fields": [],
+            }
+        )
+        self.assertIsNone(updated_value, "更新不存在的值应失败")
+
+    def test_filter_value_with_empty_result(self):
+        """测试过滤条件不匹配时返回空结果"""
+        filter_param = value.mock_entity_filter(
+            {"name": "nonexistent_entity", "pkgPath": "nonexistent_pkg"},
+            {"fields": []},
+        )
+        filtered_value = self.value_instance.filter_value(filter_param)
+        self.assertIsNotNone(filtered_value, "过滤不存在的值不应崩溃")
+        values = filtered_value.get("values", [])
+        self.assertEqual(len(values), 0, "不匹配条件应返回空列表")
+
+    def test_insert_value_with_empty_fields(self):
+        """测试插入空字段的值"""
+        empty_value = {
+            "name": self.current_entity["name"],
+            "pkgPath": self.current_entity["pkgPath"],
+            "fields": [],
+        }
+        inserted_value = self.value_instance.insert_value(empty_value)
+        # 行为取决于服务实现，记录观察
+        if inserted_value is not None:
+            self.created_entity_value = inserted_value
+            self.assertIn("name", inserted_value, "插入结果缺少name字段")
+
 
 if __name__ == "__main__":
     unittest.main()

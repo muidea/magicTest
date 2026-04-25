@@ -4,6 +4,15 @@
 
 本地验证默认目标服务是 `https://autotest.local.vpc`，如需切换环境，可通过 `MAGICTEST_FILE_BASE_URL` / `MAGICTEST_FILE_NAMESPACE` 覆盖。
 
+日常执行优先使用根入口 [magicTest/run_tests.py](/home/rangh/codespace/magicTest/run_tests.py)：
+
+```bash
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset file-smoke
+```
+
+本目录下的 `python3 -m unittest ...` 入口保留给单套件调试。
+
 ## 客户端接口
 
 Python 客户端 [`file/file/file.py`](file/file/file.py) 实现了与 Go 客户端完全相同的接口：
@@ -182,16 +191,15 @@ deleted = client.delete_file(file_id)
 
 ## 测试
 
-运行测试用例：
+日常执行：
 
 ```bash
-cd ../magicTest
-source ../venv/bin/activate
-HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
-NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
-PYTHONPATH=.:$PYTHONPATH \
-python3 -m unittest file.basic_scenario_test -v
+cd /home/rangh/codespace/magicTest
+source ~/codespace/venv/bin/activate
+python3 run_tests.py --preset file-smoke
 ```
+
+只有在定位单一用例问题时，才建议进入 `file/` 目录直接执行 `python3 -m unittest basic_scenario_test -v`。
 
 ### 测试覆盖的功能
 

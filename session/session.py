@@ -29,7 +29,7 @@ class MagicSession:
         base_url: Base URL for all requests
         namespace: Namespace for API requests
         session_token: Bearer token for authentication
-        session_auth_endpoint: Endpoint for signature authentication
+        session_auth_endpoint: Endpoint metadata for signature authentication
         session_auth_token: Token for signature authentication
         application: Application identifier
         source: Request source identifier used for monitoring correlation
@@ -152,9 +152,9 @@ class MagicSession:
         snapshot = self._auth_state_snapshot()
         auth_mode = "none"
         auth_ref = ""
-        if snapshot["session_auth_endpoint"] and snapshot["session_auth_token"]:
+        if snapshot["session_auth_token"]:
             auth_mode = "sig"
-            auth_ref = snapshot["session_auth_endpoint"]
+            auth_ref = self._mask_token(snapshot["session_auth_token"])
         elif snapshot["session_token"]:
             auth_mode = "bearer"
             auth_ref = self._mask_token(snapshot["session_token"])
@@ -216,8 +216,8 @@ class MagicSession:
         """Bind signature authentication credentials.
         
         Args:
-            endpoint: Authentication endpoint
-            auth_token: Authentication token
+            endpoint: Endpoint metadata for display/debugging
+            auth_token: Signature authentication token
         """
         with self._auth_lock:
             self.session_auth_endpoint = endpoint
@@ -309,11 +309,8 @@ class MagicSession:
             header['X-Mp-Source'] = snapshot["source"]
 
         # Priority: signature auth over bearer token
-        if snapshot["session_auth_endpoint"] and snapshot["session_auth_token"]:
-            credential_val = f"Credential={snapshot['session_auth_endpoint']}"
-            signature_val = f"Signature={snapshot['session_auth_token']}"
-            token_val = f"{credential_val},{signature_val}"
-            header["Authorization"] = f'Sig {token_val}'
+        if snapshot["session_auth_token"]:
+            header["Authorization"] = f"Sig {snapshot['session_auth_token']}"
         elif snapshot["session_token"]:
             header["Authorization"] = f"Bearer {snapshot['session_token']}"
 

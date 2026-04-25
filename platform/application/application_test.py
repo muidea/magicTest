@@ -188,6 +188,63 @@ class ApplicationTestCase(unittest.TestCase):
         # 期望删除失败，返回None或错误响应
         self.assertIsNone(deleted_app, "删除不存在的应用程序应失败")
     
+    def test_start_application(self):
+        """测试启动应用程序"""
+        app_param = application.mock_application_param()
+        new_app = self.app_instance.create_application(app_param)
+        self.assertIsNotNone(new_app, "创建应用程序失败")
+        
+        if new_app and 'id' in new_app:
+            self.created_app_ids.append(new_app['id'])
+        
+        started_app = self.app_instance.start_application(new_app['id'])
+        self.assertIsNotNone(started_app, "启动应用程序失败")
+    
+    def test_stop_application(self):
+        """测试停止应用程序"""
+        app_param = application.mock_application_param()
+        new_app = self.app_instance.create_application(app_param)
+        self.assertIsNotNone(new_app, "创建应用程序失败")
+        
+        if new_app and 'id' in new_app:
+            self.created_app_ids.append(new_app['id'])
+        
+        stopped_app = self.app_instance.stop_application(new_app['id'])
+        self.assertIsNotNone(stopped_app, "停止应用程序失败")
+    
+    def test_get_system_config(self):
+        """测试获取系统配置"""
+        config = self.app_instance.get_system_config()
+        self.assertIsNotNone(config, "获取系统配置失败")
+        # 系统配置应包含必要字段
+        if config:
+            self.assertIsInstance(config, dict, "系统配置应为字典类型")
+    
+    def test_filter_application_with_pagination(self):
+        """测试带分页的过滤应用程序"""
+        filter_param = {
+            'pagination': {
+                'pageSize': 20,
+                'pageNum': 1,
+            },
+            'params': {
+                'items': {}
+            }
+        }
+        app_list = self.app_instance.filter_application(filter_param)
+        self.assertIsNotNone(app_list, "分页过滤应用程序失败")
+        self.assertGreaterEqual(len(app_list), 0, "分页过滤结果异常")
+    
+    def test_start_nonexistent_application(self):
+        """测试启动不存在的应用程序（异常测试）"""
+        started_app = self.app_instance.start_application(999999)
+        self.assertIsNone(started_app, "启动不存在的应用程序应失败")
+    
+    def test_stop_nonexistent_application(self):
+        """测试停止不存在的应用程序（异常测试）"""
+        stopped_app = self.app_instance.stop_application(999999)
+        self.assertIsNone(stopped_app, "停止不存在的应用程序应失败")
+    
     def test_application_database_config(self):
         """测试应用程序数据库配置"""
         app_param = application.mock_application_param()

@@ -157,6 +157,68 @@ class EntityTestCase(unittest.TestCase):
         queried_entity = self.entity_instance.query_entity(999999)
         self.assertIsNone(queried_entity, "查询不存在实体应失败")
 
+    def test_search_nonexistent_entity_with_invalid_key(self):
+        """测试搜索无效格式的包键"""
+        searched_entity = self.entity_instance.search_entity("invalid_key_without_at")
+        self.assertIsNone(searched_entity, "无效包键搜索应失败")
+
+    def test_enable_already_enabled_entity(self):
+        """测试重复启用实体（幂等性）"""
+        new_entity = self._create_entity()
+
+        enabled_first = self.entity_instance.enable_entity(new_entity["id"])
+        self.assertIsNotNone(enabled_first, "首次启用实体失败")
+
+        enabled_second = self.entity_instance.enable_entity(new_entity["id"])
+        # 幂等操作应返回有效结果
+        if enabled_second is not None:
+            self.assertIn("id", enabled_second, "重复启用应返回实体信息")
+
+    def test_disable_already_disabled_entity(self):
+        """测试重复禁用实体（幂等性）"""
+        new_entity = self._create_entity()
+
+        enabled = self.entity_instance.enable_entity(new_entity["id"])
+        self.assertIsNotNone(enabled, "启用实体失败")
+
+        disabled_first = self.entity_instance.disable_entity(new_entity["id"])
+        self.assertIsNotNone(disabled_first, "首次禁用实体失败")
+
+        disabled_second = self.entity_instance.disable_entity(new_entity["id"])
+        # 幂等操作
+        if disabled_second is not None:
+            self.assertIn("id", disabled_second, "重复禁用应返回实体信息")
+
+    def test_enable_nonexistent_entity(self):
+        """测试启用不存在的实体（异常测试）"""
+        enabled = self.entity_instance.enable_entity(999999)
+        self.assertIsNone(enabled, "启用不存在实体应失败")
+
+    def test_disable_nonexistent_entity(self):
+        """测试禁用不存在的实体（异常测试）"""
+        disabled = self.entity_instance.disable_entity(999999)
+        self.assertIsNone(disabled, "禁用不存在实体应失败")
+
+    def test_filter_entity_with_pagination(self):
+        """测试带分页的过滤实体"""
+        filter_param = {
+            "pagination": {
+                "pageSize": 10,
+                "pageNum": 1,
+            },
+            "params": {
+                "items": {}
+            }
+        }
+        entity_list = self.entity_instance.filter_entity(filter_param)
+        self.assertIsNotNone(entity_list, "分页过滤实体失败")
+        self.assertGreaterEqual(len(entity_list), 0, "分页过滤结果异常")
+
+    def test_update_nonexistent_entity(self):
+        """测试更新不存在的实体（异常测试）"""
+        updated = self.entity_instance.update_entity(999999, {"name": "ghost"})
+        self.assertIsNone(updated, "更新不存在实体应失败")
+
 
 if __name__ == "__main__":
     unittest.main()

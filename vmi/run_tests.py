@@ -60,6 +60,13 @@ RUNTIME_ENV_ARG_MAP = {
     "remote_user": "MAGICTEST_REMOTE_USER",
     "deployment_mode": "MAGICTEST_DEPLOYMENT_MODE",
     "request_trust_env": "REQUEST_TRUST_ENV",
+    "tenant_user_pool_enabled": "MAGICTEST_TENANT_USER_POOL_ENABLED",
+    "tenant_user_count": "MAGICTEST_USERS_PER_TENANT",
+    "tenant_user_prefix": "MAGICTEST_TENANT_USER_PREFIX",
+    "tenant_user_password": "MAGICTEST_TENANT_USER_PASSWORD",
+    "tenant_user_role_template": "MAGICTEST_TENANT_USER_ROLE_TEMPLATE",
+    "tenant_user_include_default_tenant": "MAGICTEST_TENANT_USER_INCLUDE_DEFAULT_TENANT",
+    "tenant_user_verify_login": "MAGICTEST_TENANT_USER_VERIFY_LOGIN",
 }
 
 
@@ -369,6 +376,28 @@ def run_module_tests(
     return run_command(cmd, "模块测试", env=env)
 
 
+def run_prepare_tenant_users(
+    env: Optional[Dict[str, str]] = None,
+    cli_args: Optional[argparse.Namespace] = None,
+) -> Tuple[bool, float]:
+    """运行多租户多用户准备。"""
+    logger.info("运行多租户多用户准备")
+
+    cmd = [python_cmd(), "tenant_user_helper.py"]
+    if cli_args is not None:
+        tenant_targets = getattr(cli_args, "tenant_targets", None)
+        if tenant_targets:
+            cmd.extend(["--tenant-targets", tenant_targets])
+        report_file = getattr(cli_args, "tenant_user_report_file", None)
+        if report_file:
+            cmd.extend(["--report-file", report_file])
+        if getattr(cli_args, "tenant_user_no_verify_login", False):
+            cmd.append("--no-verify-login")
+        if getattr(cli_args, "tenant_user_print_only", False):
+            cmd.append("--print-only")
+    return run_command(_shell_quote_args(cmd), "多租户多用户准备", env=env)
+
+
 def run_all_tests(
     pytest_mode: bool = False,
     include_aging: bool = False,
@@ -487,6 +516,7 @@ def main():
     python3 run_tests.py --scenario      # 场景测试
     python3 run_tests.py --aging 30      # 30分钟老化测试
     python3 run_tests.py --multi-tenant  # 多租户测试
+    python3 run_tests.py --prepare-tenant-users --tenant-targets t001,t002
     python3 run_tests.py --pytest --all  # 使用 pytest 运行所有测试
         """,
     )
@@ -510,6 +540,11 @@ def main():
         help="与 --all 联用，在全量回归中包含老化测试（默认使用配置文件时长）",
     )
     parser.add_argument("--multi-tenant", action="store_true", help="运行多租户测试")
+    parser.add_argument(
+        "--prepare-tenant-users",
+        action="store_true",
+        help="在指定租户列表内自动创建多用户测试账号",
+    )
     parser.add_argument("--module", action="store_true", help="运行模块测试")
     parser.add_argument("--pytest", action="store_true", help="使用 pytest 运行测试")
     parser.add_argument("--check-config", action="store_true", help="检查配置状态")
@@ -530,6 +565,81 @@ def main():
     parser.add_argument("--username", help="临时覆盖登录用户名")
     parser.add_argument("--password", help="临时覆盖登录密码")
     parser.add_argument("--namespace", help="临时覆盖请求命名空间")
+    parser.add_argument(
+        "--tenant-user-pool-enabled",
+        dest="tenant_user_pool_enabled",
+        action="store_true",
+        default=None,
+        help="启用多租户测试用户池配置",
+    )
+    parser.add_argument(
+        "--tenant-user-pool-disabled",
+        dest="tenant_user_pool_enabled",
+        action="store_false",
+        help="禁用多租户测试用户池配置",
+    )
+    parser.add_argument(
+        "--tenant-user-count",
+        type=int,
+        dest="tenant_user_count",
+        help="每个租户要准备的测试用户数量",
+    )
+    parser.add_argument(
+        "--tenant-user-prefix",
+        dest="tenant_user_prefix",
+        help="临时覆盖多租户测试账号前缀",
+    )
+    parser.add_argument(
+        "--tenant-user-password",
+        dest="tenant_user_password",
+        help="临时覆盖多租户测试账号默认密码",
+    )
+    parser.add_argument(
+        "--tenant-user-role-template",
+        dest="tenant_user_role_template",
+        help="临时覆盖多租户测试 role 模板，例如 load_role_{tenant}",
+    )
+    parser.add_argument(
+        "--include-default-tenant-users",
+        dest="tenant_user_include_default_tenant",
+        action="store_true",
+        default=None,
+        help="为默认租户一并准备测试用户",
+    )
+    parser.add_argument(
+        "--exclude-default-tenant-users",
+        dest="tenant_user_include_default_tenant",
+        action="store_false",
+        help="不为默认租户准备测试用户",
+    )
+    parser.add_argument(
+        "--verify-tenant-user-login",
+        dest="tenant_user_verify_login",
+        action="store_true",
+        default=None,
+        help="准备测试用户后校验登录",
+    )
+    parser.add_argument(
+        "--skip-tenant-user-login-verify",
+        dest="tenant_user_verify_login",
+        action="store_false",
+        help="准备测试用户后不校验登录",
+    )
+    parser.add_argument(
+        "--tenant-user-report-file",
+        dest="tenant_user_report_file",
+        help="多租户测试用户准备结果输出文件",
+    )
+    parser.add_argument(
+        "--tenant-user-print-only",
+        action="store_true",
+        help="只打印当前租户用户矩阵，不执行创建",
+    )
+    parser.add_argument(
+        "--tenant-user-no-verify-login",
+        action="store_true",
+        help="执行用户准备时不额外校验新账号登录",
+    )
     parser.add_argument(
         "--request-application",
         dest="request_application",
@@ -693,6 +803,13 @@ def main():
         if args.multi_tenant:
             results.append(
                 ("多租户测试", *run_multi_tenant_tests(args.pytest, env=runtime_env))
+            )
+        if args.prepare_tenant_users:
+            results.append(
+                (
+                    "多租户多用户准备",
+                    *run_prepare_tenant_users(env=runtime_env, cli_args=args),
+                )
             )
         if args.module:
             results.append(("模块测试", *run_module_tests(args.pytest, env=runtime_env)))

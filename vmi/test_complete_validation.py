@@ -692,7 +692,7 @@ class TestFrameworkValidation(unittest.TestCase):
         headers = target.header()
         self.assertEqual(
             headers.get("Authorization"),
-            "Sig Credential=/api/v1/cas/session/login/,Signature=sig-token",
+            "Sig sig-token",
         )
         self.assertEqual(headers.get("X-Mp-Application"), "perf-run-001")
         self.assertEqual(headers.get("X-Mp-Source"), "perf-run-001")

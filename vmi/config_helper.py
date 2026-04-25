@@ -28,6 +28,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "tenant_targets": [],
     "tenant_url_template": "https://{tenant}.local.vpc",
     "credentials": {"username": "administrator", "password": "administrator"},
+    "tenant_user_pool": {
+        "enabled": False,
+        "users_per_tenant": 0,
+        "account_prefix": "e2euser",
+        "default_password": "Test@123",
+        "role_name_template": "e2e_multi_user_{tenant}",
+        "include_default_tenant": False,
+        "verify_login": True,
+    },
     "target": {
         "remote_host": "",
         "remote_user": "",
@@ -238,6 +247,47 @@ def _apply_env_overrides(config: Dict[str, Any]) -> None:
     _apply_env_if_present(credentials, "USERNAME", "username")
     _apply_env_if_present(credentials, "PASSWORD", "password")
 
+    tenant_user_pool = config.setdefault("tenant_user_pool", {})
+    _apply_env_if_present(
+        tenant_user_pool,
+        "TENANT_USER_POOL_ENABLED",
+        "enabled",
+        _env_bool,
+    )
+    _apply_env_if_present(
+        tenant_user_pool,
+        "USERS_PER_TENANT",
+        "users_per_tenant",
+        _env_int,
+    )
+    _apply_env_if_present(
+        tenant_user_pool,
+        "TENANT_USER_PREFIX",
+        "account_prefix",
+    )
+    _apply_env_if_present(
+        tenant_user_pool,
+        "TENANT_USER_PASSWORD",
+        "default_password",
+    )
+    _apply_env_if_present(
+        tenant_user_pool,
+        "TENANT_USER_ROLE_TEMPLATE",
+        "role_name_template",
+    )
+    _apply_env_if_present(
+        tenant_user_pool,
+        "TENANT_USER_INCLUDE_DEFAULT_TENANT",
+        "include_default_tenant",
+        _env_bool,
+    )
+    _apply_env_if_present(
+        tenant_user_pool,
+        "TENANT_USER_VERIFY_LOGIN",
+        "verify_login",
+        _env_bool,
+    )
+
     target = config.setdefault("target", {})
     _apply_env_if_present(target, "REMOTE_HOST", "remote_host")
     _apply_env_if_present(target, "REMOTE_USER", "remote_user")
@@ -316,6 +366,11 @@ def get_credentials() -> Dict[str, str]:
         "password": str(creds.get("password", "administrator")),
         "namespace": get_namespace(),
     }
+
+
+def get_tenant_user_pool_config() -> Dict[str, Any]:
+    """获取多租户测试用户池配置。"""
+    return dict(get_config().get("tenant_user_pool", {}))
 
 
 def get_username() -> str:

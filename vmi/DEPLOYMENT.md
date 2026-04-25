@@ -13,8 +13,8 @@
 准备：
 
 ```bash
-cd ../magicTest/vmi
-source ../venv/bin/activate
+cd /home/rangh/codespace/magicTest
+source ~/codespace/venv/bin/activate
 ```
 
 如果环境带有代理，建议先按实际目标域名清空，例如：
@@ -30,9 +30,23 @@ export no_proxy=autotest.local.vpc
 
 ## 2. 核对配置
 
+日常执行优先使用根入口 [../run_tests.py](/home/rangh/codespace/magicTest/run_tests.py)：
+
+```bash
+cd /home/rangh/codespace/magicTest
+source ~/codespace/venv/bin/activate
+python3 run_tests.py --preset business-smoke
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset load-hotspot
+python3 run_tests.py --preset load-aging
+```
+
+本目录下的 [run_tests.py](run_tests.py) 只保留给 `VMI` 特有的高级参数和压测调优。
+
 先检查 [test_config.json](test_config.json)：
 
 ```bash
+cd /home/rangh/codespace/magicTest/vmi
 python3 run_tests.py --check-config
 ```
 
@@ -53,8 +67,8 @@ python3 run_tests.py --check-config
 最小验证顺序：
 
 ```bash
-python3 run_tests.py --quick
-python3 run_tests.py --validation
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-smoke
 ```
 
 判断标准：
@@ -69,12 +83,14 @@ python3 run_tests.py --validation
 部署后建议先跑模块测试，再根据变更范围扩大：
 
 ```bash
-python3 run_tests.py --module
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-full
 ```
 
 如果只想先检查关键模块，可直接跑指定用例：
 
 ```bash
+cd /home/rangh/codespace/magicTest/vmi
 python3 -m unittest warehouse.shelf_test order.order_test -v
 python3 -m unittest status.status_test partner.partner_test -v
 python3 -m unittest store.store_test -v
@@ -82,26 +98,12 @@ python3 -m unittest store.store_test -v
 
 ## 5. 全量回归
 
-完整验证推荐两种方式。
-
-方式一，统一入口：
+完整验证建议直接使用根入口：
 
 ```bash
-python3 run_tests.py --all
-```
-
-方式二，直接 `unittest discover`：
-
-```bash
-python3 -m unittest discover -s . -p '*_test.py' -v
-```
-
-如果是远端真实环境，推荐按目标域名显式禁用代理，例如：
-
-```bash
-HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
-NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
-python3 -m unittest discover -s . -p '*_test.py' -v
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset load-aging
 ```
 
 ## 6. 并发与老化
@@ -109,22 +111,22 @@ python3 -m unittest discover -s . -p '*_test.py' -v
 并发回归：
 
 ```bash
-python3 run_tests.py --concurrent
-python3 concurrent_test_v2.py
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --target vmi-concurrent
 ```
 
 场景回归：
 
 ```bash
-python3 run_tests.py --scenario
-python3 scenario_test.py
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-full
 ```
 
 老化回归：
 
 ```bash
-python3 run_tests.py --aging 30
-python3 aging_test_simple.py --duration 0.5
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset load-aging
 ```
 
 老化测试会生成：

@@ -47,7 +47,7 @@ def test_session_methods():
     # Test header generation
     headers = session.header()
     assert "Authorization" in headers
-    assert headers["Authorization"].startswith("Sig")  # Signature auth takes priority
+    assert headers["Authorization"] == "Sig auth-token"
 
     cloned_session = session.new_session()
     assert cloned_session.base_url == session.base_url

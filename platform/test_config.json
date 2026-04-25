@@ -1,0 +1,27 @@
+{
+    "environment": "local",
+    "default_server_url": "https://autotest.local.vpc/api/v1",
+    "default_namespace": "",
+    "credentials": {
+        "username": "administrator",
+        "password": "administrator"
+    },
+    "session": {
+        "refresh_interval": 540,
+        "timeout": 1800
+    },
+    "test_modules": [
+        "application",
+        "block",
+        "entity",
+        "value",
+        "access_log",
+        "operation_log",
+        "totalizator",
+        "platform_scenario"
+    ],
+    "coverage": {
+        "min_pass_rate": 0.9,
+        "skip_modules_on_failure": false
+    }
+}

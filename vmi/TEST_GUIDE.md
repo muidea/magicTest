@@ -12,36 +12,44 @@
 准备命令：
 
 ```bash
-cd ../magicTest/vmi
-source ../venv/bin/activate
+cd /home/rangh/codespace/magicTest
+source ~/codespace/venv/bin/activate
 ```
 
-访问 `remote.vpc` 时要求临时禁用代理；本地 `*.local.vpc` 回归通常也建议按实际目标域名显式清空代理，例如：
-
-```bash
-HTTPS_PROXY= HTTP_PROXY= https_proxy= http_proxy= \
-NO_PROXY=autotest.local.vpc no_proxy=autotest.local.vpc \
-python3 -m unittest discover -s . -p '*_test.py' -v
-```
+访问 `remote.vpc` 时要求临时禁用代理；本地 `*.local.vpc` 回归通常也建议按实际目标域名显式清空代理。
 
 ## 2. 入口说明
 
-统一入口是 [run_tests.py](run_tests.py)。
-
-支持的主命令：
+日常执行优先使用根入口 [../run_tests.py](/home/rangh/codespace/magicTest/run_tests.py)：
 
 ```bash
+cd /home/rangh/codespace/magicTest
+source ~/codespace/venv/bin/activate
+python3 run_tests.py --preset business-smoke
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset load-hotspot
+python3 run_tests.py --preset load-aging
+```
+
+本目录下的 [run_tests.py](run_tests.py) 只保留给 VMI 特有的高级参数和细粒度压测。
+
+VMI 子入口是 [run_tests.py](run_tests.py)。日常只建议记住根入口 4 个命令：
+
+```bash
+python3 run_tests.py --preset business-smoke
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset load-hotspot
+python3 run_tests.py --preset load-aging
+```
+
+VMI 子入口只保留给高级参数：
+
+```bash
+cd /home/rangh/codespace/magicTest/vmi
 python3 run_tests.py --check-config
-python3 run_tests.py --quick
-python3 run_tests.py --validation
-python3 run_tests.py --multi-tenant
-python3 run_tests.py --concurrent
-python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --report-file hotspot-report.json
-python3 run_tests.py --scenario
 python3 run_tests.py --module
+python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --report-file hotspot-report.json
 python3 run_tests.py --aging 30
-python3 run_tests.py --all
-python3 run_tests.py --pytest --all
 ```
 
 行为说明：
@@ -204,13 +212,14 @@ python3 run_tests.py --pytest --all
 日常开发后：
 
 ```bash
-python3 run_tests.py --quick
-python3 run_tests.py --module
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-smoke
 ```
 
 改动会话、多租户或基础设施后：
 
 ```bash
+cd /home/rangh/codespace/magicTest/vmi
 python3 run_tests.py --validation
 python3 run_tests.py --multi-tenant
 python3 run_tests.py --module
@@ -219,16 +228,18 @@ python3 run_tests.py --module
 改动并发、性能或清理逻辑后：
 
 ```bash
-python3 run_tests.py --concurrent
-python3 run_tests.py --scenario
-python3 run_tests.py --aging 30
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --target vmi-concurrent
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset load-aging
 ```
 
 上线前完整回归：
 
 ```bash
-python3 run_tests.py --all
-python3 -m unittest discover -s . -p '*_test.py' -v
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset load-aging
 ```
 
 ## 8. 结果判断

@@ -108,6 +108,44 @@ class BlockTestCase(unittest.TestCase):
         deleted_block = self.block_instance.destroy_block("999999")
         self.assertIsNone(deleted_block, "销毁不存在的区块应失败")
 
+    def test_filter_block_with_pagination(self):
+        """测试带分页的过滤区块"""
+        filter_param = {
+            "pagination": {
+                "pageSize": 10,
+                "pageNum": 1,
+            },
+            "params": {
+                "items": {}
+            }
+        }
+        block_list = self.block_instance.filter_block(filter_param)
+        self.assertIsNotNone(block_list, "分页过滤区块失败")
+
+    def test_create_block_with_long_name(self):
+        """测试创建超长名称区块（边界测试）"""
+        block_param = block.mock_block_param()
+        block_param["name"] = "a" * 128
+        new_block = self.block_instance.create_block(block_param)
+        if new_block is not None:
+            self.created_block_ids.append(new_block["id"])
+            self.assertIsInstance(new_block["name"], str, "区块名称应为字符串")
+
+    def test_update_block_with_empty_scope(self):
+        """测试将区块 scope 更新为空字符串"""
+        new_block = self.block_instance.create_block(block.mock_block_param())
+        self.assertIsNotNone(new_block, "创建区块失败")
+        self.created_block_ids.append(new_block["id"])
+
+        update_param = new_block.copy()
+        update_param["scope"] = ""
+
+        updated_block = self.block_instance.update_block(update_param["id"], update_param)
+        # 允许为空或保持不变
+        if updated_block is not None:
+            self.assertIn(updated_block.get("scope"), ("", new_block["scope"]),
+                          "scope更新行为异常")
+
 
 if __name__ == "__main__":
     unittest.main()

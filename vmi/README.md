@@ -2,23 +2,40 @@
 
 `magicTest/vmi` 是面向已部署 VMI 服务的 Python 集成测试套件。当前测试默认连接真实服务，通过 CAS 登录、实体 SDK 调用和多模块业务链路验证服务行为。
 
-## 当前入口
-
-推荐统一入口：
+日常执行优先使用根入口 [magicTest/run_tests.py](/home/rangh/codespace/magicTest/run_tests.py)：
 
 ```bash
-source ../venv/bin/activate
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-smoke
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset business-prepare-users
+python3 run_tests.py --preset load-hotspot
+python3 run_tests.py --preset load-aging
+python3 run_tests.py --preset business-prepare-users --env MAGICTEST_TENANT_TARGETS=t001,t002 --env MAGICTEST_TENANT_USER_POOL_ENABLED=true --env MAGICTEST_USERS_PER_TENANT=3
+```
+
+本目录下的 `run_tests.py` 保留给 VMI 高级调试和细粒度压测参数传递。
+
+## 当前入口
+
+本目录内部推荐统一入口：
+
+```bash
+cd /home/rangh/codespace/magicTest/vmi
+source ~/codespace/venv/bin/activate
 python3 run_tests.py --quick
 python3 run_tests.py --all
 python3 run_tests.py --module
+python3 run_tests.py --prepare-tenant-users --tenant-targets t001,t002
 python3 run_tests.py --hotspot
 python3 run_tests.py --aging 30
 ```
 
-直接运行 `unittest`：
+只有在定位单一问题时，才建议直接运行 `unittest`：
 
 ```bash
-source ../venv/bin/activate
+cd /home/rangh/codespace/magicTest/vmi
+source ~/codespace/venv/bin/activate
 python3 -m unittest discover -s . -p '*_test.py' -v
 ```
 
@@ -62,6 +79,8 @@ python3 -m unittest discover -s . -p '*_test.py' -v
   从 `test_config.json` 读取服务、认证、并发和老化参数。
 - `tenant_config_helper.py`
   根据统一配置自动生成默认租户和多租户目标的访问视图。
+- `tenant_user_helper.py`
+  在指定租户列表内自动准备多用户测试账号，并输出测试用户矩阵。
 
 ## 配置文件
 
@@ -78,6 +97,15 @@ python3 -m unittest discover -s . -p '*_test.py' -v
   "credentials": {
     "username": "administrator",
     "password": "administrator"
+  },
+  "tenant_user_pool": {
+    "enabled": false,
+    "users_per_tenant": 0,
+    "account_prefix": "e2euser",
+    "default_password": "Test@123",
+    "role_name_template": "e2e_multi_user_{tenant}",
+    "include_default_tenant": false,
+    "verify_login": true
   },
   "session": {
     "refresh_interval": 540,
@@ -113,45 +141,46 @@ python3 -m unittest discover -s . -p '*_test.py' -v
 - 按 `tenant_url_template` 自动生成 `t001` 到 `t005` 这类目标租户地址
 - 在并发和老化入口统一复用这组租户目标
 
+如果需要为多租户测试自动准备用户，则启用 `tenant_user_pool`：
+- `enabled`: 是否启用多用户池
+- `users_per_tenant`: 每个租户要准备的用户数量
+- `account_prefix`: 账号前缀，最终会生成 `{prefix}_{tenant}_{index}`
+- `default_password`: 默认密码
+- `role_name_template`: 每租户测试 role 模板，支持 `{tenant}` / `{tenant_id}`
+- `include_default_tenant`: 是否连默认租户一并准备
+- `verify_login`: 创建后是否校验登录
+
 具体说明见 [TEST_GUIDE.md](TEST_GUIDE.md)。
 
 ## 常用命令
 
-冒烟检查：
+日常使用优先记住根入口：
 
 ```bash
+cd /home/rangh/codespace/magicTest
+python3 run_tests.py --preset business-smoke
+python3 run_tests.py --preset business-full
+python3 run_tests.py --preset business-prepare-users
+python3 run_tests.py --preset load-hotspot
+python3 run_tests.py --preset load-aging
+```
+
+只有在需要 VMI 子入口高级参数时，才进入本目录：
+
+```bash
+cd /home/rangh/codespace/magicTest/vmi
 python3 run_tests.py --check-config
-python3 run_tests.py --quick
-```
-
-模块回归：
-
-```bash
 python3 run_tests.py --module
+python3 run_tests.py --prepare-tenant-users --tenant-targets t001,t002
 python3 -m unittest warehouse.shelf_test order.order_test -v
-```
-
-并发和场景：
-
-```bash
-python3 run_tests.py --concurrent
 python3 run_tests.py --hotspot
 python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --report-file hotspot-report.json
 python3 run_tests.py --hotspot --ignore-env-proxy --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --report-file hotspot-report.json
-python3 concurrent_test_v2.py --hotspot --ignore-env-proxy --server-url https://autotest.remote.vpc --tenant-targets t001,t002,t003,t004,t005 --workers-per-tenant 12 --iterations-per-worker 20 --request-application perf-run-001 --prometheus-url https://apm.remote.vpc/prometheus/ --remote-user fedquery --remote-host 192.168.19.231 --deployment-mode docker --report-file hotspot-report.json
+python3 run_tests.py --scenario
+python3 run_tests.py --aging 30
+```
 
 当通过 `--server-url` 或 `MAGICTEST_SERVER_URL` 切换环境时，测试框架会自动按默认租户地址推导 `tenant_url_template`。只有在租户域名规则与默认入口不一致时，才需要显式传 `--tenant-url-template`。
-python3 run_tests.py --scenario
-python3 concurrent_test_v2.py
-```
-
-老化：
-
-```bash
-python3 run_tests.py --aging 30
-python3 aging_test_simple.py --duration 0.5
-python3 aging_test_simple.py --duration 0.5 --multi-tenant-business-flow --target-tenants t001,t002,t003,t004,t005
-```
 
 ## 文档索引
 

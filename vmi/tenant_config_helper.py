@@ -8,6 +8,7 @@
 - tenant_targets
 - tenant_url_template
 - credentials
+- tenant_user_pool
 """
 
 import json
@@ -54,6 +55,26 @@ def _build_tenant_entry(
         "username": username,
         "password": password,
         # 多租户 remote/local 子域名场景下由 Host 选租户，请求头不再额外传 namespace。
+        "namespace": "",
+        "enabled": True,
+    }
+
+
+def _build_tenant_user_entry(
+    tenant_id: str,
+    server_url: str,
+    username: str,
+    password: str,
+    role_name: str,
+    user_index: int,
+) -> Dict[str, Any]:
+    return {
+        "tenant_id": tenant_id,
+        "server_url": server_url,
+        "username": username,
+        "password": password,
+        "role_name": role_name,
+        "user_index": user_index,
         "namespace": "",
         "enabled": True,
     }
@@ -143,6 +164,79 @@ def get_concurrent_tenant_ids(
     )
 
 
+def get_multi_tenant_user_configs(
+    target_tenant_ids: Optional[List[str]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """获取多租户多用户测试矩阵。
+
+    返回格式:
+        {
+            "t001": [
+                {
+                    "tenant_id": "t001",
+                    "server_url": "https://t001.local.vpc",
+                    "username": "e2euser_t001_001",
+                    "password": "Test@123",
+                    "role_name": "e2e_multi_user_t001",
+                    "user_index": 1,
+                    "namespace": "",
+                    "enabled": True,
+                }
+            ]
+        }
+    """
+    from config_helper import get_tenant_user_pool_config
+
+    tenant_pool = get_tenant_user_pool_config()
+    if not tenant_pool.get("enabled") or int(tenant_pool.get("users_per_tenant", 0)) <= 0:
+        return {}
+
+    multi_tenant_config = get_multi_tenant_config()
+    tenant_configs = get_concurrent_tenant_configs(target_tenant_ids=target_tenant_ids)
+    if tenant_pool.get("include_default_tenant"):
+        default_tenant = multi_tenant_config["default_tenant"]
+        default_config = multi_tenant_config["tenants"].get(default_tenant)
+        if default_config and default_tenant not in tenant_configs:
+            tenant_configs[default_tenant] = dict(default_config)
+
+    account_prefix = str(tenant_pool.get("account_prefix", "e2euser")).strip() or "e2euser"
+    default_password = str(tenant_pool.get("default_password", "Test@123"))
+    role_name_template = str(
+        tenant_pool.get("role_name_template", "e2e_multi_user_{tenant}")
+    )
+    users_per_tenant = int(tenant_pool.get("users_per_tenant", 0))
+
+    user_configs: Dict[str, List[Dict[str, Any]]] = {}
+    for tenant_id, tenant_config in tenant_configs.items():
+        role_name = role_name_template.format(tenant=tenant_id, tenant_id=tenant_id)
+        tenant_users: List[Dict[str, Any]] = []
+        for index in range(1, users_per_tenant + 1):
+            username = f"{account_prefix}_{tenant_id}_{index:03d}"
+            tenant_users.append(
+                _build_tenant_user_entry(
+                    tenant_id=tenant_id,
+                    server_url=str(tenant_config["server_url"]),
+                    username=username,
+                    password=default_password,
+                    role_name=role_name,
+                    user_index=index,
+                )
+            )
+        user_configs[tenant_id] = tenant_users
+    return user_configs
+
+
+def get_flat_multi_tenant_user_configs(
+    target_tenant_ids: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """按平铺形式返回多租户多用户测试矩阵。"""
+    user_configs = get_multi_tenant_user_configs(target_tenant_ids=target_tenant_ids)
+    flattened: List[Dict[str, Any]] = []
+    for tenant_users in user_configs.values():
+        flattened.extend(tenant_users)
+    return flattened
+
+
 def is_multi_tenant_enabled() -> bool:
     """检查多租户功能是否启用。"""
     return get_multi_tenant_config()["enabled"]
@@ -218,6 +312,15 @@ def create_multi_tenant_config_template() -> Dict[str, Any]:
         "credentials": {
             "username": "administrator",
             "password": "administrator",
+        },
+        "tenant_user_pool": {
+            "enabled": False,
+            "users_per_tenant": 0,
+            "account_prefix": "e2euser",
+            "default_password": "Test@123",
+            "role_name_template": "e2e_multi_user_{tenant}",
+            "include_default_tenant": False,
+            "verify_login": True,
         },
         "target": {
             "remote_host": "",

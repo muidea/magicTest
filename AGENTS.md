@@ -17,16 +17,28 @@ pip install black isort flake8 mypy  # Dev dependencies
 ### Running Tests
 
 ```bash
-cd vmi
+cd /home/rangh/codespace/magicTest
+source ~/codespace/venv/bin/activate
 
-# Run tests by category
-python3 run_tests.py --all           # All tests (requires server)
-python3 run_tests.py --quick         # Quick validation (offline)
-python3 run_tests.py --validation    # Framework validation (offline)
-python3 run_tests.py --module        # Module tests (requires server)
-python3 run_tests.py --concurrent    # Concurrent tests (requires server)
-python3 run_tests.py --scenario      # Scenario tests (requires server)
-python3 run_tests.py --aging 60      # Aging test for 60 minutes
+# Unified root entry (recommended)
+python3 run_tests.py --list-goals
+python3 run_tests.py --list-presets
+python3 run_tests.py --preset auth-smoke
+python3 run_tests.py --preset panel-smoke
+python3 run_tests.py --preset platform-smoke
+python3 run_tests.py --preset business-smoke
+python3 run_tests.py --preset load-hotspot
+
+# Goal / target mode
+python3 run_tests.py --goal panel-api
+python3 run_tests.py --target panel-service-api
+
+# Only use subdirectory runners for advanced debugging
+cd vmi
+python3 run_tests.py --all
+python3 run_tests.py --module
+python3 run_tests.py --concurrent
+python3 run_tests.py --aging 60
 
 # Using pytest
 pytest -v                            # All tests verbose
@@ -130,11 +142,13 @@ def query(self, entity_id: int) -> Optional[Dict[str, Any]]:
 
 ```
 magicTest/
+├── run_tests.py       # Root unified test runner (recommended)
+├── test_catalog.py    # Goal/target/preset catalog
 ├── session/           # MagicSession HTTP client
 ├── cas/               # Authentication module
 ├── mock/              # Mock utilities
-├── vmi/               # Main test module
-│   ├── run_tests.py   # Unified test runner
+├── vmi/               # Business scenario / load test module
+│   ├── run_tests.py   # Sub-runner for advanced VMI debugging
 │   ├── test_config.json
 │   ├── conftest.py    # pytest fixtures
 │   ├── session_manager.py
@@ -166,7 +180,12 @@ VMITestCase (test_vmi_base.py)
 
 ## Configuration
 
-All runtime config in `vmi/test_config.json`:
+Daily execution should prefer root presets and built-in env profiles:
+
+- `panel-local`: `panel/cas`
+- `autotest-local`: `platform/file/vmi`
+
+Only VMI-specific advanced runtime config still lives in `vmi/test_config.json`:
 
 ```json
 {

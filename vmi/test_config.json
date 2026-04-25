@@ -17,6 +17,15 @@
     "username": "administrator",
     "password": "administrator"
   },
+  "tenant_user_pool": {
+    "enabled": false,
+    "users_per_tenant": 0,
+    "account_prefix": "e2euser",
+    "default_password": "Test@123",
+    "role_name_template": "e2e_multi_user_{tenant}",
+    "include_default_tenant": false,
+    "verify_login": true
+  },
   "target": {
     "remote_host": "",
     "remote_user": "",

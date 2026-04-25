@@ -15,7 +15,7 @@ def _network_like_error(err):
 
 
 def panel_base_url() -> str:
-    return os.getenv("MAGICTEST_PANEL_BASE_URL", "https://autotest.local.vpc/api/v1")
+    return os.getenv("MAGICTEST_PANEL_BASE_URL", "https://panel.local.vpc/api/v1")
 
 
 def panel_namespace() -> str:
@@ -35,9 +35,9 @@ def bind_panel_auth(work_session: MagicSession) -> Tuple[MagicSession, Optional[
         work_session.bind_token(bearer_token)
         return work_session, None
 
-    auth_endpoint = os.getenv("MAGICTEST_PANEL_AUTH_ENDPOINT", "")
     auth_token = os.getenv("MAGICTEST_PANEL_AUTH_TOKEN", "")
-    if auth_endpoint and auth_token:
+    auth_endpoint = os.getenv("MAGICTEST_PANEL_AUTH_ENDPOINT", "")
+    if auth_token:
         work_session.bind_auth_secret(auth_endpoint, auth_token)
         return work_session, None
 

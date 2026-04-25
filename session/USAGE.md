@@ -46,6 +46,13 @@ session.bind_auth_secret(
 )
 ```
 
+最终请求头协议：
+
+- 账号 JWT：`Authorization: Bearer <jwt>`
+- endpoint 凭证：`Authorization: Sig <auth_token>`
+
+其中 `endpoint` 参数仅保留为上下文元信息，不再参与请求头拼装。
+
 #### 应用标识
 ```python
 session.bind_application("your-application-id")
