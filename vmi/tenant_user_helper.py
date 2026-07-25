@@ -24,20 +24,17 @@ logger = logging.getLogger(__name__)
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_DIR.parent
-for component in ("session", "cas", "mock"):
-    component_path = str(PROJECT_ROOT / component)
-    if component_path not in sys.path:
-        sys.path.insert(0, component_path)
-package_dir = str(PACKAGE_DIR)
-if package_dir not in sys.path:
-    sys.path.insert(0, package_dir)
+for path in (PROJECT_ROOT, PACKAGE_DIR):
+    path_str = str(path)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
 
 from config_helper import get_credentials, get_tenant_user_pool_config
 from tenant_config_helper import get_multi_tenant_user_configs
 
 
 STATUS_ENABLE = 2
-ALL_PERMISSION = 5
+ALL_PERMISSION = 15
 
 
 def _all_privilege() -> List[Dict[str, Any]]:
@@ -102,15 +99,24 @@ class TenantUserProvisioner:
         return None
 
     def _ensure_role(self, role_app, role_name: str) -> Dict[str, Any]:
+        privilege = _all_privilege()
         role = self._find_role(role_app, role_name)
         if role is not None:
+            if role.get("privilege") != privilege and hasattr(role_app, "update_role"):
+                payload = dict(role)
+                payload["privilege"] = privilege
+                payload["status"] = STATUS_ENABLE
+                updated_role = role_app.update_role(payload)
+                if updated_role is None:
+                    raise RuntimeError(f"更新角色权限失败: role={role_name}")
+                return updated_role
             return role
         role = role_app.create_role(
             {
                 "name": role_name,
                 "description": f"multi-tenant test role {role_name}",
                 "group": "e2e",
-                "privilege": _all_privilege(),
+                "privilege": privilege,
                 "status": STATUS_ENABLE,
             }
         )
@@ -142,11 +148,13 @@ class TenantUserProvisioner:
                 "email": f"{username}@example.com",
                 "description": f"multi-tenant test user {username}",
                 "status": STATUS_ENABLE,
-                "role": {
-                    "id": role["id"],
-                    "name": role["name"],
-                    "status": role.get("status", STATUS_ENABLE),
-                },
+                "roles": [
+                    {
+                        "id": role["id"],
+                        "name": role["name"],
+                        "status": role.get("status", STATUS_ENABLE),
+                    }
+                ],
             }
         )
         if account is None:

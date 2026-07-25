@@ -1,18 +1,19 @@
 {
   "mode": "aging_multi_tenant",
-  "environment": "local",
+  "environment": "remote",
   "default_tenant": "autotest",
   "request_namespace": "",
   "request_application": "",
-  "default_server_url": "https://autotest.local.vpc",
+  "default_server_url": "https://autotest.remote.vpc",
   "tenant_targets": [
+    "autotest",
     "t001",
     "t002",
     "t003",
     "t004",
     "t005"
   ],
-  "tenant_url_template": "https://{tenant}.local.vpc",
+  "tenant_url_template": "https://{tenant}.remote.vpc",
   "credentials": {
     "username": "administrator",
     "password": "administrator"
@@ -27,12 +28,12 @@
     "verify_login": true
   },
   "target": {
-    "remote_host": "",
-    "remote_user": "",
-    "deployment_mode": ""
+    "remote_host": "192.168.19.231",
+    "remote_user": "fedquery",
+    "deployment_mode": "docker-compose"
   },
   "observability": {
-    "prometheus_url": ""
+    "prometheus_url": "https://apm.remote.vpc/prometheus/"
   },
   "session": {
     "refresh_interval": 540,
@@ -70,12 +71,12 @@
     "hotspot_measure_loop_only": true
   },
   "aging": {
-    "duration_hours": 0.5,
+    "duration_hours": 24,
     "concurrent_threads": 10,
     "operation_interval": 1.0,
     "max_data_count": 1000,
     "performance_degradation_threshold": 20.0,
-    "report_interval_minutes": 5,
+    "report_interval_minutes": 30,
     "multi_tenant_business_flow_enabled": true
   },
   "coverage": {

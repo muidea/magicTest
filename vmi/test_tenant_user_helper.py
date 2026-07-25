@@ -47,6 +47,11 @@ class FakeRoleApp:
         self.roles[param["name"]] = dict(role)
         return dict(role)
 
+    def update_role(self, param):
+        role = dict(param)
+        self.roles[param["name"]] = dict(role)
+        return dict(role)
+
 
 class FakeAccountApp:
     accounts = {}

@@ -54,8 +54,7 @@ def _build_tenant_entry(
         "server_url": server_url,
         "username": username,
         "password": password,
-        # 多租户 remote/local 子域名场景下由 Host 选租户，请求头不再额外传 namespace。
-        "namespace": "",
+        "namespace": tenant_id,
         "enabled": True,
     }
 
@@ -75,7 +74,7 @@ def _build_tenant_user_entry(
         "password": password,
         "role_name": role_name,
         "user_index": user_index,
-        "namespace": "",
+        "namespace": tenant_id,
         "enabled": True,
     }
 

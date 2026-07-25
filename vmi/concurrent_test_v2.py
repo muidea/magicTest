@@ -1233,10 +1233,12 @@ class MultiTenantConcurrentRunner:
     def __init__(
         self,
         tenant_configs: Dict[str, Dict[str, Any]],
+        tenant_user_configs: Optional[Dict[str, List[Dict[str, Any]]]] = None,
         max_workers: Optional[int] = None,
         timeout: int = 60,
     ):
         self.tenant_configs = tenant_configs
+        self.tenant_user_configs = tenant_user_configs or {}
         self.max_workers = max_workers or max(1, len(tenant_configs))
         self.timeout = timeout
         self.results_lock = threading.Lock()
@@ -1246,12 +1248,27 @@ class MultiTenantConcurrentRunner:
         self.shared_context_locks: Dict[str, threading.Lock] = {}
         self._http_request_observer = None
 
-    def _get_session_manager(self, session_key: str, tenant_id: str):
+    def _resolve_worker_tenant_config(
+        self, tenant_id: str, worker_id: int = 0
+    ) -> Dict[str, Any]:
+        tenant_users = self.tenant_user_configs.get(tenant_id) or []
+        enabled_users = [
+            user_config
+            for user_config in tenant_users
+            if user_config.get("enabled", True)
+        ]
+        if enabled_users:
+            return dict(enabled_users[worker_id % len(enabled_users)])
+        return dict(self.tenant_configs[tenant_id])
+
+    def _get_session_manager(
+        self, session_key: str, tenant_id: str, worker_id: int = 0
+    ):
         """为租户 worker 获取独立会话管理器。"""
         if session_key in self.session_managers:
             return self.session_managers[session_key]
 
-        tenant_config = self.tenant_configs[tenant_id]
+        tenant_config = self._resolve_worker_tenant_config(tenant_id, worker_id)
 
         try:
             from config_helper import get_session_config
@@ -1295,7 +1312,12 @@ class MultiTenantConcurrentRunner:
 
             session_mgr.start_auto_refresh()
             self.session_managers[session_key] = session_mgr
-            logger.info("租户 %s: 会话初始化完成(session=%s)", tenant_id, session_key)
+            logger.info(
+                "租户 %s: 会话初始化完成(session=%s, user=%s)",
+                tenant_id,
+                session_key,
+                tenant_config["username"],
+            )
             return session_mgr
 
         except Exception as exc:
@@ -1554,7 +1576,9 @@ class MultiTenantConcurrentRunner:
             setup_ok = False
 
             try:
-                session_mgr = self._get_session_manager(session_key, tenant_id)
+                session_mgr = self._get_session_manager(
+                    session_key, tenant_id, worker_id
+                )
                 if not session_mgr:
                     raise RuntimeError("无法获取租户会话")
 
@@ -3381,11 +3405,13 @@ def run_multi_tenant_hotspot_stress_test() -> ConcurrentTestResult:
     from config_helper import get_concurrent_config, get_timeout
     from tenant_config_helper import (
         get_concurrent_tenant_configs,
+        get_multi_tenant_user_configs,
         get_preferred_concurrent_tenant_ids,
     )
 
     preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
     tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
+    tenant_user_configs = get_multi_tenant_user_configs(preferred_tenant_ids)
     if not tenant_configs:
         raise unittest.SkipTest("多租户未启用，跳过多租户热点压测")
 
@@ -3403,6 +3429,7 @@ def run_multi_tenant_hotspot_stress_test() -> ConcurrentTestResult:
 
     runner = MultiTenantConcurrentRunner(
         tenant_configs=tenant_configs,
+        tenant_user_configs=tenant_user_configs,
         max_workers=max(1, len(tenant_configs) * workers_per_tenant),
         timeout=max(get_timeout(), 300),
     )
@@ -3447,11 +3474,13 @@ def run_multi_tenant_goods_hotspot_stress_test() -> ConcurrentTestResult:
     from config_helper import get_concurrent_config, get_timeout
     from tenant_config_helper import (
         get_concurrent_tenant_configs,
+        get_multi_tenant_user_configs,
         get_preferred_concurrent_tenant_ids,
     )
 
     preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
     tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
+    tenant_user_configs = get_multi_tenant_user_configs(preferred_tenant_ids)
     if not tenant_configs:
         raise unittest.SkipTest("多租户未启用，跳过 goods 专项热点压测")
 
@@ -3469,6 +3498,7 @@ def run_multi_tenant_goods_hotspot_stress_test() -> ConcurrentTestResult:
 
     runner = MultiTenantConcurrentRunner(
         tenant_configs=tenant_configs,
+        tenant_user_configs=tenant_user_configs,
         max_workers=max(1, len(tenant_configs) * workers_per_tenant),
         timeout=max(get_timeout(), 300),
     )
@@ -3523,11 +3553,13 @@ def run_multi_tenant_full_flow_coverage_test() -> ConcurrentTestResult:
     from config_helper import get_max_workers, get_timeout
     from tenant_config_helper import (
         get_concurrent_tenant_configs,
+        get_multi_tenant_user_configs,
         get_preferred_concurrent_tenant_ids,
     )
 
     preferred_tenant_ids = get_preferred_concurrent_tenant_ids()
     tenant_configs = get_concurrent_tenant_configs(preferred_tenant_ids)
+    tenant_user_configs = get_multi_tenant_user_configs(preferred_tenant_ids)
     if not tenant_configs:
         raise unittest.SkipTest("多租户未启用，跳过 t001-t005 并发业务测试")
 
@@ -3539,6 +3571,7 @@ def run_multi_tenant_full_flow_coverage_test() -> ConcurrentTestResult:
 
     runner = MultiTenantConcurrentRunner(
         tenant_configs=tenant_configs,
+        tenant_user_configs=tenant_user_configs,
         max_workers=max(len(tenant_configs), get_max_workers()),
         timeout=max(get_timeout(), 120),
     )

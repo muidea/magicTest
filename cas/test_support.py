@@ -13,7 +13,7 @@ from endpoint.endpoint import Endpoint as EndpointApp
 
 STATUS_DISABLE = 1
 STATUS_ENABLE = 2
-ALL_PERMISSION = 5
+ALL_PERMISSION = 15
 UNSET = object()
 
 
