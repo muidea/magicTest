@@ -187,8 +187,8 @@ TARGETS: Tuple[TestTarget, ...] = (
     TestTarget(
         key="panel-runtime-api",
         goal="panel-api",
-        title="Panel 运行期与生命周期接口",
-        description="运行中应用、apps runtime、多实例安装卸载幂等回归。",
+        title="Panel 运行期接口",
+        description="运行中应用与 apps runtime 只读接口回归。",
         workdir=ROOT_DIR / "panel",
         command=(
             sys.executable,
@@ -196,7 +196,6 @@ TARGETS: Tuple[TestTarget, ...] = (
             "unittest",
             "application_lifecycle_test",
             "apps_runtime_test",
-            "application_install_roundtrip_test",
             "-v",
         ),
         env={"PYTHONPATH": _pythonpath_for(".", "panel")},

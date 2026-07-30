@@ -12,15 +12,10 @@ python3 run_tests.py --preset panel-full
 
 本目录下的 `python3 -m unittest ...` 入口保留给单套件调试。
 
-当前第一批已落地的是“应用生命周期组”的最小测试入口：
+当前第一批已落地的是“应用运行态组”的最小测试入口：
 
 - [application_lifecycle_test.py](application_lifecycle_test.py)
   - `fetch running application` smoke
-  - 在显式提供 `MAGICTEST_PANEL_APP_UUID` 时执行可恢复的 `start/stop` 回归
-- [application_install_roundtrip_test.py](application_install_roundtrip_test.py)
-  - 自动选择一个已发布且已存在原实例的非 `bootstrap` 应用源
-  - 执行“第二实例在线安装 -> 卸载 -> 再次安装”回归
-  - 校验同一发布多实例安装、卸载、重复安装下的运行期幂等行为
 - [subscription_test.py](subscription_test.py)
   - `filter subscription` smoke
   - 在显式提供 `MAGICTEST_PANEL_SUBSCRIPTION_ID` 时查询订阅详情
@@ -92,19 +87,6 @@ python3 run_tests.py --target panel-governance-api
 
 只有在定位单一文件问题时，才建议进入 `panel/` 目录使用 `python3 -m unittest ...`。
 
-如果要执行 `start/stop` 回归，还需要额外提供：
-
-- `MAGICTEST_PANEL_APP_UUID`
-
-如果要执行多实例在线安装 / 卸载幂等回归，可选提供：
-
-- `MAGICTEST_PANEL_INSTALL_RELEASE_ID`
-- `MAGICTEST_PANEL_INSTALL_PACKAGE_ID`
-- `MAGICTEST_PANEL_INSTALL_SOURCE_UUID`
-- `MAGICTEST_PANEL_INSTALL_SOURCE_PKG_PREFIX`
-- `MAGICTEST_PANEL_INSTALL_DATABASE_INSTANCE_ID`
-- `MAGICTEST_PANEL_INSTALL_TASK_TIMEOUT`
-
 如果要执行 `subscription` 的增强回归，还需要按场景提供：
 
 - `MAGICTEST_PANEL_SUBSCRIPTION_ID`
@@ -150,8 +132,7 @@ python3 run_tests.py --target panel-governance-api
 
 ## 当前边界
 
-- 当前只落了生命周期组的安全入口，不默认执行安装/卸载
-- `application_install_roundtrip` 会执行真实在线安装与卸载，只会针对自动发现或显式指定的非 `bootstrap` 发布源创建临时实例，并在测试结束时自动清理
+- 应用部署与容器启动由 `magicInstaller --action=deploy` 管理，Panel 测试不再调用旧在线安装、启停或卸载 API
 - `subscription` 组默认只跑读路径；写路径只在显式提供可变更对象时执行
 - `definition` 组默认只跑读路径；写路径只在显式提供允许变更时执行
 - `profile` 组当前全部为只读 smoke，不引入额外副作用

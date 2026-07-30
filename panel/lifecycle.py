@@ -28,31 +28,3 @@ class LifecycleClient:
             self._log_error("查询运行中应用", response)
             return None
         return response.get("values", [])
-
-    def query_install_task(self, task_id: str) -> Optional[Dict[str, Any]]:
-        response = self.session.get("/panel/application/install/tasks/", {"taskID": task_id})
-        if self._error(response) is not None:
-            self._log_error("查询安装任务", response)
-            return None
-        return response.get("value")
-
-    def start_application(self, app_uuid: str) -> Optional[Dict[str, Any]]:
-        response = self.session.get("/panel/application/start/", {"appID": app_uuid})
-        if self._error(response) is not None:
-            self._log_error("启动应用", response)
-            return None
-        return response.get("value")
-
-    def stop_application(self, app_uuid: str) -> Optional[Dict[str, Any]]:
-        response = self.session.get("/panel/application/stop/", {"appID": app_uuid})
-        if self._error(response) is not None:
-            self._log_error("停止应用", response)
-            return None
-        return response.get("value")
-
-    def uninstall_application(self, app_uuid: str) -> Optional[Dict[str, Any]]:
-        response = self.session.post("/panel/application/uninstall/", {"appID": app_uuid})
-        if self._error(response) is not None:
-            self._log_error("卸载应用", response)
-            return None
-        return response.get("task")
