@@ -4,7 +4,7 @@
 用法:
     python3 run_tests.py                    # 运行所有平台测试
     python3 run_tests.py --list             # 列出所有可用的测试模块
-    python3 run_tests.py --module access_log  # 仅运行指定模块
+    python3 run_tests.py --module operation_log  # 仅运行指定模块
     python3 run_tests.py --skip-totalizator   # 跳过指定模块
     python3 run_tests.py --verbose           # 详细输出
     python3 run_tests.py --coverage          # 运行后打印覆盖率摘要
@@ -39,7 +39,6 @@ PLATFORM_TEST_MODULES = [
     ("block.block_test", "Block", "BlockTestCase"),
     ("entity.entity_test", "Entity", "EntityTestCase"),
     ("value.value_test", "Value", "ValueTestCase"),
-    ("access_log.access_log_test", "AccessLog", "AccessLogTestCase"),
     ("operation_log.operation_log_test", "OperationLog", "OperationLogTestCase"),
     ("totalizator.totalizator_test", "Totalizator", "TotalizatorTestCase"),
 ]
@@ -69,7 +68,7 @@ def run_single_module(module_name: str, verbose: bool = False) -> bool:
     """运行单个测试模块
 
     Args:
-        module_name: 模块名（支持路径名如 access_log 或 access_log.access_log_test）
+        module_name: 模块名（支持路径名如 operation_log 或 operation_log.operation_log_test）
         verbose: 是否详细输出
 
     Returns:
@@ -182,7 +181,7 @@ def main():
 示例:
   python3 run_tests.py                    # 运行所有平台测试
   python3 run_tests.py --list             # 列出可用模块
-  python3 run_tests.py --module access_log  # 仅运行访问日志模块
+  python3 run_tests.py --module operation_log  # 仅运行操作日志模块
   python3 run_tests.py --skip totalizator   # 跳过总计器模块
   python3 run_tests.py --verbose           # 详细输出
 

@@ -259,7 +259,6 @@ python3 run_tests.py --preset load-aging
 - block
 - entity
 - value
-- access_log
 - operation_log
 - totalizator
 

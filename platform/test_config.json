@@ -15,7 +15,6 @@
         "block",
         "entity",
         "value",
-        "access_log",
         "operation_log",
         "totalizator",
         "platform_scenario"

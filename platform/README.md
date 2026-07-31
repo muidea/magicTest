@@ -21,18 +21,17 @@ python3 run_tests.py --preset platform-smoke
 | `block` | create / query / update / filter / destroy | 11 |
 | `entity` | create / search / query / update / filter / enable / disable / destroy | 17 |
 | `value` | insert / query / update / filter / delete | 12 |
-| `access_log` | write / filter | 9 |
 | `operation_log` | write / filter | 9 |
 | `totalizator` | register / filter / summary / refresh / unregister | 9 |
 | `platform_scenario` | 跨模块集成场景（10 个场景） | 10 |
 
-**总计：约 90+ 个测试用例**，覆盖基本 CRUD、边界条件、异常场景和跨模块集成。
+**总计：约 80+ 个测试用例**，覆盖基本 CRUD、边界条件、异常场景和跨模块集成。
 
 ## 层级说明
 
 这里要特别区分两层：
 
-- 本目录覆盖的是 `magicBase` 自身的 `application/block/entity/value/access_log/operation_log/totalizator` 平台接口
+- 本目录覆盖的是 `magicBase` 自身的 `application/block/entity/value/operation_log/totalizator` 平台接口
 - 不覆盖 `magicPanel` 中那组 `artifact application / entity / subscription / feedback / notification` 运行期对象入口
 
 因此：
@@ -58,7 +57,7 @@ python3 run_tests.py --preset platform-smoke
 cd /home/rangh/codespace/magicTest/platform
 python3 run_tests.py --list
 python3 run_tests.py --module application
-python3 run_tests.py --module access_log
+python3 run_tests.py --module operation_log
 python3 run_tests.py --skip totalizator
 python3 -m unittest platform_scenario_test -v
 ```
@@ -81,7 +80,7 @@ python3 -m unittest platform_scenario_test -v
 1. **完整平台链路**：Application → Block → Entity → Value 的端到端编排
 2. **应用启动停止链路**：创建 → 启动 → 停止
 3. **实体状态转换**：启用 → 禁用 → 再次启用
-4. **日志双写**：同时写入访问日志和操作日志
+4. **操作日志**：写入并过滤操作日志
 5. **总计器与实体值交互**：验证跨模块无干扰
 6. **应用更新与过滤**：创建 → 更新 → 过滤验证
 7. **区块依赖验证**：含实体的区块的依赖管理
@@ -114,7 +113,6 @@ python3 -m unittest platform_scenario_test -v
 
 ```bash
 cd /home/rangh/codespace/magicTest/platform
-python3 run_tests.py --module access_log
 python3 run_tests.py --module operation_log
 python3 run_tests.py --module totalizator
 ```

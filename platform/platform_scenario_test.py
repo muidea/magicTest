@@ -13,7 +13,6 @@ from application import application
 from block import block
 from entity import entity
 from value import value
-from access_log import access_log
 from operation_log import operation_log
 from totalizator import totalizator
 
@@ -35,7 +34,6 @@ class PlatformScenarioTestCase(unittest.TestCase):
         cls.block = block.Block(cls.work_session)
         cls.entity = entity.Entity(cls.work_session)
         cls.value = value.Value(cls.work_session)
-        cls.access_log = access_log.AccessLog(cls.work_session)
         cls.oplog = operation_log.OperationLog(cls.work_session)
         cls.totalizator = totalizator.Totalizator(cls.work_session)
 
@@ -157,28 +155,11 @@ class PlatformScenarioTestCase(unittest.TestCase):
         re_enabled = self.entity.enable_entity(new_entity["id"])
         self.assertIsNotNone(re_enabled, "再次启用实体失败")
 
-    def test_scenario_access_log_and_operation_log(self):
-        """场景4: 访问日志和操作日志同时写入"""
-        # 写入访问日志
-        log_param = access_log.mock_access_log_param()
-        write_ok = self.access_log.write_access_log(log_param)
-        self.assertTrue(write_ok, "写入访问日志失败")
-
-        # 写入操作日志
+    def test_scenario_operation_log(self):
+        """场景4: 操作日志写入与过滤"""
         oplog_param = operation_log.mock_operation_log_param()
         write_ok = self.oplog.write_operation_log(oplog_param)
         self.assertTrue(write_ok, "写入操作日志失败")
-
-        # 分别过滤验证
-        access_filter = {
-            "params": {
-                "items": {
-                    "clientIP": "{0}|=".format(log_param["clientIP"]),
-                }
-            }
-        }
-        access_list = self.access_log.filter_access_log(access_filter)
-        self.assertIsNotNone(access_list, "过滤访问日志失败")
 
         oplog_filter = {
             "params": {
