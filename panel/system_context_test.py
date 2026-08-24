@@ -24,56 +24,57 @@ class PanelSystemContextTestCase(PanelE2EBase):
     def _prefixed_area_keys(area_visibility, prefix):
         return sorted(key for key in (area_visibility or {}) if key.startswith(prefix))
 
-    def test_system_context_filters_panel_and_portal_areas_by_surface(self):
-        panel_context = self.system_context_client.query("panel")
-        self.assertEqual(panel_context.get("surface"), "panel", f"panel surface 不正确: {panel_context}")
+    def test_system_context_keeps_complete_authority_projection_across_surfaces(self):
+        contexts = {
+            surface: self.system_context_client.query(surface)
+            for surface in ("panel", "portal", "workbench", "app", "other")
+        }
+        baseline = contexts["panel"]
         self.assertTrue(
-            panel_context.get("entryVisibility", {}).get("panel"),
-            f"panel 管理员上下文应展示 panel 入口: {panel_context}",
+            baseline.get("entryVisibility", {}).get("panel"),
+            f"panel 管理员上下文应展示 panel 入口: {baseline}",
         )
 
-        panel_area_visibility = panel_context.get("areaVisibility") or {}
-        self.assertTrue(
-            self._prefixed_area_keys(panel_area_visibility, "panel."),
-            f"panel surface 应返回 panel.* 功能区: {panel_context}",
+        panel_keys = self._prefixed_area_keys(
+            baseline.get("areaVisibility") or {}, "panel."
         )
-        self.assertFalse(
-            self._prefixed_area_keys(panel_area_visibility, "portal."),
-            f"panel surface 不应返回 portal.* 功能区: {panel_context}",
-        )
+        self.assertTrue(panel_keys, f"授权投影应包含 panel.* 功能区: {baseline}")
 
-        portal_context = self.system_context_client.query("portal")
-        self.assertEqual(portal_context.get("surface"), "portal", f"portal surface 不正确: {portal_context}")
-        self.assertTrue(
-            portal_context.get("entryVisibility", {}).get("panel"),
-            f"panel 管理员上下文仍应保留 panel 入口可见性: {portal_context}",
-        )
-
-        portal_area_visibility = portal_context.get("areaVisibility") or {}
-        self.assertTrue(
-            self._prefixed_area_keys(portal_area_visibility, "portal."),
-            f"portal surface 应返回 portal.* 功能区: {portal_context}",
-        )
-        self.assertFalse(
-            self._prefixed_area_keys(portal_area_visibility, "panel."),
-            f"portal surface 不应返回 panel.* 功能区: {portal_context}",
-        )
-
-    def test_system_context_non_page_surfaces_skip_panel_and_portal_page_areas(self):
-        for surface in ("workbench", "app", "other"):
-            context = self.system_context_client.query(surface)
-            self.assertEqual(context.get("surface"), surface, f"{surface} surface 不正确: {context}")
-            area_visibility = context.get("areaVisibility") or {}
-            panel_keys = self._prefixed_area_keys(area_visibility, "panel.")
-            portal_keys = self._prefixed_area_keys(area_visibility, "portal.")
-            self.assertFalse(
-                panel_keys,
-                f"{surface} surface 不应返回 panel.* 页面功能区: surface={surface}, context={context}",
+        for surface, context in contexts.items():
+            self.assertEqual(
+                context.get("surface"),
+                surface,
+                f"{surface} surface 不正确: {context}",
             )
-            self.assertFalse(
-                portal_keys,
-                f"{surface} surface 不应返回 portal.* 页面功能区: surface={surface}, context={context}",
+            self.assertEqual(
+                context.get("entryVisibility") or {},
+                baseline.get("entryVisibility") or {},
+                f"入口投影不应随 surface 漂移: surface={surface}, context={context}",
             )
+            self.assertEqual(
+                context.get("areaVisibility") or {},
+                baseline.get("areaVisibility") or {},
+                f"区域投影不应随 surface 漂移: surface={surface}, context={context}",
+            )
+            self.assertEqual(
+                context.get("capabilities") or [],
+                baseline.get("capabilities") or [],
+                f"capability 投影不应随 surface 漂移: surface={surface}, context={context}",
+            )
+
+    def test_system_context_capabilities_are_stable_and_explicit(self):
+        context = self.system_context_client.query("panel")
+        capabilities = context.get("capabilities") or []
+        self.assertTrue(capabilities, f"system context 缺少有效 capability: {context}")
+        self.assertEqual(
+            capabilities,
+            sorted(set(capabilities)),
+            f"capability 必须去空、去重并稳定排序: {capabilities}",
+        )
+        self.assertTrue(
+            all(isinstance(item, str) and item.strip() for item in capabilities),
+            f"capability 必须使用非空字符串: {capabilities}",
+        )
 
 
 if __name__ == "__main__":

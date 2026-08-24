@@ -30,8 +30,9 @@ python3 run_tests.py --preset panel-full
   - `Profile` smoke
   - 校验 `summary` / `notification` 的返回结构
 - [system_context_test.py](system_context_test.py)
-  - 校验 `/api/v1/system/context/` 在 `panel / portal / workbench / app / other` 不同 `surface` 下的返回边界
-  - 固化 `panel.*` 与 `portal.*` 页面级功能区不会跨 surface 混出
+  - 校验 `/api/v1/system/context/` 在 `panel / portal / workbench / app / other` 下返回一致的完整授权投影
+  - 固化 entry、area visibility 与 capability 不随页面切换发生短暂漂移
+  - 校验 capability 去空、去重并稳定排序
 - [service_access_test.py](service_access_test.py)
   - 多能力项服务未带 capability key 时返回 `400`
   - `query` 能力通过 `gateway` 访问
@@ -136,7 +137,7 @@ python3 run_tests.py --target panel-governance-api
 - `subscription` 组默认只跑读路径；写路径只在显式提供可变更对象时执行
 - `definition` 组默认只跑读路径；写路径只在显式提供允许变更时执行
 - `profile` 组当前全部为只读 smoke，不引入额外副作用
-- `system_context` 组当前全部为只读 smoke，用于校验 `surface` 过滤和页面级功能区边界
+- `system_context` 组当前全部为只读 smoke，用于校验完整授权投影和 capability 稳定性
 - `service access` 默认先锁定协议与 query 访问；`get` 访问只在显式提供实体 ID 时执行
 - 当前 `user_service` 已存在稳定样本，`service_access_test` 会自动覆盖 `query + get`
 - `service roundtrip` 优先复用当前用户既有订阅；若无订阅则尝试创建并在测试结束后清理

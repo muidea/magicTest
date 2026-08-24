@@ -222,7 +222,7 @@ TARGETS: Tuple[TestTarget, ...] = (
         key="panel-page-api",
         goal="panel-api",
         title="Panel / Portal 页面接口边界",
-        description="profile、notification、system/context surface 过滤回归。",
+        description="profile、notification、system/context 完整 capability 投影回归。",
         workdir=ROOT_DIR / "panel",
         command=(
             sys.executable,
