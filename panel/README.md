@@ -145,4 +145,3 @@ python3 run_tests.py --target panel-governance-api
 - 若未提供且运行期实体元数据足够，则自动生成最小 `create/update` payload
 - 若服务未开放 `delete` 能力，则通过运行期实体 delete API 做测试清理，避免脏数据累计
 - `apps runtime` 默认优先使用显式指定的 `MAGICTEST_APPS_RUNTIME_KEY`；若未指定，则只从“非 bootstrap 的运行中应用”列表自动发现目标，自动发现失败时会跳过而不是误判为 runtime 同步失败
-- 安装/卸载、schema、subscription、definition、feedback、notification 的专项回归分组设计见 `magicRunner/docs/design-panel-regression-plan.md`
