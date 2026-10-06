@@ -1,5 +1,13 @@
 # AGENTS.md - MagicTest Codebase Guide
 
+## Model and Workflow Boundaries
+
+For model, DTO, lifecycle, recovery or cleanup changes, read [Workspace Boundary Rules](../docs/model-state-boundary-rules.md) and use its change-review template.
+
+- Verify business metadata separately from workflow progress and owner security fences. Cover exact identity, tenant/instance isolation, stale versions, unknown replies and cleanup through public owner contracts.
+- Retain original evidence and candidate identity. Source tests, fixture success and recovered network observations cannot substitute for durable business confirmation or automatically change formal Live outcomes.
+- Change source owners first; never edit vendor manually. Sync direct dependents through the workspace `upgrade_vendor.sh`, update affected contracts and product materials, and record source regression separately from Live acceptance.
+
 ## Project Overview
 MagicTest is a Python3 test suite project using pytest/unittest. Modules include: session, cas, mock, file, platform, vmi.
 
