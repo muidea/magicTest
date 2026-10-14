@@ -1,6 +1,6 @@
 # magicTest CAS E2E 基线
 
-这组 e2e 测试以 [design-cas-auth.md](../../docs/design-cas-auth.md) 和 [design-modules.md](../../magicCas/docs/design-modules.md) 为准，当前固定采用以下业务口径：
+这组 e2e 测试以 [design-cas-auth.md](~/dataspace/magicPlatform/docs/technical/design-cas-auth.md) 和 [design-modules.md](~/codespace/magicCas/docs/design-modules.md) 为准，当前固定采用以下业务口径：
 
 ## 核心语义
 

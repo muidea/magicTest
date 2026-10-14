@@ -2,7 +2,7 @@
 
 ## Model and Workflow Boundaries
 
-For model, DTO, lifecycle, recovery or cleanup changes, read [Workspace Boundary Rules](../docs/model-state-boundary-rules.md) and use its change-review template.
+For model, DTO, lifecycle, recovery or cleanup changes, read [Workspace Boundary Rules](~/dataspace/magicPlatform/docs/technical/model-state-boundary-rules.md) and use its change-review template.
 
 - Verify business metadata separately from workflow progress and owner security fences. Cover exact identity, tenant/instance isolation, stale versions, unknown replies and cleanup through public owner contracts.
 - Retain original evidence and candidate identity. Source tests, fixture success and recovered network observations cannot substitute for durable business confirmation or automatically change formal Live outcomes.
@@ -25,7 +25,7 @@ pip install black isort flake8 mypy  # Dev dependencies
 ### Running Tests
 
 ```bash
-cd /home/rangh/codespace/magicTest
+cd ~/codespace/magicTest
 source ~/codespace/venv/bin/activate
 
 # Unified root entry (recommended)
@@ -193,7 +193,7 @@ Daily execution should prefer root presets and built-in env profiles:
 - `panel-local`: `panel/cas`
 - `autotest-local`: `platform/file/vmi`
 
-Only VMI-specific advanced runtime config still lives in `vmi/test_config.json`:
+Only VMI-specific advanced runtime config still lives in `~/codespace/magicTest/vmi/test_config.json`:
 
 ```json
 {

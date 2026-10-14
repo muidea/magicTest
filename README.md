@@ -11,14 +11,14 @@
 
 | 测试目标 | 说明 | 主要目录 |
 | --- | --- | --- |
-| `foundation` | 会话、请求封装和测试基础设施自身验证 | `session/` |
-| `auth` | CAS 认证、账号、角色、命名空间、注册审核 | `cas/` |
-| `ui` | 真实浏览器层面的注册、登录与页面入口验收 | `ui/` |
-| `file` | 文件服务基础能力验证 | `file/` |
-| `platform-core` | `magicBase` 平台核心接口回归 | `platform/` |
-| `panel-api` | `magicPanel` / `portal` 控制面与消费面接口回归 | `panel/` |
-| `business-scenario` | 业务应用级场景与模块回归 | `vmi/` |
-| `load` | 并发、热点、老化等压测入口 | `vmi/` |
+| `foundation` | 会话、请求封装和测试基础设施自身验证 | `~/codespace/magicTest/session` |
+| `auth` | CAS 认证、账号、角色、命名空间、注册审核 | `~/codespace/magicTest/cas` |
+| `ui` | 真实浏览器层面的注册、登录与页面入口验收 | `~/codespace/magicTest/ui` |
+| `file` | 文件服务基础能力验证 | `~/codespace/magicTest/file` |
+| `platform-core` | `magicBase` 平台核心接口回归 | `~/codespace/magicTest/platform` |
+| `panel-api` | `magicPanel` / `portal` 控制面与消费面接口回归 | `~/codespace/magicTest/panel` |
+| `business-scenario` | 业务应用级场景与模块回归 | `~/codespace/magicTest/vmi` |
+| `load` | 并发、热点、老化等压测入口 | `~/codespace/magicTest/vmi` |
 
 这次整理后的原则是：
 
@@ -32,15 +32,15 @@
 
 新增根层入口：
 
-- [run_tests.py](/home/rangh/codespace/magicTest/run_tests.py)
-- [test_catalog.py](/home/rangh/codespace/magicTest/test_catalog.py)
+- [run_tests.py](~/codespace/magicTest/run_tests.py)
+- [test_catalog.py](~/codespace/magicTest/test_catalog.py)
 
 推荐先用它做导航和执行。`cas/platform/panel/vmi` 各子目录里的 `run_tests.py` 保留给高级调试，不再作为日常主入口。
 
 ### 2.1 查看测试目标
 
 ```bash
-cd /home/rangh/codespace/magicTest
+cd ~/codespace/magicTest
 source ~/codespace/venv/bin/activate
 python3 run_tests.py --list-goals
 ```
@@ -223,11 +223,11 @@ python3 run_tests.py --preset load-aging
 
 ## 4. 现有目录的职责
 
-### `session/`
+### `~/codespace/magicTest/session`
 
 只放测试基础设施和 `MagicSession` 相关验证，不承载业务接口回归。
 
-### `cas/`
+### `~/codespace/magicTest/cas`
 
 只放认证与注册治理相关测试：
 
@@ -236,7 +236,7 @@ python3 run_tests.py --preset load-aging
 - 账号 / 角色 / 端点 / 命名空间
 - 注册模板 / 注册策略 / 注册审核
 
-### `ui/`
+### `~/codespace/magicTest/ui`
 
 只放真实浏览器层面的页面链路验收：
 
@@ -245,13 +245,13 @@ python3 run_tests.py --preset load-aging
 - 审核后登录
 - 登录后进入 portal 首页
 
-当前 `ui` 测试是可选增强套件，依赖 Playwright；日常接口回归仍以 `cas/` 和 `panel/` 为主。
+当前 `ui` 测试是可选增强套件，依赖 Playwright；日常接口回归仍以 `~/codespace/magicTest/cas` 和 `~/codespace/magicTest/panel` 为主。
 
-### `file/`
+### `~/codespace/magicTest/file`
 
 只放 `magicFile` 相关基础回归。
 
-### `platform/`
+### `~/codespace/magicTest/platform`
 
 只放 `magicBase` 平台核心接口：
 
@@ -262,7 +262,7 @@ python3 run_tests.py --preset load-aging
 - operation_log
 - totalizator
 
-### `panel/`
+### `~/codespace/magicTest/panel`
 
 只放 `magicplatform` 当前控制面 / 消费面接口回归：
 
@@ -272,7 +272,7 @@ python3 run_tests.py --preset load-aging
 - profile / system context
 - 服务访问主链
 
-### `vmi/`
+### `~/codespace/magicTest/vmi`
 
 只放具体业务应用级验证与压测：
 
@@ -308,7 +308,7 @@ python3 run_tests.py --preset load-aging
 
 ## 6. 相关文档
 
-- [panel/README.md](/home/rangh/codespace/magicTest/panel/README.md)
-- [platform/README.md](/home/rangh/codespace/magicTest/platform/README.md)
-- [vmi/README.md](/home/rangh/codespace/magicTest/vmi/README.md)
-- [session/USAGE.md](/home/rangh/codespace/magicTest/session/USAGE.md)
+- [panel/README.md](~/codespace/magicTest/panel/README.md)
+- [platform/README.md](~/codespace/magicTest/platform/README.md)
+- [vmi/README.md](~/codespace/magicTest/vmi/README.md)
+- [session/USAGE.md](~/codespace/magicTest/session/USAGE.md)
