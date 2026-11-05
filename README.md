@@ -2,17 +2,19 @@
 
 平台基本功能以交付可重复执行的完整场景、逐条用例及配套脚本为目标，统一要求见[平台全量功能回归说明](~/dataspace/magicPlatform/docs/technical/platform-functional-regression.md)，两个模拟应用单列。正式回归材料只描述当前功能、环境准备、操作断言、清理和执行方式，不包含过去的临时阶段记录。
 
-[资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找候选脚本和缺口；清单存在不代表完整脚本套件已经交付。
+[资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找71类功能、245条必需用例的候选脚本和缺口；清单存在不代表完整脚本套件已经交付。默认常规全量目标为223个分项自动执行，48个条件专项单独预检与验证；26条混合用例分别记账，完整目录仍为245条。异常类型不直接决定是否专项，可稳定构造的权限／输入／并发／浏览器反例保留在常规。
 
 ```sh
 cd ~/codespace/magicTest
 python3 regression_inventory.py --check
 python3 regression_inventory.py --case F033-001
 python3 regression_inventory.py --scenario R10
+python3 regression_inventory.py --suite standard --json
+python3 regression_inventory.py --suite special --json
 python3 regression_inventory.py --json
 ```
 
-[盘点工具](~/codespace/magicTest/regression_inventory.py)只读原用例目录并检查引用，不运行测试。缺协作仓库或引用失效会明确失败；可用`--workspace`与`--platform-root`指定checkout。执行仍使用下文统一入口；现有部分套件可能跳过，退出码为0不等于对应功能用例已通过。
+[盘点工具](~/codespace/magicTest/regression_inventory.py)只读原用例目录并复用目录owner的分组校验，不运行测试；默认展示整个目录，`--suite`只筛选导航，不执行所选组。分组详情和条件见[专项清单](~/codespace/docs/acceptance/platform-special-cases.md)。缺协作仓库或引用失效会明确失败；可用`--workspace`与`--platform-root`指定checkout。执行仍使用下文统一入口；现有部分套件可能跳过，退出码为0不等于对应功能用例已通过。
 
 ## 项目定位与开发边界
 

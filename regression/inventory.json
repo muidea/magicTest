@@ -148,7 +148,8 @@
       "owners": [
         "magicCas",
         "magicRunner/web",
-        "magicWebPortal"
+        "magicWebPortal",
+        "magicRunner/panel"
       ],
       "candidateAssets": [
         "login-browser",
@@ -169,7 +170,9 @@
       ],
       "owners": [
         "magicCas",
-        "magicRunner/panel"
+        "magicRunner/panel",
+        "magicRunner/web",
+        "magicRunner/gateway"
       ],
       "candidateAssets": [
         "cas-api",
@@ -178,7 +181,7 @@
     },
     {
       "id": "R03",
-      "title": "模型定义、关系、原子保存与发布",
+      "title": "模型、页面设计、资源与正式发布",
       "featureIds": [
         "F011",
         "F012",
@@ -186,12 +189,18 @@
         "F014",
         "F018",
         "F019",
-        "F020"
+        "F020",
+        "F067",
+        "F068"
       ],
       "owners": [
         "magicRunner/panel",
+        "magicFile",
+        "magicWebPortal",
         "magicBase",
-        "magicOrm"
+        "magicOrm",
+        "magicRunner/gateway",
+        "magicCas"
       ],
       "candidateAssets": [
         "panel-definition"
@@ -199,15 +208,18 @@
     },
     {
       "id": "R04",
-      "title": "功能块、脚本与持久执行",
+      "title": "功能块、脚本、可靠来源与持久执行",
       "featureIds": [
         "F015",
         "F016",
-        "F017"
+        "F017",
+        "F071"
       ],
       "owners": [
+        "magicBase",
         "magicRunner/panel",
-        "magicBase"
+        "magicWebPortal",
+        "magicCas"
       ],
       "candidateAssets": []
     },
@@ -244,7 +256,8 @@
       "owners": [
         "magicRunner/panel",
         "magicBase",
-        "magicCas"
+        "magicCas",
+        "magicRunner/gateway"
       ],
       "candidateAssets": [
         "panel-lifecycle-list",
@@ -253,7 +266,7 @@
     },
     {
       "id": "R07",
-      "title": "启停、恢复、卸载与清理",
+      "title": "启停、升级、恢复、卸载与清理",
       "featureIds": [
         "F030",
         "F031",
@@ -264,7 +277,8 @@
         "magicRunner/panel",
         "magicBase",
         "magicCas",
-        "magicFile"
+        "magicFile",
+        "magicRunner/gateway"
       ],
       "candidateAssets": [
         "recovery-source",
@@ -273,16 +287,22 @@
     },
     {
       "id": "R08",
-      "title": "运行数据、数据库与实例存储",
+      "title": "运行数据、页面读取、业务动作与存储",
       "featureIds": [
         "F036",
         "F047",
-        "F048"
+        "F048",
+        "F069",
+        "F070"
       ],
       "owners": [
+        "magicRunner/apps",
         "magicBase",
+        "magicOrm",
+        "magicCas",
         "magicRunner/panel",
-        "magicOrm"
+        "magicPlatform",
+        "magicWebPortal"
       ],
       "candidateAssets": [
         "panel-runtime",
@@ -357,8 +377,10 @@
       ],
       "owners": [
         "magicRunner",
+        "magicBase",
+        "magicFile",
         "magicCas",
-        "magicBase"
+        "magicRunner/panel"
       ],
       "candidateAssets": [
         "panel-profile"

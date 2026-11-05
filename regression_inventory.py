@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from collections import Counter
@@ -41,6 +42,11 @@ def unique_index(items: list[dict], field: str) -> dict:
 
 
 def validate_inventory(inventory: dict, catalog: dict, workspace: Path, platform: Path) -> None:
+    validator = workspace / 'docs/scripts/platform_acceptance.py'
+    spec = importlib.util.spec_from_file_location('platform_case_validation', validator)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.validate_execution(catalog)
     features = unique_index(catalog["features"], "id")
     cases = unique_index(catalog["cases"], "id")
     assets = unique_index(inventory["assets"], "id")
@@ -81,6 +87,7 @@ def validate_inventory(inventory: dict, catalog: dict, workspace: Path, platform
 
 
 def build_rows(inventory: dict, catalog: dict) -> list[dict]:
+    features = {feature['id']: feature for feature in catalog['features']}
     scenarios = {fid: s for s in inventory["scenarios"] for fid in s["featureIds"]}
     reviews = {r["caseId"]: r for r in inventory["caseReviews"]}
     rows = []
@@ -89,10 +96,12 @@ def build_rows(inventory: dict, catalog: dict) -> list[dict]:
         review = reviews.get(case["id"], {})
         rows.append({
             "caseId": case["id"], "title": case["title"],
+            "purpose": case.get("purpose", ""), "required": case.get("required", True),
             "scenarioId": scenario["id"], "scenario": scenario["title"],
             "kind": case["kind"], "fixture": case["fixture"],
             "methods": case["methods"], "priority": case["priority"],
-            "owners": scenario["owners"],
+            "execution": case["execution"],
+            "owners": features[case['featureId']].get('owners', scenario['owners']),
             "status": review.get("status", "unreviewed"),
             "candidateAssets": scenario["candidateAssets"],
             "reviewedAssets": review.get("assetIds", []),
@@ -110,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="检查功能完整分组、用例引用、target及文件存在性")
     parser.add_argument("--case", help="查看单条固定编号用例，例如 F033-001")
     parser.add_argument("--scenario", help="按主场景筛选，例如 R07")
+    parser.add_argument("--suite", choices=["standard", "special", "all"], default="all",
+                        help="只读筛选执行分组；默认展示完整目录，不运行测试")
     parser.add_argument("--json", action="store_true", help="输出全部或筛选后的逐用例映射")
     args = parser.parse_args(argv)
     try:
@@ -124,6 +135,9 @@ def main(argv: list[str] | None = None) -> int:
             rows = [r for r in rows if r["scenarioId"] == args.scenario]
         if args.case:
             rows = [r for r in rows if r["caseId"] == args.case]
+        if args.suite != 'all':
+            rows = [{**r, 'execution': [p for p in r['execution'] if p['suite'] == args.suite]}
+                    for r in rows if any(p['suite'] == args.suite for p in r['execution'])]
         if not rows:
             raise ValueError("没有匹配的用例")
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -131,11 +145,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.json:
         print(json.dumps({"purpose": "inventory-only", "cases": rows, "assets": inventory["assets"]}, ensure_ascii=False, indent=2))
-    elif args.case or args.scenario:
+    elif args.case or args.scenario or args.suite != 'all':
         assets = {a["id"]: a for a in inventory["assets"]}
         for row in rows:
             print(f"{row['caseId']} {row['title']} [{row['scenarioId']}/{row['status']}]")
             print(f"  {row['finding']}")
+            for part in row['execution']:
+                print(f"  {part['suite']} [{part['fixture']}]: {part['scope']}")
+                if part['prerequisites']:
+                    print('  专项条件：' + '、'.join(part['prerequisites']))
             for aid in row["candidateAssets"]:
                 print(f"  候选 {aid}: {assets[aid]['path']}")
                 print(f"    {assets[aid]['limitation']}")
@@ -145,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{scenario['id']} {scenario['title']}: {len(scenario['featureIds'])}类功能 / {len(selected)}条用例 / {len(scenario['candidateAssets'])}个候选资产")
         print(f"结构检查通过：{len(inventory['scenarios'])}个场景，{len(catalog['features'])}类功能，{len(rows)}条用例。")
         print("脚本复核状态：" + json.dumps(Counter(r["status"] for r in rows), ensure_ascii=False))
+        print("执行分组（混合用例分别计入）：" + json.dumps(
+            Counter(p['suite'] for r in rows for p in r['execution']), ensure_ascii=False))
         print("仅证明盘点结构与引用有效；不表示脚本就绪、业务通过或Live完成。")
     return 0
 
