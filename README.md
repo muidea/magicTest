@@ -1,5 +1,7 @@
 # magicTest 测试导航
 
+Node.js浏览器工具的Playwright固定为`1.56.1`，依赖及锁文件维护在本仓根目录。首次检出或依赖目录缺失时在`~/codespace/magicTest`执行`npm ci`；常规验证直接复用本仓`node_modules`，不向临时目录重复安装。浏览器可使用本机Google Chrome；使用Playwright自带Chromium时首次执行`npx playwright install chromium`，其缓存由用户目录复用。该Node.js依赖不替代Python浏览器套件所需的Python包。
+
 平台基本功能以交付可重复执行的完整场景、逐条用例及配套脚本为目标，统一要求见[平台全量功能回归说明](~/dataspace/magicPlatform/docs/technical/platform-functional-regression.md)，两个模拟应用单列。正式回归材料只描述当前功能、环境准备、操作断言、清理和执行方式，不包含过去的临时阶段记录。
 
 [资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找71类功能、245条必需用例的候选脚本和缺口；清单存在不代表完整脚本套件已经交付。默认常规全量目标为223个分项自动执行，48个条件专项单独预检与验证；26条混合用例分别记账，完整目录仍为245条。异常类型不直接决定是否专项，可稳定构造的权限／输入／并发／浏览器反例保留在常规。
@@ -15,6 +17,19 @@ python3 regression_inventory.py --json
 ```
 
 [盘点工具](~/codespace/magicTest/regression_inventory.py)只读原用例目录并复用目录owner的分组校验，不运行测试；默认展示整个目录，`--suite`只筛选导航，不执行所选组。分组详情和条件见[专项清单](~/codespace/docs/acceptance/platform-special-cases.md)。缺协作仓库或引用失效会明确失败；可用`--workspace`与`--platform-root`指定checkout。执行仍使用下文统一入口；现有部分套件可能跳过，退出码为0不等于对应功能用例已通过。
+
+### 常规分项浏览器执行器
+
+[执行器](~/codespace/magicTest/regression/standard.cjs)读取权威目录，为所选常规分项逐项输出结果；[具体断言](~/codespace/magicTest/regression/standard_cases.cjs)只登记已有实现，未覆盖全部步骤、缺少夹具或没有执行器的分项明确受阻。它仍不是已交付的完整常规套件，不能以已注册handler数推断完整覆盖。
+
+```sh
+node ~/codespace/magicTest/regression/standard.cjs --dry-run true
+node ~/codespace/magicTest/regression/standard.cjs --dry-run true --cases F001-004,F065-003
+```
+
+实际执行必须传入`--credentials`、`--private-state`、`--output`、`--baseline-health`；可用`--case`或`--cases`筛选分项。凭据为仓库外权限受限的JSON文件，字段为明确HTTPS的`origin`、原账号所在`namespace`、`account`及`password`；秘密和浏览器状态不得提交。`--baseline-health`使用报告工具采集的当前部署结果。`--output`指向应用资料仓库当前登记运行下的新执行目录，不能覆盖既有结果；已完成清理的私密fixture状态不再复用，新执行另用私密状态目录。正常退出仍需核对逐例结果及cleanup证据，退出码2表示未全部通过或清理未完成。
+
+默认复用已安装Playwright配套Chromium；首次准备执行`~/codespace/magicTest/node_modules/.bin/playwright install chromium`。可用`--chrome`指定其他已安装浏览器。当前本地环境使用`*.local.vpc`映射到本机，其他部署须先适配浏览器解析配置，不能直接套用本机网络假设。专项不由此入口触发。
 
 ## 项目定位与开发边界
 
