@@ -1,0 +1,484 @@
+{
+  "sourceCatalog": "~/codespace/docs/acceptance/platform-catalog.json",
+  "scope": "platform-basic",
+  "applicationSuites": [
+    "~/codespace/docs/device-management/README.md",
+    "~/codespace/docs/chess-room-booking/README.md"
+  ],
+  "assets": [
+    {
+      "id": "login-browser",
+      "path": "~/codespace/docs/scripts/live-login-regression.cjs",
+      "layer": "browser",
+      "limitation": "需本机CDP、私密账号文件和候选指纹；缺首次改密、三宽度及CAS独立会话回读。"
+    },
+    {
+      "id": "registration-api",
+      "path": "~/codespace/magicTest/cas/registration_test.py",
+      "layer": "api",
+      "limitation": "已抽查批准前后登录分支；需核对当前认证合同、驳回、重复审批及清理回读。",
+      "target": "cas-registration"
+    },
+    {
+      "id": "registration-browser",
+      "path": "~/codespace/magicTest/ui/portal_registration_ui_test.py",
+      "layer": "browser",
+      "limitation": "需Playwright；缺依赖可能跳过；逐项断言和当前认证合同待审。",
+      "target": "portal-registration-ui"
+    },
+    {
+      "id": "cas-api",
+      "path": "~/codespace/magicTest/cas/cas_api_test.py",
+      "layer": "api",
+      "limitation": "仅定位候选入口；原主体、当前角色和精确租户／实例断言待审。",
+      "target": "cas-api"
+    },
+    {
+      "id": "panel-definition",
+      "path": "~/codespace/magicTest/panel/definition_test.py",
+      "layer": "api",
+      "limitation": "已抽查：定义查询和描述往返；缺图标、发布、独立回读及清理确认；公共夹具仍有旧凭据入口。",
+      "target": "panel-governance-api"
+    },
+    {
+      "id": "panel-runtime",
+      "path": "~/codespace/magicTest/panel/apps_runtime_test.py",
+      "layer": "api",
+      "limitation": "已抽查：元数据与列表；自动发现或缺夹具可跳过，未覆盖完整CRUD。",
+      "target": "panel-runtime-api"
+    },
+    {
+      "id": "panel-lifecycle-list",
+      "path": "~/codespace/magicTest/panel/application_lifecycle_test.py",
+      "layer": "api",
+      "limitation": "已抽查：只查询运行列表，不能证明安装、启停、卸载或恢复。",
+      "target": "panel-runtime-api"
+    },
+    {
+      "id": "panel-subscription",
+      "path": "~/codespace/magicTest/panel/subscription_test.py",
+      "layer": "api",
+      "limitation": "候选查询、端点往返及状态切换；真实ApiKey、到期及撤权待审。",
+      "target": "panel-governance-api"
+    },
+    {
+      "id": "panel-service",
+      "path": "~/codespace/magicTest/panel/service_roundtrip_test.py",
+      "layer": "api",
+      "limitation": "已抽查：仍以endpoint/authToken和bind_auth_secret接入；需按当前ApiKey合同改写后验证。",
+      "target": "panel-service-api"
+    },
+    {
+      "id": "key-first-call",
+      "path": "~/codespace/docs/scripts/live-api-key-first-call.cjs",
+      "layer": "browser-api",
+      "limitation": "已有ApiKey签发后首次GET；固定local.vpc、已登录页及清理判定须复核，缺轮换／撤销后拒绝证明。"
+    },
+    {
+      "id": "panel-context",
+      "path": "~/codespace/magicTest/panel/system_context_test.py",
+      "layer": "api",
+      "limitation": "候选system/context投影；不是CAS独立授权真值回读。",
+      "target": "panel-page-api"
+    },
+    {
+      "id": "panel-profile",
+      "path": "~/codespace/magicTest/panel/profile_test.py",
+      "layer": "api",
+      "limitation": "候选profile结构检查；不证明完整通知、待办和工作台交互。",
+      "target": "panel-page-api"
+    },
+    {
+      "id": "base-api",
+      "path": "~/codespace/magicTest/platform/run_tests.py",
+      "layer": "api",
+      "limitation": "旧核心接口集合；逐项核对当前Base SDK／权限及数据归属后再复用。",
+      "target": "platform-core-api"
+    },
+    {
+      "id": "file-api",
+      "path": "~/codespace/magicTest/file/basic_scenario_test.py",
+      "layer": "api",
+      "limitation": "文件基础场景；当前认证、受管引用、上传中断和删除证明待审。",
+      "target": "file-basic"
+    },
+    {
+      "id": "native-source",
+      "path": "~/codespace/magicRunner/internal/modules/kernel/panel/biz/native_orchestration_validation_test.go",
+      "layer": "source",
+      "limitation": "源码保护项候选；不能替代实际多容器运行／注入与卸载。"
+    },
+    {
+      "id": "deployment-source",
+      "path": "~/codespace/magicRunner/internal/modules/kernel/panel/biz/deployment_execution_checkpoint_test.go",
+      "layer": "source",
+      "limitation": "执行检查点源码保护项候选；原任务、失联及重启Live链路另验。"
+    },
+    {
+      "id": "recovery-source",
+      "path": "~/codespace/magicRunner/internal/modules/kernel/panel/biz/application_successor_recovery_test.go",
+      "layer": "source",
+      "limitation": "后继恢复源码候选；完整恢复用例还需创建当次任务、执行正式恢复并独立核对终态及残留。"
+    },
+    {
+      "id": "deployment-regression",
+      "path": "~/dataspace/magicPlatform/tests/deployment/inventory.json",
+      "layer": "source-inventory",
+      "limitation": "25个当前部署回归文件；执行条件见同目录README，不自动执行，不代表平台功能用例已覆盖或Live通过。"
+    },
+    {
+      "id": "evidence-validator",
+      "path": "~/codespace/docs/scripts/platform_acceptance.py",
+      "layer": "tool",
+      "limitation": "校验目录及结果证据；不是业务场景执行器。"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "R01",
+      "title": "登录、注册与会话",
+      "featureIds": [
+        "F001",
+        "F002",
+        "F004",
+        "F008",
+        "F009",
+        "F056"
+      ],
+      "owners": [
+        "magicCas",
+        "magicRunner/web",
+        "magicWebPortal"
+      ],
+      "candidateAssets": [
+        "login-browser",
+        "registration-api",
+        "registration-browser",
+        "cas-api"
+      ]
+    },
+    {
+      "id": "R02",
+      "title": "租户、角色、实例与端点授权",
+      "featureIds": [
+        "F003",
+        "F005",
+        "F006",
+        "F007",
+        "F010"
+      ],
+      "owners": [
+        "magicCas",
+        "magicRunner/panel"
+      ],
+      "candidateAssets": [
+        "cas-api",
+        "panel-context"
+      ]
+    },
+    {
+      "id": "R03",
+      "title": "模型定义、关系、原子保存与发布",
+      "featureIds": [
+        "F011",
+        "F012",
+        "F013",
+        "F014",
+        "F018",
+        "F019",
+        "F020"
+      ],
+      "owners": [
+        "magicRunner/panel",
+        "magicBase",
+        "magicOrm"
+      ],
+      "candidateAssets": [
+        "panel-definition"
+      ]
+    },
+    {
+      "id": "R04",
+      "title": "功能块、脚本与持久执行",
+      "featureIds": [
+        "F015",
+        "F016",
+        "F017"
+      ],
+      "owners": [
+        "magicRunner/panel",
+        "magicBase"
+      ],
+      "candidateAssets": []
+    },
+    {
+      "id": "R05",
+      "title": "原生多组件编排与发布",
+      "featureIds": [
+        "F021",
+        "F022",
+        "F023",
+        "F024",
+        "F025",
+        "F026"
+      ],
+      "owners": [
+        "magicRunner/panel",
+        "magicPlatform"
+      ],
+      "candidateAssets": [
+        "native-source",
+        "deployment-regression"
+      ]
+    },
+    {
+      "id": "R06",
+      "title": "安装、审批、执行与分派",
+      "featureIds": [
+        "F027",
+        "F028",
+        "F029",
+        "F032",
+        "F035"
+      ],
+      "owners": [
+        "magicRunner/panel",
+        "magicBase",
+        "magicCas"
+      ],
+      "candidateAssets": [
+        "panel-lifecycle-list",
+        "deployment-source"
+      ]
+    },
+    {
+      "id": "R07",
+      "title": "启停、恢复、卸载与清理",
+      "featureIds": [
+        "F030",
+        "F031",
+        "F033",
+        "F034"
+      ],
+      "owners": [
+        "magicRunner/panel",
+        "magicBase",
+        "magicCas",
+        "magicFile"
+      ],
+      "candidateAssets": [
+        "recovery-source",
+        "deployment-regression"
+      ]
+    },
+    {
+      "id": "R08",
+      "title": "运行数据、数据库与实例存储",
+      "featureIds": [
+        "F036",
+        "F047",
+        "F048"
+      ],
+      "owners": [
+        "magicBase",
+        "magicRunner/panel",
+        "magicOrm"
+      ],
+      "candidateAssets": [
+        "panel-runtime",
+        "base-api"
+      ]
+    },
+    {
+      "id": "R09",
+      "title": "服务治理、合同、指南与调试",
+      "featureIds": [
+        "F037",
+        "F038",
+        "F039",
+        "F040",
+        "F043",
+        "F044",
+        "F046"
+      ],
+      "owners": [
+        "magicRunner/panel",
+        "magicRunner/gateway",
+        "magicWebPortal"
+      ],
+      "candidateAssets": [
+        "panel-service"
+      ]
+    },
+    {
+      "id": "R10",
+      "title": "订阅、ApiKey与网关准入",
+      "featureIds": [
+        "F041",
+        "F042",
+        "F045"
+      ],
+      "owners": [
+        "magicRunner/panel",
+        "magicRunner/gateway",
+        "magicCas"
+      ],
+      "candidateAssets": [
+        "panel-subscription",
+        "panel-service",
+        "key-first-call"
+      ]
+    },
+    {
+      "id": "R11",
+      "title": "文件、图标、附件与分类",
+      "featureIds": [
+        "F049",
+        "F050",
+        "F051"
+      ],
+      "owners": [
+        "magicFile",
+        "magicRunner/panel"
+      ],
+      "candidateAssets": [
+        "file-api"
+      ]
+    },
+    {
+      "id": "R12",
+      "title": "待办、通知、工单与审计留存",
+      "featureIds": [
+        "F052",
+        "F053",
+        "F054",
+        "F057",
+        "F058"
+      ],
+      "owners": [
+        "magicRunner",
+        "magicCas",
+        "magicBase"
+      ],
+      "candidateAssets": [
+        "panel-profile"
+      ]
+    },
+    {
+      "id": "R13",
+      "title": "品牌、法律资料与双工作台",
+      "featureIds": [
+        "F055",
+        "F064",
+        "F065",
+        "F066"
+      ],
+      "owners": [
+        "magicRunner",
+        "magicWebPortal"
+      ],
+      "candidateAssets": [
+        "login-browser",
+        "panel-profile",
+        "panel-context"
+      ]
+    },
+    {
+      "id": "R14",
+      "title": "健康、交付、备份、TLS与更新",
+      "featureIds": [
+        "F059",
+        "F060",
+        "F061",
+        "F062",
+        "F063"
+      ],
+      "owners": [
+        "magicPlatform",
+        "magicRunner/installer"
+      ],
+      "candidateAssets": [
+        "deployment-regression",
+        "evidence-validator"
+      ]
+    }
+  ],
+  "caseReviews": [
+    {
+      "caseId": "F001-001",
+      "status": "partial",
+      "assetIds": [
+        "login-browser"
+      ],
+      "finding": "已存在登录／退出交互取证；首次改密、CAS独立会话回读未齐。"
+    },
+    {
+      "caseId": "F002-001",
+      "status": "partial",
+      "assetIds": [
+        "registration-api",
+        "registration-browser"
+      ],
+      "finding": "API已断言pending不可登录、批准后登录；驳回账号不可登录及清理证明待补，浏览器逐断言待审。"
+    },
+    {
+      "caseId": "F011-001",
+      "status": "needs_rewrite",
+      "assetIds": [
+        "panel-definition"
+      ],
+      "finding": "只断言描述往返；未覆盖完整模型信息／图标及独立详情回读；认证夹具须先对齐当前合同。"
+    },
+    {
+      "caseId": "F012-001",
+      "status": "partial",
+      "assetIds": [
+        "panel-definition"
+      ],
+      "finding": "只定位包树／实体查询；完整分页、父子导航及失效选择待补。"
+    },
+    {
+      "caseId": "F029-001",
+      "status": "unreviewed",
+      "assetIds": [
+        "panel-lifecycle-list",
+        "deployment-source"
+      ],
+      "finding": "列表测试没有任务状态变化断言；检查点源码入口待逐项映射，需新增真实任务执行脚本。"
+    },
+    {
+      "caseId": "F033-001",
+      "status": "unreviewed",
+      "assetIds": [
+        "panel-lifecycle-list",
+        "recovery-source"
+      ],
+      "finding": "现有列表查询不能覆盖启停／卸载；需补正式命令及owner残留回读。"
+    },
+    {
+      "caseId": "F036-001",
+      "status": "partial",
+      "assetIds": [
+        "panel-runtime"
+      ],
+      "finding": "仅元数据CRUD地址和列表可访问断言；未实际执行创建／详情／更新／删除。"
+    },
+    {
+      "caseId": "F041-001",
+      "status": "needs_rewrite",
+      "assetIds": [
+        "panel-service",
+        "panel-subscription"
+      ],
+      "finding": "往返测试使用旧Endpoint凭据绑定；按当前合同重写并补退订与授权回读。"
+    },
+    {
+      "caseId": "F042-001",
+      "status": "partial",
+      "assetIds": [
+        "key-first-call"
+      ],
+      "finding": "当前ApiKey签发后首次GET已有取证工具；轮换、旧Key失效及独立当前角色判定待补。"
+    }
+  ]
+}

@@ -1,5 +1,19 @@
 # magicTest 测试导航
 
+平台基本功能以交付可重复执行的完整场景、逐条用例及配套脚本为目标，统一要求见[平台全量功能回归说明](~/dataspace/magicPlatform/docs/technical/platform-functional-regression.md)，两个模拟应用单列。正式回归材料只描述当前功能、环境准备、操作断言、清理和执行方式，不包含过去的临时阶段记录。
+
+[资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找候选脚本和缺口；清单存在不代表完整脚本套件已经交付。
+
+```sh
+cd ~/codespace/magicTest
+python3 regression_inventory.py --check
+python3 regression_inventory.py --case F033-001
+python3 regression_inventory.py --scenario R10
+python3 regression_inventory.py --json
+```
+
+[盘点工具](~/codespace/magicTest/regression_inventory.py)只读原用例目录并检查引用，不运行测试。缺协作仓库或引用失效会明确失败；可用`--workspace`与`--platform-root`指定checkout。执行仍使用下文统一入口；现有部分套件可能跳过，退出码为0不等于对应功能用例已通过。
+
 ## 项目定位与开发边界
 
 本仓 `AGENTS.md` 直接列出项目定位、公开能力、职责边界及开发验证要求，单独检出即可执行；跨项目配合使用项目名和 Git 地址识别。先修改事实 owner，再同步消费者和交付材料。平台架构长文作为补充设计依据，不是读取本仓规则的前置依赖。下文日期化记录保留各批范围，不代表当前部署全部验收通过。
