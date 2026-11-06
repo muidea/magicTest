@@ -208,6 +208,27 @@
       "layer": "tool",
       "target": "platform-standard",
       "limitation": "越权意外成功／未知／并发及handler夹具；仅工具验证，持久owner与Live另验。"
+    },
+    {
+      "id": "platform-standard-directory",
+      "path": "~/codespace/magicTest/regression/directory.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "完整分页、原主体与租户、预算和重复身份检查；没有owner快照修订时不承诺并发原子快照，不将不完整结果当作不存在。"
+    },
+    {
+      "id": "platform-standard-resource-lifecycle",
+      "path": "~/codespace/magicTest/regression/resource_lifecycle.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "公共create/createAs发送前持久化私密意图，独立owner读确认；未知创建／删除不盲重放，未解决子项阻止父租户清理；不覆盖手写业务命令的所有恢复合同。"
+    },
+    {
+      "id": "platform-standard-service-identity",
+      "path": "~/codespace/magicTest/regression/service_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "F037-003重复标识及身份不可编辑的精确拒绝，完整目录与两个独立owner回读；不调用外部上游，不覆盖其余服务主链。"
     }
   ],
   "scenarios": [
@@ -425,7 +446,8 @@
       "candidateAssets": [
         "panel-service",
         "platform-standard-orchestrator",
-        "platform-standard-handlers"
+        "platform-standard-handlers",
+        "platform-standard-service-identity"
       ]
     },
     {
@@ -714,6 +736,16 @@
         "platform-standard-script"
       ],
       "finding": "已补语法／入口／输入／输出异常、作者调试1—3000ms预算、长循环超时及浏览器取消；运行绑定1—30000ms由对应用例独立验证。AbortError仅证明传输取消，缺同一请求的服务端停止独立证据时执行器明确partial，不计Live通过；源码执行中取消测试单列。"
+    },
+    {
+      "caseId": "F037-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-identity",
+        "platform-standard-directory",
+        "platform-standard-resource-lifecycle"
+      ],
+      "finding": "已有精确handler及原主体/owner回读和清理；工具复核及单次定向运行不构成完整常规套件稳定执行资格。逐次结果见当前运行证据。"
     }
   ]
 }

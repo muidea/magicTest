@@ -19,6 +19,12 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def tool_hashes():
+    runtime = ROOT / 'regression'
+    paths = [runtime / 'run_standard.py'] + sorted(path for path in runtime.glob('*.cjs') if not path.name.endswith('.test.cjs'))
+    return {path.name: 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+
+
 @contextmanager
 def environment_lock(credentials):
     origin = json.loads(credentials.read_text()).get('origin', '')
@@ -135,8 +141,7 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     private = Path(tempfile.mkdtemp(prefix='platform-standard-' + stamp + '-'))
     print('Evidence: ' + str(directory), flush=True)
     print('Private recovery state (retained outside repositories): ' + str(private), flush=True)
-    inputs = {name: 'sha256:' + hashlib.sha256((ROOT / 'regression' / name).read_bytes()).hexdigest()
-              for name in ['run_standard.py', 'standard.cjs', 'standard_cases.cjs', 'identity_cases.cjs', 'registration_cases.cjs', 'session_cases.cjs', 'script_cases.cjs', 'notification_cases.cjs']}
+    inputs = tool_hashes()
     save(directory / 'inputs.json', {'suite': 'standard', 'selectedCases': cases or 'all required standard branches',
                                     'catalogDigest': owner.digest(catalog), 'toolHashes': inputs,
                                     'coordination': 'exclusive local origin lock held through preflight, mutations, cleanup and report',

@@ -142,6 +142,7 @@ test('F051 both readonly-role and missing-role branches register unexpected POST
     h.login = async () => ({});
     h.denied = (r, label) => { if (good(r)) { assert.equal(h.state.resources[0].id, 99); throw Error(label); } };
     const ok = h.ok;
+    h.directory = async (actor, route) => (await h.ok(actor, 'GET', route)).values;
     h.ok = async (actor, method, route) => {
       if (route.includes('/roles/')) return { values: readerAvailable ? [{ module: '/modules/kernel/runner', key: 'management-catalog-viewer', humanAssignable: true, status: 2, privilege: [{ module: '/modules/kernel/runner', uriPath: '/panel/catalogs/', value: 4 }] }] : [] };
       if (actor !== h.admin) return route.includes('?') ? { values: [c] } : { value: c };

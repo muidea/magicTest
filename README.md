@@ -43,6 +43,14 @@ MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json pyth
 
 [注册执行器](~/codespace/magicTest/regression/registration_cases.cjs)通过真实匿名租户Host调用公开申请入口，管理策略路径为`policies`；管理代理不能替代匿名正例。[会话策略执行器](~/codespace/magicTest/regression/session_cases.cjs)保存平台及租户策略，独立读取BFF新旧会话身份和实际到期时间，并条件恢复平台原策略；自然到期仍按专项处理。[脚本执行器](~/codespace/magicTest/regression/script_cases.cjs)核对格式化、样例输出／日志、诊断及正式库保存回读；F017-002 另核对作者调试1—3000ms（0默认3000）的边界、超时和传输取消，运行绑定1—30000ms独立验证。浏览器取消不直接证明服务端已停止。[通知执行器](~/codespace/magicTest/regression/notification_cases.cjs)核对真实门户详情、受众与租户范围、下线／删除及读取失败后的旧缓存保护。各模块登记不表示用例已经通过。
 
+注册账号的 `templateRefs` 只表示人工模板来源，不能用它断言注册来源的初始授权。执行器另通过公开 `subject-role-bindings` 集合读取原账号的绑定，核对注册来源、来源键、有效状态及精确角色集合，并保留实际登录和管理权限拒绝验证。目录仅在 `values:null` 且明确 `total:0` 时按空集读取；缺失或不完整结果保持受阻。
+
+[完整目录读取器](~/codespace/magicTest/regression/directory.cjs)固定原主体、origin、查询条件及页预算，检查分页总数、重复身份和短页；没有 owner 快照修订时不承诺并发原子快照。分类只读角色和租户管理员夹具使用完整分页，不凭第一页认定角色或账号不存在。F051-003 缺 reader 时报告正式候选／Installer／CAS 配套条件，不使用临时 Role 或初始化重放补权。
+
+[资源台账](~/codespace/magicTest/regression/resource_lifecycle.cjs)覆盖公共 `create/createAs/remove` 夹具入口。发送前原子持久化私密意图，创建响应后保存精确身份并独立读取；首次回读失败但已保存匹配的成功响应与精确 ID 时，清理可在原主体／origin 下重读原 ID，确认原提交身份后再删除，台账重载后同样适用；若原 ID 已独立确认不存在则只记录处置证明。删除前记意图，响应后独立确认原身份不存在。未知创建不重放、不猜 ID 删除；未知删除仍存在且无 owner 终态证明时保持开放。原主体／origin 变化阻断清理，未解决子项不能靠删除父租户掩盖。手写订阅等业务命令仍须各自提供原请求恢复与回收证明，公共 helper 不代替这些合同。
+
+[服务标识执行器](~/codespace/magicTest/regression/service_cases.cjs)覆盖 F037-003，创建同租户两个独立服务，验证重复 key 和不可编辑身份的精确拒绝阶段，并完整查询相关目录、回读两条原资源证明未覆盖。地址仅作合法外部服务元数据，不调用上游。失败／未知写入先登记，再保留原资源及清理开放状态。工具输入指纹自动包含全部运行 `.cjs` 模块，包含目录、公开探针及写入台账。
+
 租户正式删除后，BFF可能拒绝再查询该租户子资源，403不能作为不存在的证明。执行器保留子身份，结合原租户DELETE回执、公开持久退役记录和独立目录不存在证明，核对已审查的聚合清理合同；不声称逐个删除后仍可读取子资源。只读`--reconcile-cleanup`模式向唯一新attempt追加原失败资源的处置证明，不重放DELETE、不修改旧记录，也不会回落为常规执行。
 
 [公开首跳探针](~/codespace/magicTest/regression/public_probe.cjs)在原浏览器页面使用原会话 Cookie，只读同源 GET；禁止自动跳转，记录 Chromium 原始首跳状态及 Location。301／302／307／308 后最终404不能满足统一404断言。普通登录流程仍按正式跳转执行。
@@ -52,7 +60,7 @@ MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json pyth
 工具自身回归（隔离 HTTP／真实 Chromium 与 handler 夹具，不计产品 Live 通过）：
 
 ```sh
-node --test regression/public_probe.test.cjs regression/negative_mutations.test.cjs
+node --test regression/*.test.cjs
 python3 -B -m unittest regression.test_run_standard
 ```
 

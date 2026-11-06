@@ -58,23 +58,42 @@ async function submit(h, f, payload) {
 async function lists(h, f) {
   const accounts = await h.ok(h.admin, 'GET', f.base + 'accounts/?_pageSize=100');
   const registrations = await h.ok(h.admin, 'GET', f.reg + 'accounts/?_pageSize=100');
-  for (const page of [accounts, registrations]) {
-    if (page.pagination?.hasMore || page.pagination?.total > page.values.length) throw new h.Blocked('Dedicated registration identity directory requires complete reader');
+  return { accounts: directoryValues(h, accounts), registrations: directoryValues(h, registrations) };
+}
+
+function directoryValues(h, page) {
+  const values = page.values === null && page.pagination?.total === 0 ? [] : page.values;
+  if (!Array.isArray(values) || page.pagination?.hasMore || page.pagination?.total > values.length) {
+    throw new h.Blocked('Dedicated registration identity directory requires complete reader');
   }
-  return { accounts: accounts.values, registrations: registrations.values };
+  return values;
 }
 
 async function approved(h, f, r) {
   const registration = (await h.ok(h.admin, 'GET', f.reg + 'accounts/' + r.id)).value;
   h.check('Workflow owner confirms original approved registration and profile snapshot', registration.status === 'approved' && registration.accountId === r.accountId && registration.account === r.account && registration.profileKey === f.p.key && equal(registration.accessProfileKeys, ['portal-user']));
   const account = (await h.ok(h.admin, 'GET', f.base + 'accounts/' + r.accountId)).value;
-  h.check('Account owner confirms active original subject and exact initial profile', account.id === r.accountId && account.account === r.account && account.status === 2 && equal((account.templateRefs || []).map(t => t.key), ['portal-user']));
+  h.check('Account owner confirms active original subject without human template assignments', account.id === r.accountId && account.account === r.account && account.status === 2 && (account.templateRefs || []).length === 0);
+  const bindings = directoryValues(h, await h.ok(h.admin, 'GET', registrationBindingRoute(f.base, r.accountId)));
+  registrationAuthority(h, r.accountId, f.portal.roleRefs, bindings);
   h.check('Initial effective roles equal selected protected profile, with no additional management roles', equal(roles(account.effectiveRoles), roles(f.portal.roleRefs)), { expected: roles(f.portal.roleRefs), actual: roles(account.effectiveRoles) });
   const actor = await h.login(r.account, h.state.password, f.ns.name, h.state.password + 'R');
   await h.ok(actor, 'GET', '/system/context/?surface=portal');
   h.denied(await h.api(actor, 'GET', f.base + 'accounts/'), 'Registered portal subject gains no account management authority');
   await h.screenshot(actor, 'registered-' + r.id);
   return { registration, account, actor };
+}
+
+function registrationAuthority(h, accountId, roleRefs, bindings) {
+  const actual = bindings.map(b => ({ module: b.roleModule, key: b.roleKey }));
+  h.check('Authorization owner confirms exact registration-source role bindings for original account',
+    bindings.length > 0 && bindings.every(b => b.subjectType === 'account' && b.subjectId === accountId && b.sourceType === 'registration' && b.sourceKey === 'account-registration:' + accountId && b.status === 2 && b.sourceVersion > 0) && equal(roles(actual), roles(roleRefs)),
+    { accountId, expectedRoles: roles(roleRefs), bindings });
+}
+
+function registrationBindingRoute(base, accountId) {
+  const query = new URLSearchParams({ _pageSize: '100', subjectId: String(accountId) + '|=', subjectType: 'account|=' });
+  return base + 'subject-role-bindings/?' + query;
 }
 
 async function review(h, f, r, action, actor = h.admin) {
@@ -162,4 +181,4 @@ handlers['F002-004'] = async h => {
   h.check('Public policy does not advertise unavailable CAPTCHA', equal(policyValue((await h.ok(f.anon, 'GET', publicPolicy)).value), policyValue(initial)));
 };
 for (const handler of Object.values(handlers)) handler.actors = ['user', 'tenantAdmin', 'otherTenantAdmin'];
-module.exports = { handlers };
+module.exports = { handlers, directoryValues, registrationAuthority, registrationBindingRoute };

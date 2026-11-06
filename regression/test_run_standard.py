@@ -6,10 +6,16 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from regression.run_standard import ROOT, environment_lock, finish, load_owner
+from regression.run_standard import ROOT, environment_lock, finish, load_owner, tool_hashes
 
 
 class ReportGatesTest(unittest.TestCase):
+    def test_tool_identity_includes_runtime_helpers(self):
+        hashes = tool_hashes()
+        for name in ['directory.cjs', 'resource_lifecycle.cjs', 'negative_mutations.cjs', 'public_probe.cjs', 'standard_cases.cjs']:
+            self.assertEqual(hashes[name], 'sha256:' + hashlib.sha256((ROOT / 'regression' / name).read_bytes()).hexdigest())
+        self.assertFalse(any(name.endswith('.test.cjs') for name in hashes))
+
     @classmethod
     def setUpClass(cls):
         catalog_path = ROOT.parent / 'docs/acceptance/platform-catalog.json'

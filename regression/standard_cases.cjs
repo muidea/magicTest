@@ -270,16 +270,15 @@ handlers['F051-003'] = async h => {
   const collection = '/panel/infra/catalogs/';
   const c = await h.create(collection, { name: h.state.prefix + '-catalog', description: 'temporary regression', parent: null }, 'catalog');
   const cas = '/cas/namespaces/' + h.credentials.namespace + '/';
-  const roles = await h.ok(h.admin, 'GET', cas + 'roles/?_pageSize=100');
-  if (roles.pagination?.hasMore || roles.pagination?.total > roles.values.length) throw new h.Blocked('Role catalogue is incomplete; cannot decide readonly catalog fixture availability');
+  const roles = await h.directory(h.admin, cas + 'roles/');
   // Public Base permission bits: read=4, write=2, delete=8.
   const catalogPrivileges = role => role.privilege?.filter(p => p.module === '/modules/kernel/runner' && p.uriPath === '/panel/catalogs/') || [];
-  const readerRole = roles.values.find(role => role.module === '/modules/kernel/runner' && role.key === 'management-catalog-viewer' && role.humanAssignable && role.status === 2 && catalogPrivileges(role).some(p => p.value & 4) && !catalogPrivileges(role).some(p => p.value & (2 | 8)));
+  const readerRole = roles.find(role => role.module === '/modules/kernel/runner' && role.key === 'management-catalog-viewer' && role.humanAssignable && role.status === 2 && catalogPrivileges(role).some(p => p.value & 4) && !catalogPrivileges(role).some(p => p.value & (2 | 8)));
   if (!readerRole) {
     h.denied(await negativeCreate(h, h.user, collection, { name: h.state.prefix + '-forbidden-' + crypto.randomBytes(6).toString('hex'), description: '', parent: null }, 'catalog'), 'Unprivileged subject cannot write category');
     h.denied(await h.api(h.user, 'PUT', collection + c.id, { name: 'MUST NOT CHANGE', description: c.description, parent: null }), 'Unprivileged subject cannot write category');
     await same(h, h.admin, collection + c.id, c, 'Rejected writes leave category unchanged');
-    await h.partial('CONTRACT-CATALOG-READER: current CAS role catalogue has no human-assignable Runner catalog reader without write/delete; ordinary HTTP cannot create roles. Owner role declaration is required before same-tenant read/write separation can be verified.');
+    await h.partial('DELIVERY-CATALOG-READER: complete current CAS catalogue lacks the source-declared Runner catalog reader. Require a paired candidate and formal Installer/CAS synchronization proof; do not create roles through ordinary HTTP or replay initialization.');
   }
   const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-catalog-reader', name: '回归分类只读成员', description: '复用owner声明的分类只读角色', subjectType: 'account', roleRefs: [{ module: readerRole.module, key: readerRole.key }], applicationAccess: [], status: 2 }, 'role-template');
   const account = await h.create(cas + 'accounts/', { account: h.state.prefix + '-catalog-reader', displayName: '回归分类只读成员', password: h.state.password, status: 2, roleTemplateKeys: [template.key] }, 'account');
@@ -387,4 +386,5 @@ Object.assign(handlers, require('./registration_cases.cjs').handlers);
 Object.assign(handlers, require('./session_cases.cjs').handlers);
 Object.assign(handlers, require('./script_cases.cjs').handlers);
 Object.assign(handlers, require('./notification_cases.cjs').handlers);
+Object.assign(handlers, require('./service_cases.cjs').handlers);
 module.exports = { handlers };

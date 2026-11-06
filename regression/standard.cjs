@@ -8,6 +8,8 @@ const { handlers } = require('./standard_cases.cjs');
 const { restoreSessionPolicy } = require('./session_cases.cjs');
 const { publicGet } = require('./public_probe.cjs');
 const { cleanupNegativeMutation } = require('./negative_mutations.cjs');
+const { readDirectory } = require('./directory.cjs');
+const { createResource, deleteResource } = require('./resource_lifecycle.cjs');
 const root = path.resolve(__dirname, '..');
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -51,7 +53,14 @@ async function main() {
   const stateFile = path.join(priv, 'state.json');
   const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile)) : { prefix: 'rg' + crypto.randomBytes(4).toString('hex'), password: 'Rg@' + crypto.randomBytes(16).toString('hex'), resources: [], fixtures: {} };
   if (state.resources.length && state.resources.every(r => r.phase === 'deleted')) throw Error('This fixture execution has already been cleaned. Preserve its state and use a separate private-state directory for a new execution.');
-  const persist = () => fs.writeFileSync(stateFile, JSON.stringify(state), { mode: 0o600 });
+  const persist = () => {
+    const bytes = JSON.stringify(state), temporary = path.join(priv, '.state-' + crypto.randomBytes(12).toString('hex'));
+    const fd = fs.openSync(temporary, 'wx', 0o600);
+    try { fs.writeFileSync(fd, bytes); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    fs.renameSync(temporary, stateFile);
+    const directory = fs.openSync(priv, 'r');
+    try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
+  };
   persist();
   const browser = await chromium.launch({ executablePath: options.chrome || chromium.executablePath(), headless: true, args: ['--no-sandbox', '--no-proxy-server', '--host-resolver-rules=MAP *.local.vpc 127.0.0.1'] });
   const sessions = [];
@@ -182,16 +191,22 @@ async function main() {
     return actor;
   }
   const owned = (collection, resource, kind, actor) => { state.resources.push({ collection, id: resource.id, kind, name: resource.name || resource.account || resource.key, ...(actor ? { actor } : {}), phase: 'created' }); persist(); return resource; };
-  const create = async (collection, payload, kind) => owned(collection, (await ok(admin, 'POST', collection, payload)).value, kind);
+  const create = async (collection, payload, kind) => createResource(h, admin, 'admin', collection, payload, kind);
   const createAs = async (actorName, collection, payload, kind) => {
     if (!h[actorName]) throw new Blocked('Missing fixture owner actor ' + actorName);
-    return owned(collection, (await ok(h[actorName], 'POST', collection, payload)).value, kind, actorName);
+    return createResource(h, h[actorName], actorName, collection, payload, kind);
   };
   const screenshot = async (actor, label) => { const name = currentCase + '-' + label + '.png'; const file = path.join(attemptDir, name); if (fs.existsSync(file)) throw Error('Screenshot evidence label reused: ' + name); await actor.page.screenshot({ path: file, fullPage: true, animations: 'disabled' }); const relative = path.relative(out, file); trace.push({ kind: 'screenshot', path: relative, sha256: 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') }); return relative; };
   const h = { fs, path, root, state, persist, browser, login, anonymous, namespaceDependent, rejectedLogin, sessionAtOrigin, api, publicGet: (actor, route) => api(actor, 'GET', route, undefined, {}, true), ok, check, good, denied, inaccessible, invalid, Blocked, create, createAs, owned, screenshot, credentials, authorizedAdmin,
+    directory(actor, route, options) { return readDirectory(h, actor, route, options); },
     need(key) { if (!state.fixtures[key]) throw new Blocked('Missing current-run fixture: ' + key); return state.fixtures[key]; },
     async gone(collection, id) { const r = await api(admin, 'GET', collection + id); check('Owner confirms target absent', r.data?.error?.code === 2 && r.data.value == null, r); },
-    async remove(collection, id) { await ok(admin, 'DELETE', collection + id); const resource = state.resources.find(x => x.collection === collection && x.id === id); if (resource) { resource.phase = 'deleted'; persist(); } },
+    async remove(collection, id) {
+      const resource = state.resources.find(x => x.collection === collection && x.id === id);
+      if (!resource?.creation) throw new Blocked('Removal requires the original tracked creation');
+      await deleteResource(h, resource.actor ? h[resource.actor] : admin, resource);
+      resource.phase = 'deleted'; persist();
+    },
     async partial(message) { throw new Blocked('Partial verification: ' + message); }
   };
   let prepError;
@@ -247,7 +262,7 @@ async function main() {
     user = await login(state.fixtures.user.account, state.fixtures.userPassword || state.password, a.name, state.password + 'U');
     state.fixtures.userPassword = user.password; persist(); h.user = user;
     for (const [namespace, key] of [[a, 'tenantAdmin'], [b, 'otherTenantAdmin']]) {
-      const accounts = (await ok(admin, 'GET', '/cas/namespaces/' + namespace.name + '/accounts/?_pageSize=100')).values;
+      const accounts = await readDirectory(h, admin, '/cas/namespaces/' + namespace.name + '/accounts/');
       const account = accounts.find(x => x.account.includes('admin'));
       if (!account) throw new Blocked('Namespace bootstrap has no public administrator account');
       const actor = await login(account.account, state.fixtures[key + 'Password'] || state.password, namespace.name, state.password + (key === 'tenantAdmin' ? 'A' : 'B'));
@@ -300,6 +315,7 @@ async function main() {
       if (r.phase === 'deleted') continue;
       try {
         await authorizedAdmin();
+        if (r.kind === 'service-identity-attempt') throw new Blocked('Service identity attempt is unresolved; retain original response and owner evidence without guessed cleanup');
         if (['negative-branding', 'negative-create'].includes(r.kind)) {
           const proof = await cleanupNegativeMutation(h, r);
           r.phase = 'deleted'; persist();
@@ -324,6 +340,19 @@ async function main() {
             cleanupActor = await login(cleanupActor.identity.account, cleanupActor.password, cleanupActor.identity.namespace);
             h[r.actor] = cleanupActor;
           }
+        }
+        if (r.creation) {
+          if (r.kind === 'service' && state.resources.some(attempt => attempt.kind === 'service-identity-attempt' && attempt.phase !== 'deleted' && attempt.original?.some(value => value.id === r.id))) throw new Blocked('Service identity attempt is unresolved; retain its original fixture for owner reconciliation');
+          if (r.kind === 'namespace' && state.resources.some(child => child !== r && child.phase !== 'deleted' && (child.collection?.startsWith('/cas/namespaces/' + r.name + '/') || child.creation?.actorIdentity?.namespace === r.name || child.actorIdentity?.namespace === r.name || child.name === r.name))) throw new Blocked('Original namespace has unresolved tracked children; retain their owner evidence before aggregate deletion');
+          const proof = await deleteResource(h, cleanupActor, r);
+          let retirement;
+          if (r.kind === 'namespace') {
+            retirement = (await ok(admin, 'GET', '/panel/namespace-onboardings/' + r.id + '/retirement')).value;
+            check('Original namespace owner confirms aggregate retirement', retirement?.namespaceId === r.id && retirement.name === r.name && retirement.phase === 'complete' && retirement.requestId && retirement.expectedVersion > 0 && retirement.revision > 0, retirement);
+          }
+          r.phase = 'deleted'; persist();
+          cleanup.push({ ...r, confirmed: true, ...proof, ...(retirement ? { retirement } : {}) });
+          continue;
         }
         await ok(cleanupActor, 'DELETE', r.collection + r.id);
         const readRoute = r.kind === 'namespace' ? '/cas/namespaces/' + r.id : r.collection + r.id;
