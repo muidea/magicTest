@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { negativeBrandWrite, negativeCreate } = require('./negative_mutations.cjs');
 const handlers = {};
 const fixturesDir = h => h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression');
 const accountBase = h => '/cas/namespaces/' + h.state.fixtures.tenantA.name + '/accounts/';
@@ -19,6 +20,13 @@ handlers['F003-001'] = async h => {
   const original = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + n.id)).value;
   const panelPeer = await h.login(h.credentials.account, h.credentials.password);
   const unaffected = [h.admin, panelPeer, h.otherTenantAdmin];
+  const targetActors = [h.user, h.tenantAdmin];
+  const anonymous = await h.anonymous(n.name), unavailableProbes = [];
+  const protectedContext = '/system/context/?surface=portal';
+  for (const actor of targetActors) {
+    await h.ok(actor, 'GET', protectedContext);
+    await h.ok(actor, 'GET', '/api/v1/web/session/');
+  }
   const assertUnrelatedSessions = async () => {
     for (const actor of unaffected) {
       const session = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value;
@@ -32,16 +40,42 @@ handlers['F003-001'] = async h => {
       await assertUnrelatedSessions();
       current = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + n.id)).value;
       h.check('Space settings independently persisted', current.description === '常规回归空间编辑' && current.status === status && saved.id === n.id);
-      const access = await h.api(h.user, 'GET', '/system/context/?surface=portal');
-      h.check('Target old session remains invalid after disable or reenable', access.status === 401 || [5, 11, 12, 22].includes(access.data?.error?.code));
+      let entry = await h.publicGet(anonymous, '/api/v1/web/session/');
+      for (let retry = 0; retry < 5 && (status === 1 ? entry.status !== 404 : entry.status === 404); retry++) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        entry = await h.publicGet(anonymous, '/api/v1/web/session/');
+      }
+      h.check('Watched tenant BFF entry converges to acknowledged availability before credential assertions', status === 1 ? entry.status === 404 : entry.status !== 404, entry);
+      if (status === 1) {
+        // The user requires HTTP 404 for every request to an unavailable tenant.
+        // Probe representative route families; do not infer this from one BFF URL.
+        for (const route of ['/', '/portal/', '/api/v1/web/session/', '/api/v1/cas/registration/policy/public/', '/.well-known/openid-configuration', '/api/v1/system/notifications/', '/api/v1/regression-unknown/']) {
+          const response = await h.publicGet(anonymous, route);
+          unavailableProbes.push({ route, status: response.status });
+        }
+      }
+      for (const actor of targetActors) {
+        const access = await h.publicGet(actor, '/api/v1/web/proxy' + protectedContext);
+        const authenticationDenied = access.status === 401 || [5, 11, 12, 22].includes(access.data?.error?.code);
+        // Disabled namespaces withdraw their ingress. The same live route was
+        // proved above; 404 here proves entry withdrawal, not token revocation.
+        if (status === 1) unavailableProbes.push({ route: protectedContext, actor: actor.identity, status: access.status });
+        else {
+          h.check('Reenable does not revive target old credentials', authenticationDenied, access);
+          const oldSession = await h.publicGet(actor, '/api/v1/web/session/');
+          h.check('Reenabled BFF rejects original target session', oldSession.status === 401 || [5, 11, 12, 22].includes(oldSession.data?.error?.code), oldSession);
+        }
+      }
       if (status === 2) {
         const fresh = await h.login(h.user.identity.account, h.user.password, n.name);
-        const freshAccess = await h.api(fresh, 'GET', '/system/context/?surface=portal');
+        const freshAccess = await h.api(fresh, 'GET', protectedContext);
         h.check('Reenabled namespace accepts fresh login', h.good(freshAccess));
+        await assertUnrelatedSessions();
       }
     }
     const list = (await h.ok(h.admin, 'GET', '/cas/namespaces/?_pageSize=100')).values;
     h.check('Namespace directory contains exact resource', list.some(x => x.id === n.id && x.name === n.name));
+    h.check('Unavailable tenant uniformly returns HTTP 404 across public pages, BFF, CAS, discovery, notices and unknown routes', unavailableProbes.length === 9 && unavailableProbes.every(x => x.status === 404), unavailableProbes);
   } finally {
     await h.authorizedAdmin();
     current = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + n.id)).value;
@@ -65,9 +99,27 @@ handlers['F004-002'] = async h => {
   const rows = (await h.ok(h.tenantAdmin, 'GET', '/cas/namespaces/' + a.name + '/accounts/?_pageSize=100')).values;
   h.check('Managed namespace administrator sees own member', rows.some(x => x.id === h.state.fixtures.user.id));
   h.denied(await h.api(h.tenantAdmin, 'GET', '/cas/namespaces/' + b.name + '/accounts/'), 'Other namespace directory denied');
+  const targets = [];
+  for (const n of [a, b]) {
+    const collection = '/cas/namespaces/' + n.name + '/accounts/';
+    const target = await h.create(collection, { account: h.state.prefix + '-scope-' + n.name.slice(-1), displayName: '范围核对账号', password: h.state.password, email: '', description: '', status: 2, roleTemplateKeys: ['portal-user'] }, 'account');
+    const before = (await h.ok(h.admin, 'GET', collection + target.id)).value;
+    targets.push({ n, collection, target, before });
+  }
+  for (const { n, collection, target, before } of targets) {
+    const payload = { account: before.account, displayName: '已核对管理范围', email: before.email || '', description: '常规回归账号管理范围', status: before.status, roleTemplateKeys: ['portal-user'] };
+    const response = await h.api(h.tenantAdmin, 'PUT', collection + target.id, payload);
+    if (n.id === a.id) {
+      h.check('Authorized namespace administrator can update own account resource', h.good(response), response);
+      const after = (await h.ok(h.admin, 'GET', collection + target.id)).value;
+      h.check('CAS independently persists in-scope change and original ownership', after.id === before.id && after.account === before.account && after.namespace === before.namespace && after.displayName === payload.displayName && after.description === payload.description, after);
+    } else {
+      h.denied(response, 'Same original administrator cannot mutate other namespace account');
+      await same(h, h.admin, collection + target.id, before, 'Outside account remains exactly unchanged');
+    }
+  }
   const session = (await h.ok(h.tenantAdmin, 'GET', '/api/v1/web/session/')).value;
   h.check('Account original namespace unchanged', session.homeNamespace === a.name);
-  await h.partial('Account directory isolation verified; in-scope account mutation and out-of-scope mutation still need paired verification.');
 };
 handlers['F004-003'] = async h => {
   const body = { account: h.need('user').account, displayName: 'Duplicate test', password: h.state.password, status: 2, roleTemplateKeys: ['portal-user'] };
@@ -119,13 +171,48 @@ handlers['F018-002'] = async h => {
 };
 handlers['F016-003'] = async h => {
   const m = await model(h), route = definitionBase + m.id + '/function-blocks', before = (await h.ok(h.admin, 'GET', route)).value;
-  for (const actor of [h.user, h.tenantAdmin]) h.inaccessible(await h.api(actor, 'PUT', route, { expectedDefinitionVersion: before.definitionVersion, content: before.content }), 'Readonly/other namespace cannot edit script library');
+  const cas = '/cas/namespaces/' + h.credentials.namespace + '/';
+  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-publisher', name: '回归只读应用作者', description: '复用应用发布负责人，仅读取应用库和模型草稿，不授予定义编辑权', subjectType: 'account', roleRefs: [{ module: '/modules/kernel/runner', key: 'management-application-publisher' }], applicationAccess: [], status: 2 }, 'role-template');
+  const account = await h.create(cas + 'accounts/', { account: h.state.prefix + '-reader', displayName: '回归应用库只读成员', password: h.state.password, status: 2, roleTemplateKeys: [template.key] }, 'account');
+  const reader = await h.login(account.account, h.state.password, h.credentials.namespace, h.state.password + 'R');
+  const readable = (await h.ok(reader, 'GET', route)).value;
+  h.check('Same namespace readonly subject can read actual library', JSON.stringify(readable) === JSON.stringify(before));
+  const draftRoute = definitionBase + m.id + '/model-draft';
+  const draft = (await h.ok(h.admin, 'GET', draftRoute)).value;
+  const payload = JSON.parse(h.fs.readFileSync(h.path.join(fixturesDir(h), 'fixture-draft-atomic-save-request.json')));
+  payload.expectedDefinitionVersion = before.definitionVersion;
+  payload.entities[0].pkgPath = '/' + h.state.prefix;
+  for (const actor of [reader, h.user, h.tenantAdmin]) {
+    h.inaccessible(await h.api(actor, 'PUT', route, { expectedDefinitionVersion: before.definitionVersion, content: before.content }), 'Readonly/other namespace cannot edit script library');
+    h.inaccessible(await h.api(actor, 'PUT', draftRoute, payload), 'Binding/model-draft save does not bypass definition editing authority');
+  }
   await same(h, h.admin, route, before, 'Library is unchanged');
-  await h.partial('Cross-namespace library write rejected; a same-namespace readonly author and binding-save bypass fixture are still required.');
+  await same(h, h.admin, draftRoute, draft, 'Rejected binding saves leave complete model draft unchanged');
 };
 handlers['F037-002'] = async h => {
-  // A real owned service is necessary to prove resource authorization, not only collection denial.
-  await h.partial('No current owned published service and ordinary subscriber fixture; collection denial alone is insufficient.');
+  const n = h.need('tenantA'), collection = '/panel/hub/services/';
+  // This case protects governance versus subscription authority. It never
+  // invokes the upstream, so registration needs no external running service.
+  const address = 'https://regression.invalid/api';
+  const service = await h.createAs('tenantAdmin', collection, { key: h.state.prefix + '_auth', name: h.state.prefix + '_auth', showName: '回归服务权限', description: '受控服务定义；本用例不调用上游', catalog: 'regression', providerType: 'external', providerKey: '', status: 2, accessMode: 'gateway', address, options: JSON.stringify({ debug: { authMode: 'bearer', operations: [{ key: 'probe', name: 'probe', method: 'GET', pathTemplate: address + '/probe', parameters: [] }] } }) }, 'service');
+  const publication = await h.createAs('tenantAdmin', '/panel/hub/publications/', { service: { id: service.id }, status: 1, visibleScope: n.name, allowSubscription: true, requireApproval: false, maxSubscriptions: 0, maxQPS: 0, dailyQuota: 0 }, 'publication');
+  await h.ok(h.tenantAdmin, 'PUT', '/panel/hub/publication/publish/' + publication.id);
+  const visible = (await h.ok(h.user, 'GET', '/portal/services/?_pageSize=100')).values;
+  h.check('Original ordinary user sees the actual published service', visible.some(x => x.id === service.id));
+  const requestId = crypto.randomBytes(16).toString('hex');
+  h.state.fixtures.subscriptionRequest = { requestId, service: service.id, namespace: n.name }; h.persist();
+  const subscribed = await h.ok(h.user, 'POST', '/portal/service/subscriptions/', { requestId, service: service.id, leaseTerm: 1 });
+  h.check('Original ordinary user receives active subscription', subscribed.value?.id === service.id && subscribed.value?.leaseTerm?.status === 2, subscribed);
+  const subscriptions = (await h.ok(h.tenantAdmin, 'GET', '/panel/hub/subscriptions/?_pageSize=100')).values;
+  const subscription = subscriptions.find(x => x.service?.id === service.id && x.subscriberRef?.accountId === h.need('user').id && x.namespace === n.name);
+  h.check('Owner independently confirms exact ordinary subscriber and service', subscription?.status === 2, subscription);
+  h.owned('/panel/hub/subscriptions/', subscription, 'subscription', 'tenantAdmin');
+  const before = (await h.ok(h.tenantAdmin, 'GET', collection + service.id)).value;
+  h.denied(await h.api(h.user, 'PUT', collection + service.id, { showName: 'MUST NOT CHANGE', description: before.description, icon: before.icon, catalog: before.catalog, address: before.address, options: before.options, expectedServiceVersion: before.updateTime }), 'Subscription never grants service definition editing');
+  h.denied(await h.api(h.user, 'DELETE', collection + service.id), 'Subscription never grants service definition deletion');
+  await same(h, h.tenantAdmin, collection + service.id, before, 'Rejected subscriber writes preserve real service definition');
+  const retained = (await h.ok(h.tenantAdmin, 'GET', '/panel/hub/subscriptions/' + subscription.id)).value;
+  h.check('Rejected governance requests preserve original active subscription', retained.id === subscription.id && retained.status === 2 && retained.subscriberRef?.accountId === h.need('user').id);
 };
 handlers['F047-003'] = async h => {
   const db = (await h.ok(h.admin, 'GET', '/panel/operations/database-instances/?_pageSize=100')).values[0];
@@ -137,10 +224,31 @@ handlers['F047-003'] = async h => {
   h.check('Resource catalog does not expose password', !db.password || db.password === '******');
 };
 handlers['F055-003'] = async h => {
-  const before = (await h.ok(h.admin, 'GET', '/panel/namespace-branding/')).value;
-  h.denied(await h.api(h.user, 'PUT', '/panel/namespace-branding/?namespace=panel', { displayName: 'Forbidden global brand', expectedResourceVersion: before.override?.resourceVersion || 0 }), 'Ordinary tenant cannot edit global branding');
-  await same(h, h.admin, '/panel/namespace-branding/', before, 'Global branding remains exact');
-  await h.partial('Ordinary user write rejected; tenant customizer with a proved successful own-tenant branding operation is still required.');
+  const route = '/panel/namespace-branding/', n = h.need('tenantA');
+  const before = (await h.ok(h.admin, 'GET', route)).value;
+  const own = (await h.ok(h.tenantAdmin, 'GET', route)).value;
+  h.check('New tenant branding has no preexisting override', own.namespace === n.name && own.override == null);
+  // Register cleanup intent before the write: an unknown write result still needs owner cleanup.
+  h.owned(route, { id: '', name: n.name }, 'namespace-branding', 'tenantAdmin');
+  const body = { platformName: h.state.prefix + ' 回归品牌', platformShortName: '回归', loginTitle: '回归登录', loginSubtitle: '', footerText: '', primaryColor: '#1677ff', logoAltText: '', backgroundPosition: 'center', backgroundOverlayOpacity: null, sloganMode: 'inherit', sloganAltText: '', brandingFeatureMode: 'inherit', brandingFeatureAltText: '', expectedResourceVersion: 0 };
+  await h.ok(h.tenantAdmin, 'PUT', route, body);
+  const saved = (await h.ok(h.tenantAdmin, 'GET', route)).value;
+  h.check('Tenant customizer successfully changes only own brand', saved.namespace === n.name && saved.override?.platformName === body.platformName && saved.resolved?.platformName === body.platformName);
+  h.denied(await h.api(h.user, 'PUT', route, { ...body, expectedResourceVersion: saved.override.resourceVersion }), 'Ordinary tenant member cannot edit branding with valid payload');
+  // Query/header hints are not target selection. Prove the result stays local,
+  // then address the actual platform host with the unmodified original session.
+  const hinted = await negativeBrandWrite(h, h.tenantAdmin, route, before, { ...body, expectedResourceVersion: saved.override.resourceVersion }, { requestRoute: route + '?namespace=' + encodeURIComponent(h.credentials.namespace), headers: { 'X-Namespace': h.credentials.namespace }, permittedNamespace: n.name });
+  if (h.good(hinted)) h.check('Forged target hints cannot expand branding namespace', hinted.data.value?.namespace === n.name && hinted.data.value?.override?.namespace === n.name);
+  else h.denied(hinted, 'Forged target hints rejected');
+  await h.ok(h.tenantAdmin, 'GET', '/api/v1/web/session/');
+  const addressed = await h.sessionAtOrigin(h.tenantAdmin, h.admin.origin);
+  const globalWrite = await negativeBrandWrite(h, addressed, route, before, { ...body, platformName: h.state.prefix + '-forbidden-global-' + crypto.randomBytes(6).toString('hex'), expectedResourceId: before.override?.id || 0, expectedResourceVersion: before.override?.resourceVersion || 0 });
+  h.check('Original tenant session cannot edit actual platform global branding', [401, 403].includes(globalWrite.status) || [5, 11, 12, 22].includes(globalWrite.data?.error?.code), globalWrite);
+  const surviving = (await h.ok(h.tenantAdmin, 'GET', '/api/v1/web/session/')).value;
+  h.check('Original tenant session remains valid at its own host', surviving.homeNamespace === n.name && surviving.account.account === h.tenantAdmin.identity.account);
+  const after = (await h.ok(h.tenantAdmin, 'GET', route)).value;
+  h.check('Own brand remains confined to original namespace', after.namespace === n.name && after.override?.platformName === body.platformName);
+  await same(h, h.admin, route, before, 'Global branding remains exact');
 };
 handlers['F056-002'] = async h => {
   const before = (await h.ok(h.admin, 'GET', policy)).value;
@@ -160,14 +268,34 @@ handlers['F058-003'] = async h => {
 };
 handlers['F051-003'] = async h => {
   const collection = '/panel/infra/catalogs/';
-  const c = await h.create(collection, { name: h.state.prefix + '-catalog', description: 'temporary regression', parentID: 0 }, 'catalog');
-  for (const [method, route, body] of [['POST', collection, { name: h.state.prefix + '-forbidden' }], ['PUT', collection + c.id, { name: 'MUST NOT CHANGE' }]]) h.denied(await h.api(h.user, method, route, body), 'Readonly subject cannot write category');
+  const c = await h.create(collection, { name: h.state.prefix + '-catalog', description: 'temporary regression', parent: null }, 'catalog');
+  const cas = '/cas/namespaces/' + h.credentials.namespace + '/';
+  const roles = await h.ok(h.admin, 'GET', cas + 'roles/?_pageSize=100');
+  if (roles.pagination?.hasMore || roles.pagination?.total > roles.values.length) throw new h.Blocked('Role catalogue is incomplete; cannot decide readonly catalog fixture availability');
+  // Public Base permission bits: read=4, write=2, delete=8.
+  const catalogPrivileges = role => role.privilege?.filter(p => p.module === '/modules/kernel/runner' && p.uriPath === '/panel/catalogs/') || [];
+  const readerRole = roles.values.find(role => role.module === '/modules/kernel/runner' && role.key === 'management-catalog-viewer' && role.humanAssignable && role.status === 2 && catalogPrivileges(role).some(p => p.value & 4) && !catalogPrivileges(role).some(p => p.value & (2 | 8)));
+  if (!readerRole) {
+    h.denied(await negativeCreate(h, h.user, collection, { name: h.state.prefix + '-forbidden-' + crypto.randomBytes(6).toString('hex'), description: '', parent: null }, 'catalog'), 'Unprivileged subject cannot write category');
+    h.denied(await h.api(h.user, 'PUT', collection + c.id, { name: 'MUST NOT CHANGE', description: c.description, parent: null }), 'Unprivileged subject cannot write category');
+    await same(h, h.admin, collection + c.id, c, 'Rejected writes leave category unchanged');
+    await h.partial('CONTRACT-CATALOG-READER: current CAS role catalogue has no human-assignable Runner catalog reader without write/delete; ordinary HTTP cannot create roles. Owner role declaration is required before same-tenant read/write separation can be verified.');
+  }
+  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-catalog-reader', name: '回归分类只读成员', description: '复用owner声明的分类只读角色', subjectType: 'account', roleRefs: [{ module: readerRole.module, key: readerRole.key }], applicationAccess: [], status: 2 }, 'role-template');
+  const account = await h.create(cas + 'accounts/', { account: h.state.prefix + '-catalog-reader', displayName: '回归分类只读成员', password: h.state.password, status: 2, roleTemplateKeys: [template.key] }, 'account');
+  const reader = await h.login(account.account, h.state.password, h.credentials.namespace, h.state.password + 'C');
+  const rows = (await h.ok(reader, 'GET', collection + '?_pageSize=100')).values;
+  h.check('Same namespace readonly subject sees exact category', rows.some(x => x.id === c.id && x.name === c.name));
+  await h.ok(reader, 'GET', collection + c.id);
+  h.denied(await h.api(reader, 'DELETE', collection + c.id), 'Same namespace readonly subject cannot delete category');
+  h.denied(await negativeCreate(h, reader, collection, { name: h.state.prefix + '-forbidden-' + crypto.randomBytes(6).toString('hex'), description: '', parent: null }, 'catalog'), 'Same namespace readonly subject cannot write category');
+  h.denied(await h.api(reader, 'PUT', collection + c.id, { name: 'MUST NOT CHANGE', description: c.description, parent: null }), 'Same namespace readonly subject cannot write category');
   const after = (await h.ok(h.admin, 'GET', collection + c.id)).value;
   h.check('Unauthorized writes preserve category name', after.name === c.name);
-  await h.partial('Unprivileged category writes rejected; a same-tenant subject with successful catalog reads and denied writes is still required.');
 };
 for (const id of ['F003-001', 'F003-002', 'F004-002', 'F004-003', 'F010-002', 'F011-003', 'F016-003', 'F047-003', 'F051-003', 'F055-003', 'F056-003', 'F058-003']) handlers[id].actors = ['user', 'tenantAdmin'];
 handlers['F003-001'].actors = ['user', 'tenantAdmin', 'otherTenantAdmin'];
+handlers['F037-002'].actors = ['user', 'tenantAdmin'];
 
 handlers['F001-002'] = async h => {
   const actor = h.admin, observed = [];
@@ -254,4 +382,9 @@ handlers['F065-003'] = async h => {
   }
 };
 handlers['F065-003'].actors = ['user'];
+Object.assign(handlers, require('./identity_cases.cjs').handlers);
+Object.assign(handlers, require('./registration_cases.cjs').handlers);
+Object.assign(handlers, require('./session_cases.cjs').handlers);
+Object.assign(handlers, require('./script_cases.cjs').handlers);
+Object.assign(handlers, require('./notification_cases.cjs').handlers);
 module.exports = { handlers };

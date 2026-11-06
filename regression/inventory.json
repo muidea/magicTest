@@ -124,13 +124,90 @@
       "id": "deployment-regression",
       "path": "~/dataspace/magicPlatform/tests/deployment/inventory.json",
       "layer": "source-inventory",
-      "limitation": "25个当前部署回归文件；执行条件见同目录README，不自动执行，不代表平台功能用例已覆盖或Live通过。"
+      "limitation": "26个当前部署回归文件；执行条件见同目录README，不自动执行，不代表平台功能用例已覆盖或Live通过。"
     },
     {
       "id": "evidence-validator",
       "path": "~/codespace/docs/scripts/platform_acceptance.py",
       "layer": "tool",
       "limitation": "校验目录及结果证据；不是业务场景执行器。"
+    },
+    {
+      "id": "platform-standard-orchestrator",
+      "path": "~/codespace/magicTest/regression/run_standard.py",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "仅编排常规预检、执行、owner清理与证据报告；未实现分项仍受阻，不表示完整覆盖，不触发条件专项。"
+    },
+    {
+      "id": "platform-standard-handlers",
+      "path": "~/codespace/magicTest/regression/standard_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "只执行实际登记断言；分类只读主体等缺合同项保持受阻。handler登记及本地通过数均不作为稳定全量资格。"
+    },
+    {
+      "id": "platform-standard-identity",
+      "path": "~/codespace/magicTest/regression/identity_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "首次改密、错误密码、精确BFF退出和模板授权生命周期；CAS OAuth会话目录使用同租户真实审计主体。以当轮完整逐步证据和清理门禁为准，未覆盖其他身份分项。"
+    },
+    {
+      "id": "platform-standard-registration",
+      "path": "~/codespace/magicTest/regression/registration_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "匿名租户Host策略与申请、审批／驳回、重复／并发审批及受控初始权限；真实入口未通过时保持开放，不以管理代理替代匿名申请。"
+    },
+    {
+      "id": "platform-standard-session",
+      "path": "~/codespace/magicTest/regression/session_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "常规策略继承／覆盖／重置和精确BFF新旧会话期限；平台策略条件恢复并独立回读，自然到期仍单列专项。"
+    },
+    {
+      "id": "platform-standard-script",
+      "path": "~/codespace/magicTest/regression/script_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "作者脚本格式化、样例执行、日志／定位诊断、正式库保存回读，以及1—3000ms调试预算与传输取消；服务端取消由源码证据独立证明，不代替Base运行绑定或实例持久执行。"
+    },
+    {
+      "id": "platform-standard-notification",
+      "path": "~/codespace/magicTest/regression/notification_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "通知发布、真实门户详情、受众及租户边界、下线／删除与失败时旧缓存保护；使用当前运行独立租户，正式回收。"
+    },
+    {
+      "id": "platform-standard-public-probe",
+      "path": "~/codespace/magicTest/regression/public_probe.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "原主体同源GET首跳及Location；不跟随跳转，不从最终404推断原路径404。"
+    },
+    {
+      "id": "platform-standard-negative-mutations",
+      "path": "~/codespace/magicTest/regression/negative_mutations.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "负例意图先持久化；已证副作用精确回收／条件恢复；未知及并发变化保持未清理，不代表Live成功。"
+    },
+    {
+      "id": "platform-standard-public-probe-test",
+      "path": "~/codespace/magicTest/regression/public_probe.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "真实Chromium隔离首跳、原Cookie与同源边界；仅工具验证。"
+    },
+    {
+      "id": "platform-standard-negative-mutations-test",
+      "path": "~/codespace/magicTest/regression/negative_mutations.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "越权意外成功／未知／并发及handler夹具；仅工具验证，持久owner与Live另验。"
     }
   ],
   "scenarios": [
@@ -155,7 +232,12 @@
         "login-browser",
         "registration-api",
         "registration-browser",
-        "cas-api"
+        "cas-api",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers",
+        "platform-standard-identity",
+        "platform-standard-registration",
+        "platform-standard-session"
       ]
     },
     {
@@ -176,7 +258,10 @@
       ],
       "candidateAssets": [
         "cas-api",
-        "panel-context"
+        "panel-context",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers",
+        "platform-standard-identity"
       ]
     },
     {
@@ -203,7 +288,9 @@
         "magicCas"
       ],
       "candidateAssets": [
-        "panel-definition"
+        "panel-definition",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers"
       ]
     },
     {
@@ -221,7 +308,11 @@
         "magicWebPortal",
         "magicCas"
       ],
-      "candidateAssets": []
+      "candidateAssets": [
+        "platform-standard-orchestrator",
+        "platform-standard-handlers",
+        "platform-standard-script"
+      ]
     },
     {
       "id": "R05",
@@ -240,7 +331,8 @@
       ],
       "candidateAssets": [
         "native-source",
-        "deployment-regression"
+        "deployment-regression",
+        "platform-standard-orchestrator"
       ]
     },
     {
@@ -261,7 +353,8 @@
       ],
       "candidateAssets": [
         "panel-lifecycle-list",
-        "deployment-source"
+        "deployment-source",
+        "platform-standard-orchestrator"
       ]
     },
     {
@@ -282,7 +375,8 @@
       ],
       "candidateAssets": [
         "recovery-source",
-        "deployment-regression"
+        "deployment-regression",
+        "platform-standard-orchestrator"
       ]
     },
     {
@@ -306,7 +400,9 @@
       ],
       "candidateAssets": [
         "panel-runtime",
-        "base-api"
+        "base-api",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers"
       ]
     },
     {
@@ -327,7 +423,9 @@
         "magicWebPortal"
       ],
       "candidateAssets": [
-        "panel-service"
+        "panel-service",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers"
       ]
     },
     {
@@ -346,7 +444,8 @@
       "candidateAssets": [
         "panel-subscription",
         "panel-service",
-        "key-first-call"
+        "key-first-call",
+        "platform-standard-orchestrator"
       ]
     },
     {
@@ -362,7 +461,9 @@
         "magicRunner/panel"
       ],
       "candidateAssets": [
-        "file-api"
+        "file-api",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers"
       ]
     },
     {
@@ -383,7 +484,10 @@
         "magicRunner/panel"
       ],
       "candidateAssets": [
-        "panel-profile"
+        "panel-profile",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers",
+        "platform-standard-notification"
       ]
     },
     {
@@ -402,7 +506,9 @@
       "candidateAssets": [
         "login-browser",
         "panel-profile",
-        "panel-context"
+        "panel-context",
+        "platform-standard-orchestrator",
+        "platform-standard-handlers"
       ]
     },
     {
@@ -421,7 +527,8 @@
       ],
       "candidateAssets": [
         "deployment-regression",
-        "evidence-validator"
+        "evidence-validator",
+        "platform-standard-orchestrator"
       ]
     }
   ],
@@ -430,18 +537,20 @@
       "caseId": "F001-001",
       "status": "partial",
       "assetIds": [
-        "login-browser"
+        "login-browser",
+        "platform-standard-identity"
       ],
-      "finding": "已存在登录／退出交互取证；首次改密、CAS独立会话回读未齐。"
+      "finding": "新增正式首次改密、受限操作、CAS同租户独立会话回读及原BFF凭据退出断言；完整资格仍由当前候选重复执行及清理证据判定。"
     },
     {
       "caseId": "F002-001",
       "status": "partial",
       "assetIds": [
         "registration-api",
-        "registration-browser"
+        "registration-browser",
+        "platform-standard-registration"
       ],
-      "finding": "API已断言pending不可登录、批准后登录；驳回账号不可登录及清理证明待补，浏览器逐断言待审。"
+      "finding": "已补当前公开合同断言；匿名入口与较长租户Host路由覆盖存在实测缺口，未关闭；旧认证／policys历史脚本不能直接代替。"
     },
     {
       "caseId": "F011-001",
@@ -501,6 +610,110 @@
         "key-first-call"
       ],
       "finding": "当前ApiKey签发后首次GET已有取证工具；轮换、旧Key失效及独立当前角色判定待补。"
+    },
+    {
+      "caseId": "F001-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-identity"
+      ],
+      "finding": "已补当前合同逐步执行器；登记本身不构成稳定全量资格，须核对当轮逐项结果、同候选重复执行和owner清理。"
+    },
+    {
+      "caseId": "F005-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-identity"
+      ],
+      "finding": "已补当前合同逐步执行器；登记本身不构成稳定全量资格，须核对当轮逐项结果、同候选重复执行和owner清理。"
+    },
+    {
+      "caseId": "F005-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-identity"
+      ],
+      "finding": "已补当前合同逐步执行器；登记本身不构成稳定全量资格，须核对当轮逐项结果、同候选重复执行和owner清理。"
+    },
+    {
+      "caseId": "F005-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-identity"
+      ],
+      "finding": "已补当前合同逐步执行器；登记本身不构成稳定全量资格，须核对当轮逐项结果、同候选重复执行和owner清理。"
+    },
+    {
+      "caseId": "F002-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-registration"
+      ],
+      "finding": "已补当前公开合同断言；匿名入口与较长租户Host路由覆盖存在实测缺口，未关闭；旧认证／policys历史脚本不能直接代替。"
+    },
+    {
+      "caseId": "F002-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-registration"
+      ],
+      "finding": "已补当前公开合同断言；匿名入口与较长租户Host路由覆盖存在实测缺口，未关闭；旧认证／policys历史脚本不能直接代替。"
+    },
+    {
+      "caseId": "F002-004",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-registration"
+      ],
+      "finding": "已补当前公开合同断言；匿名入口与较长租户Host路由覆盖存在实测缺口，未关闭；旧认证／policys历史脚本不能直接代替。"
+    },
+    {
+      "caseId": "F056-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-session"
+      ],
+      "finding": "常规分支已补平台／租户策略和实际BFF新旧期限回读；自然到期不在本执行器覆盖范围。"
+    },
+    {
+      "caseId": "F017-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-script"
+      ],
+      "finding": "已补格式化、样例日志／输出／定位诊断及正式库保存回读；实例运行与超时分项仍独立。"
+    },
+    {
+      "caseId": "F053-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-notification"
+      ],
+      "finding": "已补现行owner与门户断言；资格仍须按同候选重复执行、逐例证据和清理门禁判定，不能从handler存在推导通过。"
+    },
+    {
+      "caseId": "F053-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-notification"
+      ],
+      "finding": "已补现行owner与门户断言；资格仍须按同候选重复执行、逐例证据和清理门禁判定，不能从handler存在推导通过。"
+    },
+    {
+      "caseId": "F053-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-notification"
+      ],
+      "finding": "已补现行owner与门户断言；资格仍须按同候选重复执行、逐例证据和清理门禁判定，不能从handler存在推导通过。"
+    },
+    {
+      "caseId": "F017-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-script"
+      ],
+      "finding": "已补语法／入口／输入／输出异常、作者调试1—3000ms预算、长循环超时及浏览器取消；运行绑定1—30000ms由对应用例独立验证。AbortError仅证明传输取消，缺同一请求的服务端停止独立证据时执行器明确partial，不计Live通过；源码执行中取消测试单列。"
     }
   ]
 }

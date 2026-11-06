@@ -5,6 +5,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { chromium } = require('playwright');
 const { handlers } = require('./standard_cases.cjs');
+const { restoreSessionPolicy } = require('./session_cases.cjs');
+const { publicGet } = require('./public_probe.cjs');
+const { cleanupNegativeMutation } = require('./negative_mutations.cjs');
 const root = path.resolve(__dirname, '..');
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -56,15 +59,16 @@ async function main() {
   const write = (name, value) => { const file = path.join(attemptDir, name); fs.writeFileSync(file, JSON.stringify(sanitize(value), null, 2) + '\n', { flag: 'wx' }); return path.relative(out, file); };
   const fail = message => { throw new ProductFailure(message); };
   const check = (message, condition, details) => { trace.push({ kind: 'assertion', message, passed: !!condition, details: sanitize(details) }); if (!condition) fail(message); };
-  const api = async (actor, method, route, body, extraHeaders = {}) => {
-    const endpoint = route.startsWith('/api/') ? route : '/api/v1/web/proxy' + route;
-    const result = await actor.page.evaluate(async ({ endpoint, method, body, extraHeaders }) => {
+  const api = async (actor, method, route, body, extraHeaders = {}, directPublic = false) => {
+    if (directPublic && (method !== 'GET' || !route.startsWith('/') || route.startsWith('//'))) throw Error('Direct public probe must be a same-origin GET');
+    const endpoint = directPublic || route.startsWith('/api/') ? route : '/api/v1/web/proxy' + route;
+    const result = directPublic ? await publicGet(actor, route) : await actor.page.evaluate(async ({ endpoint, method, body, extraHeaders }) => {
       const r = await fetch(endpoint, { method, headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30000) });
       const text = await r.text(); let data;
       try { data = JSON.parse(text); } catch { data = { text: text.slice(0, 1000) }; }
       return { status: r.status, data };
     }, { endpoint, method, body, extraHeaders });
-    trace.push(sanitize({ kind: 'request', actor: actor.identity, origin: actor.origin, method, route, body, headers: extraHeaders, response: result }));
+    trace.push(sanitize({ kind: 'request', actor: actor.identity, origin: actor.origin, method, route, ...(directPublic ? { transport: 'direct-public-read' } : {}), body, headers: extraHeaders, response: result }));
     return result;
   };
   const good = r => r.status === 200 && r.data.error == null && !('text' in r.data);
@@ -78,20 +82,36 @@ async function main() {
     else denied(r, label);
   };
   const invalid = (r, label) => check(label, [400, 409, 422].includes(r.status) || (r.status === 200 && [3, 4, 7, 19, 21].includes(r.data?.error?.code)), r);
-  async function login(account, password, namespace = credentials.namespace, newPassword) {
+  async function login(account, password, namespace = credentials.namespace, newPassword, beforePasswordChange) {
     const actorOrigin = namespace === credentials.namespace ? origin : origin.replace(new URL(origin).hostname, namespace + '.' + new URL(origin).hostname.split('.').slice(1).join('.'));
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 768 } });
     const page = await context.newPage();
     const actor = { context, page, origin: actorOrigin, identity: { account, namespace }, password };
     sessions.push(actor);
     page.on('pageerror', e => trace.push({ kind: 'browser-error', message: sanitize(e.message) }));
-    await page.goto(actorOrigin + '/api/v1/web/auth/login?return_to=%2Fportal%2F', { waitUntil: 'networkidle', timeout: 45000 });
-    await page.locator('input[name=account]').fill(account);
+    let loginResponse = await page.goto(actorOrigin + '/api/v1/web/auth/login?return_to=%2Fportal%2F', { waitUntil: 'networkidle', timeout: 45000 });
+    // Namespace ingress publication reaches Traefik through its watched files.
+    // Retry only this same read-only login page, never the OAuth command.
+    for (let retry = 0; retry < 5 && loginResponse?.status() === 404 && new URL(page.url()).pathname === '/login/cas'; retry++) {
+      trace.push({ kind: 'ingress-readiness', status: 404, path: '/login/cas', retry: retry + 1 });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      loginResponse = await page.reload({ waitUntil: 'networkidle', timeout: 15000 });
+    }
+    try {
+      await page.locator('input[name=account]').fill(account);
+    } catch (error) {
+      const location = new URL(page.url());
+      trace.push({ kind: 'login-entry-diagnostic', status: loginResponse?.status(), location: location.origin + location.pathname,
+        error: location.searchParams.get('error'), text: sanitize((await page.locator('body').innerText()).slice(0, 1000)) });
+      await screenshot(actor, 'login-entry-' + sessions.length);
+      throw error;
+    }
     await page.locator('input[name=password]').fill(password);
     await page.locator('form[action="/oauth/login"] button[type=submit]').click();
     await page.waitForFunction(() => document.querySelector('form[action="/oauth/password/change"]') || ['/panel', '/portal'].some(p => location.pathname.startsWith(p)) || new URL(location.href).searchParams.has('error'), {}, { timeout: 30000 });
     if (await page.locator('form[action="/oauth/password/change"]').count()) {
       if (!newPassword) throw new Blocked('First password change needs a dedicated account credential');
+      if (beforePasswordChange) await beforePasswordChange(actor);
       await page.locator('#cas-new-password').fill(newPassword);
       await page.locator('#cas-new-password-confirm').fill(newPassword);
       await page.locator('form[action="/oauth/password/change"] button[type=submit]').click();
@@ -112,10 +132,63 @@ async function main() {
     }
     return admin;
   }
-  const owned = (collection, resource, kind) => { state.resources.push({ collection, id: resource.id, kind, name: resource.name || resource.account || resource.key, phase: 'created' }); persist(); return resource; };
+  async function sessionAtOrigin(actor, targetOrigin) {
+    // Preserve exact original session bytes; only address a different tenant
+    // host. Never synthesize identity claims or obtain administrator credentials.
+    const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 768 } });
+    const cookies = await actor.context.cookies(actor.origin);
+    check('Cross-host test has an existing protected original session', cookies.some(c => c.httpOnly));
+    await context.addCookies(cookies.map(cookie => ({ ...cookie, domain: new URL(targetOrigin).hostname })));
+    const page = await context.newPage();
+    const addressed = { context, page, origin: targetOrigin, identity: actor.identity };
+    sessions.push(addressed);
+    trace.push({ kind: 'session-host-boundary', originalIdentity: actor.identity, sourceOrigin: actor.origin, targetOrigin, credentialSource: 'unchanged original BFF cookies; values never archived' });
+    await page.goto(targetOrigin + '/portal/', { waitUntil: 'networkidle', timeout: 30000 });
+    return addressed;
+  }
+  async function anonymous(namespace) {
+    const actorOrigin = origin.replace(new URL(origin).hostname, namespace + '.' + new URL(origin).hostname.split('.').slice(1).join('.'));
+    const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 768 } });
+    const page = await context.newPage(), actor = { context, page, origin: actorOrigin, identity: { account: 'anonymous', namespace } };
+    sessions.push(actor);
+    await page.goto(actorOrigin + '/register/', { waitUntil: 'networkidle', timeout: 45000 });
+    const session = await api(actor, 'GET', '/api/v1/web/session/');
+    check('Public applicant has no authenticated BFF session', session.status === 401 || session.data?.error?.code === 11, session);
+    return actor;
+  }
+  function namespaceDependent(namespaceID, collection, id, kind) {
+    const parent = state.resources.find(r => r.kind === 'namespace' && r.id === namespaceID);
+    if (!parent) throw new Blocked('Namespace teardown has no original tracked owner identity');
+    parent.dependents ||= [];
+    if (!parent.dependents.some(r => r.collection === collection && r.id === id)) parent.dependents.push({ collection, id, kind });
+    persist();
+  }
+  async function rejectedLogin(account, password, namespace) {
+    const actorOrigin = namespace === credentials.namespace ? origin : origin.replace(new URL(origin).hostname, namespace + '.' + new URL(origin).hostname.split('.').slice(1).join('.'));
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const page = await context.newPage(), actor = { context, page, origin: actorOrigin, identity: { account, namespace } };
+    sessions.push(actor);
+    await page.goto(actorOrigin + '/api/v1/web/auth/login?return_to=%2Fportal%2F', { waitUntil: 'networkidle', timeout: 45000 });
+    await page.locator('input[name=account]').fill(account);
+    await page.locator('input[name=password]').fill(password);
+    await page.locator('form[action="/oauth/login"] button[type=submit]').click();
+    await page.waitForLoadState('networkidle');
+    check('Rejected login stays on official login form', new URL(page.url()).pathname === '/login/cas' && await page.locator('input[name=password]').count() === 1);
+    const error = page.locator('.ant-alert-error');
+    check('Rejected login reports explicit credential/account error', await error.count() === 1 && await error.isVisible() && /密码|凭据|账号|account|password|credential/i.test(await error.innerText()));
+    const session = await api(actor, 'GET', '/api/v1/web/session/');
+    check('Rejected password establishes no BFF application session', session.status === 401 || session.data?.error?.code === 11, session);
+    await screenshot(actor, 'rejected-login-' + sessions.length);
+    return actor;
+  }
+  const owned = (collection, resource, kind, actor) => { state.resources.push({ collection, id: resource.id, kind, name: resource.name || resource.account || resource.key, ...(actor ? { actor } : {}), phase: 'created' }); persist(); return resource; };
   const create = async (collection, payload, kind) => owned(collection, (await ok(admin, 'POST', collection, payload)).value, kind);
-  const screenshot = async (actor, label) => { const name = currentCase + '-' + label + '.png'; const file = path.join(attemptDir, name); await actor.page.screenshot({ path: file, fullPage: true, animations: 'disabled' }); const relative = path.relative(out, file); trace.push({ kind: 'screenshot', path: relative, sha256: 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') }); return relative; };
-  const h = { fs, path, root, state, persist, browser, login, api, ok, check, good, denied, inaccessible, invalid, Blocked, create, owned, screenshot, credentials, authorizedAdmin,
+  const createAs = async (actorName, collection, payload, kind) => {
+    if (!h[actorName]) throw new Blocked('Missing fixture owner actor ' + actorName);
+    return owned(collection, (await ok(h[actorName], 'POST', collection, payload)).value, kind, actorName);
+  };
+  const screenshot = async (actor, label) => { const name = currentCase + '-' + label + '.png'; const file = path.join(attemptDir, name); if (fs.existsSync(file)) throw Error('Screenshot evidence label reused: ' + name); await actor.page.screenshot({ path: file, fullPage: true, animations: 'disabled' }); const relative = path.relative(out, file); trace.push({ kind: 'screenshot', path: relative, sha256: 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') }); return relative; };
+  const h = { fs, path, root, state, persist, browser, login, anonymous, namespaceDependent, rejectedLogin, sessionAtOrigin, api, publicGet: (actor, route) => api(actor, 'GET', route, undefined, {}, true), ok, check, good, denied, inaccessible, invalid, Blocked, create, createAs, owned, screenshot, credentials, authorizedAdmin,
     need(key) { if (!state.fixtures[key]) throw new Blocked('Missing current-run fixture: ' + key); return state.fixtures[key]; },
     async gone(collection, id) { const r = await api(admin, 'GET', collection + id); check('Owner confirms target absent', r.data?.error?.code === 2 && r.data.value == null, r); },
     async remove(collection, id) { await ok(admin, 'DELETE', collection + id); const resource = state.resources.find(x => x.collection === collection && x.id === id); if (resource) { resource.phase = 'deleted'; persist(); } },
@@ -125,6 +198,35 @@ async function main() {
   try {
     admin = await login(credentials.account, credentials.password);
     h.admin = admin;
+    if (options['reconcile-cleanup']) {
+      const originalBytes = fs.readFileSync(options['reconcile-cleanup']);
+      const original = JSON.parse(originalBytes), reconciled = [];
+      for (const resource of original.resources) {
+        if (resource.confirmed === true) { reconciled.push({ ...resource, proof: 'retained original successful cleanup receipt' }); continue; }
+        let aggregate = resource;
+        if (resource.kind !== 'namespace') {
+          // CAS retirement's acknowledged account phase precedes namespace deletion.
+          // A failed individual DELETE is retained; it is never relabeled successful.
+          const match = resource.collection.match(/^\/cas\/namespaces\/([^/]+)\/accounts\/$/);
+          const targetNamespace = match && ['account', 'unexpected-account'].includes(resource.kind) ? match[1]
+            : resource.kind === 'namespace-branding' && resource.collection === '/panel/namespace-branding/' ? resource.name : null;
+          if (!targetNamespace) throw new Blocked('Original resource has no reviewed aggregate retirement contract');
+          aggregate = original.resources.find(r => r.kind === 'namespace' && r.name === targetNamespace);
+          if (!aggregate) throw new Blocked('Original child has no exact original namespace identity');
+        }
+        const acknowledgement = original.trace.find(t => t.kind === 'request' && t.method === 'DELETE' && t.route === aggregate.collection + aggregate.id && good(t.response) && t.response.data.value?.id === aggregate.id && t.response.data.value?.name === aggregate.name);
+        check('Original exact namespace DELETE was acknowledged before reconciliation', !!acknowledgement);
+        const absent = await api(admin, 'GET', '/cas/namespaces/' + aggregate.id);
+        check('Independent namespace owner confirms original identity absent', absent.data?.error?.code === 2 && absent.data.value == null, absent);
+        const receipt = (await ok(admin, 'GET', '/panel/namespace-onboardings/' + aggregate.id + '/retirement')).value;
+        check('Original aggregate retirement is complete under immutable request identity', receipt?.namespaceId === aggregate.id && receipt.name === aggregate.name && receipt.phase === 'complete' && receipt.requestId && receipt.expectedVersion > 0 && receipt.revision > 0, receipt);
+        reconciled.push({ ...resource, confirmed: true, retirement: receipt, ...(aggregate !== resource ? { aggregateIdentity: { id: aggregate.id, name: aggregate.name }, individualDeleteConfirmed: false } : {}), proof: 'original successful namespace DELETE, owner durable aggregate receipt, independent namespace absence; child visibility unavailable after deletion' });
+      }
+      write('cleanup-reconciliation.json', { originalSha256: 'sha256:' + crypto.createHash('sha256').update(originalBytes).digest('hex'), environment: baseline.environment, allCurrentResourcesDisposed: reconciled.every(r => r.confirmed), resources: reconciled, trace });
+      for (const actor of sessions) { await actor.context.close(); }
+      await browser.close();
+      return;
+    }
     for (const namespace of [state.fixtures.tenantA, state.fixtures.tenantB].filter(Boolean)) {
       const current = (await ok(admin, 'GET', '/cas/namespaces/' + namespace.id)).value;
       if (current.status === 1) {
@@ -151,7 +253,15 @@ async function main() {
       const actor = await login(account.account, state.fixtures[key + 'Password'] || state.password, namespace.name, state.password + (key === 'tenantAdmin' ? 'A' : 'B'));
       state.fixtures[key + 'Password'] = actor.password; persist(); h[key] = actor;
     }
-  } catch (e) { prepError = sanitize(e.message); }
+  } catch (e) {
+    if (options['reconcile-cleanup']) {
+      write('cleanup-reconciliation-failed.json', { error: sanitize(e.message), trace });
+      for (const actor of sessions) await actor.context.close();
+      await browser.close();
+      throw e;
+    }
+    prepError = sanitize(e.message);
+  }
   const preparationEvidence = write('preparation.json', { completed: !prepError, error: prepError, trace });
   const results = [];
   try {
@@ -190,17 +300,47 @@ async function main() {
       if (r.phase === 'deleted') continue;
       try {
         await authorizedAdmin();
-        await ok(admin, 'DELETE', r.collection + r.id);
+        if (['negative-branding', 'negative-create'].includes(r.kind)) {
+          const proof = await cleanupNegativeMutation(h, r);
+          r.phase = 'deleted'; persist();
+          cleanup.push({ ...r, confirmed: true, ...proof });
+          continue;
+        }
+        if (r.kind === 'session-policy-restore') {
+          const restored = await restoreSessionPolicy(h, r);
+          r.phase = 'deleted'; persist();
+          cleanup.push({ ...r, confirmed: true, restored, proof: 'Guarded public restore and independent policy owner read; no byte-for-byte historical revision claim' });
+          continue;
+        }
+        let cleanupActor = r.actor ? h[r.actor] : admin;
+        if (!cleanupActor) throw new Blocked('Missing original cleanup actor ' + r.actor);
+        if (r.actor) {
+          let session = await api(cleanupActor, 'GET', '/api/v1/web/session/');
+          for (let retry = 0; retry < 5 && session.status === 404; retry++) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            session = await api(cleanupActor, 'GET', '/api/v1/web/session/');
+          }
+          if (session.status === 401 || session.data?.error?.code === 11) {
+            cleanupActor = await login(cleanupActor.identity.account, cleanupActor.password, cleanupActor.identity.namespace);
+            h[r.actor] = cleanupActor;
+          }
+        }
+        await ok(cleanupActor, 'DELETE', r.collection + r.id);
         const readRoute = r.kind === 'namespace' ? '/cas/namespaces/' + r.id : r.collection + r.id;
-        let after = await api(admin, 'GET', readRoute);
-        if (after.status === 401) {
+        let after = await api(cleanupActor, 'GET', readRoute);
+        if (after.status === 401 && !r.actor) {
           trace.push({ kind: 'environment-observation', message: 'Management session invalidated after namespace deletion; checking original resource using a new independent authorized session.' });
           admin = await login(credentials.account, credentials.password); h.admin = admin;
           after = await api(admin, 'GET', readRoute);
         }
-        const absent = after.data?.error?.code === 2 && after.data.value == null;
+        const absent = r.kind === 'namespace-branding' ? good(after) && after.data.value?.namespace === r.name && after.data.value.override == null : after.data?.error?.code === 2 && after.data.value == null;
         check('Cleanup has independent owner absence proof', absent, { collection: r.collection, id: r.id, response: after });
-        r.phase = 'deleted'; cleanup.push({ ...r, confirmed: true }); persist();
+        let retirement;
+        if (r.dependents?.length) {
+          retirement = (await ok(admin, 'GET', '/panel/namespace-onboardings/' + r.id + '/retirement')).value;
+          check('Owner confirms exact original namespace aggregate retirement completed', retirement?.namespaceId === r.id && retirement.name === r.name && retirement.phase === 'complete' && retirement.requestId && retirement.expectedVersion > 0 && retirement.revision > 0, retirement);
+        }
+        r.phase = 'deleted'; cleanup.push({ ...r, confirmed: true, ...(retirement ? { retirement, dependentProofMethod: 'owner aggregate retirement receipt and independent namespace absence; no post-deletion child visibility claim' } : {}) }); persist();
       } catch (e) { cleanup.push({ ...r, confirmed: false, error: sanitize(e.message) }); }
     }
     write('cleanup.json', { allCleaned: state.resources.every(r => r.phase === 'deleted'), resources: cleanup, trace });

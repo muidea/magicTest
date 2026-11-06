@@ -22,7 +22,7 @@
 ## 功能定位与边界
 
 - 提供公开 API、浏览器、业务场景和压力验证工具，以及测试目标目录、会话管理和报告；不成为产品业务事实、发行版本、权限策略或恢复流程的 owner。
-- 根入口按 foundation、auth、ui、file、platform-core、panel-api、business-scenario、load 组织测试，子目录 runner 保留给专项调试；历史 VMI 测试不能代替最新设备管理／棋牌应用验收。
+- 根入口按 platform-regression、foundation、auth、ui、file、platform-core、panel-api、business-scenario、load 组织测试；平台常规统一target为platform-standard，子目录 runner 保留给专项调试。历史 VMI 测试不能代替最新设备管理／棋牌应用验收。
 - 按原普通账号和 ApiKey Endpoint 的真实角色验证正反例，不使用管理员身份替代普通角色成功证明。撤权、租户／实例隔离、版本及原请求身份分别核对。
 - 测试只通过 owner 公开接口／页面操作，不直接 SQL 改库、改回执、清运行目录或伪造成功。超时和取消不等于未提交，先查原请求，再按 owner 合同恢复及清理。
 - 源码替身、离线包、隔离数据库、部署镜像和 Live 分别记录；保留候选身份、输入、执行日志、截图及独立 owner 回读，失败、跳过和未执行不能算通过。

@@ -57,6 +57,11 @@ def _pythonpath_for(*relative_dirs: str) -> str:
 
 
 GOALS: Dict[str, TestGoal] = {
+    "platform-regression": TestGoal(
+        key="platform-regression",
+        title="平台常规全量回归",
+        description="按唯一目录逐项验证常规分支，独立报告未实现、受阻及资源清理。",
+    ),
     "foundation": TestGoal(
         key="foundation",
         title="基础能力验证",
@@ -126,6 +131,14 @@ ENV_PROFILES: Dict[str, TestEnvProfile] = {
 
 
 TARGETS: Tuple[TestTarget, ...] = (
+    TestTarget(
+        key="platform-standard",
+        goal="platform-regression",
+        title="平台常规全量回归",
+        description="自动预检、浏览器/API验证、owner清理和报告；配置由MAGICTEST_REGRESSION_CONFIG指定。",
+        workdir=ROOT_DIR,
+        command=(sys.executable, "-B", "regression/run_standard.py"),
+    ),
     TestTarget(
         key="session-foundation",
         goal="foundation",
