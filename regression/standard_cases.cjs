@@ -1,4 +1,6 @@
+const { waitLoginForm, waitLoginError, observeLogin } = require('./login_readiness.cjs');
 const crypto = require('node:crypto');
+const { sameAuthority, sameAccounts } = require('./authority_snapshot.cjs');
 const { negativeBrandWrite, negativeCreate } = require('./negative_mutations.cjs');
 const handlers = {};
 const fixturesDir = h => h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression');
@@ -18,6 +20,8 @@ async function model(h) {
 handlers['F003-001'] = async h => {
   const n = h.need('tenantA');
   const original = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + n.id)).value;
+  const resource = h.state.resources.find(r => r.kind === 'namespace' && r.id === n.id && r.name === n.name);
+  const availability = require('./namespace_availability.cjs');
   const panelPeer = await h.login(h.credentials.account, h.credentials.password);
   const unaffected = [h.admin, panelPeer, h.otherTenantAdmin];
   const targetActors = [h.user, h.tenantAdmin];
@@ -36,7 +40,7 @@ handlers['F003-001'] = async h => {
   let current = original;
   try {
     for (const status of [1, 2]) {
-      const saved = (await h.ok(h.admin, 'PUT', '/panel/namespace-onboardings/' + n.id, { expectedVersion: current.updateTime, description: '常规回归空间编辑', scope: [], status, startTime: current.startTime, expireTime: current.expireTime })).value;
+      const saved = await availability.change(h, resource, current, { ...current, description: '常规回归空间编辑', scope: [], status });
       await assertUnrelatedSessions();
       current = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + n.id)).value;
       h.check('Space settings independently persisted', current.description === '常规回归空间编辑' && current.status === status && saved.id === n.id);
@@ -78,15 +82,10 @@ handlers['F003-001'] = async h => {
     h.check('Unavailable tenant uniformly returns HTTP 404 across public pages, BFF, CAS, discovery, notices and unknown routes', unavailableProbes.length === 9 && unavailableProbes.every(x => x.status === 404), unavailableProbes);
   } finally {
     await h.authorizedAdmin();
-    current = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + n.id)).value;
-    if (current.status !== original.status) {
-      await h.ok(h.admin, 'PUT', '/panel/namespace-onboardings/' + n.id, { expectedVersion: current.updateTime, description: original.description, scope: original.scope || [], status: original.status, startTime: original.startTime, expireTime: original.expireTime });
-      await h.authorizedAdmin();
-      const restored = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + n.id)).value;
-      h.check('Original namespace restored through owner', restored.id === n.id && restored.status === original.status);
-    }
+    await availability.restore(h, resource);
   }
 };
+handlers['F003-001'].transport = 'owner-api';
 handlers['F003-002'] = async h => {
   const root = (await h.ok(h.admin, 'GET', '/cas/namespaces/?_pageSize=100')).values.find(x => x.name === h.credentials.namespace);
   for (const actor of [h.user, h.tenantAdmin]) {
@@ -115,7 +114,8 @@ handlers['F004-002'] = async h => {
       h.check('CAS independently persists in-scope change and original ownership', after.id === before.id && after.account === before.account && after.namespace === before.namespace && after.displayName === payload.displayName && after.description === payload.description, after);
     } else {
       h.denied(response, 'Same original administrator cannot mutate other namespace account');
-      await same(h, h.admin, collection + target.id, before, 'Outside account remains exactly unchanged');
+      const after = (await h.ok(h.admin, 'GET', collection + target.id)).value;
+      h.check('Outside account remains exactly unchanged', sameAuthority(before, after));
     }
   }
   const session = (await h.ok(h.tenantAdmin, 'GET', '/api/v1/web/session/')).value;
@@ -123,7 +123,7 @@ handlers['F004-002'] = async h => {
 };
 handlers['F004-003'] = async h => {
   const body = { account: h.need('user').account, displayName: 'Duplicate test', password: h.state.password, status: 2, roleTemplateKeys: ['portal-user'] };
-  const before = (await h.ok(h.admin, 'GET', accountBase(h) + '?_pageSize=100')).values;
+  const before = await h.directory(h.admin, accountBase(h));
   for (const [index, payload] of [body, { ...body, account: '' }, { ...body, account: h.state.prefix + '-invalid', password: '' }].entries()) {
     const r = await h.api(h.admin, 'POST', accountBase(h), payload);
     if (h.good(r) && r.data.value?.id) h.owned(accountBase(h), r.data.value, 'unexpected-account');
@@ -131,8 +131,8 @@ handlers['F004-003'] = async h => {
     else h.invalid(r, 'Empty account/empty password rejected');
     h.check('Response does not expose submitted password', !JSON.stringify(r).includes(h.state.password));
   }
-  const after = (await h.ok(h.admin, 'GET', accountBase(h) + '?_pageSize=100')).values;
-  h.check('No duplicate or invalid accounts created', JSON.stringify(before) === JSON.stringify(after));
+  const after = await h.directory(h.admin, accountBase(h));
+  h.check('No duplicate or invalid accounts created', sameAccounts(before, after));
 };
 handlers['F010-002'] = async h => {
   const other = h.need('tenantB').name;
@@ -158,16 +158,6 @@ handlers['F011-003'] = async h => {
     h.inaccessible(await h.api(actor, 'PUT', definitionBase + m.id, { expectedDefinitionVersion: m.updateTime, description: 'MUST NOT PERSIST' }), 'Unauthorized definition edit denied');
   }
   await same(h, h.admin, definitionBase + m.id, before, 'Rejected edits preserve definition');
-};
-handlers['F018-002'] = async h => {
-  const m = await model(h), route = definitionBase + m.id + '/model-draft';
-  const payload = JSON.parse(h.fs.readFileSync(h.path.join(fixturesDir(h), 'fixture-draft-atomic-save-request.json')));
-  payload.expectedDefinitionVersion = m.updateTime;
-  payload.entities[0].pkgPath = '/' + h.state.prefix;
-  const outcomes = await Promise.all([h.api(h.admin, 'PUT', route, payload), h.api(h.admin, 'PUT', route, payload)]);
-  h.check('Exactly one same-version concurrent atomic save succeeds', outcomes.filter(h.good).length === 1, outcomes);
-  const read = (await h.ok(h.admin, 'GET', route)).value;
-  h.check('Entity and bindings independently preserved', read.entities.length === 1 && read.entities[0].fields.length === payload.entities[0].fields.length && read.entities[0].pkgPath === '/' + h.state.prefix);
 };
 handlers['F016-003'] = async h => {
   const m = await model(h), route = definitionBase + m.id + '/function-blocks', before = (await h.ok(h.admin, 'GET', route)).value;
@@ -318,6 +308,7 @@ handlers['F001-002'] = async h => {
 };
 
 async function fits(h, page, locator, label) {
+  await locator.waitFor({ state: 'visible', timeout: 30000 });
   h.check(label + ' is visible', await locator.isVisible());
   const box = await locator.boundingBox(), width = page.viewportSize().width;
   h.check(label + ' fits viewport width', box && box.x >= -1 && box.width > 0 && box.x + box.width <= width + 1, box);
@@ -326,17 +317,20 @@ handlers['F001-004'] = async h => {
   for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
     const context = await h.browser.newContext({ ignoreHTTPSErrors: true, viewport });
     const page = await context.newPage(), actor = { context, page, origin: h.user.origin };
-    try {
+    try { await observeLogin(actor, {
+      record: h.observe,
+      capture: () => h.screenshot(actor, 'login-layout-unresolved-' + viewport.width),
+    }, async () => {
       await page.goto(actor.origin + '/api/v1/web/auth/login?return_to=%2Fportal%2F', { waitUntil: 'networkidle', timeout: 30000 });
-      const account = page.locator('input[name=account]'), password = page.locator('input[name=password]'), submit = page.locator('form[action="/oauth/login"] button[type=submit]');
+      const { account, password, submit } = await waitLoginForm(page);
       await fits(h, page, account, 'Account field'); await fits(h, page, password, 'Password field'); await fits(h, page, submit, 'Login button');
       await account.fill(h.user.identity.account); await password.fill(h.state.password + '-wrong');
       const rejected = page.waitForResponse(r => new URL(r.url()).pathname === '/oauth/login' && r.request().method() === 'POST');
+      rejected.catch(() => {}); // Navigation failure must not leave an unhandled observer promise.
       await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle', timeout: 30000 }), submit.click()]); await rejected;
-      await password.waitFor({ state: 'visible' });
+      await waitLoginForm(page);
       h.check('Wrong-password form remains on login page', !['/panel', '/portal'].some(p => new URL(page.url()).pathname.startsWith(p)) && await submit.isVisible());
-      const error = page.locator('[role=alert], .ant-alert, .error, .error-message, .cas-error').filter({ hasText: /密码|错误|失败|invalid|incorrect/i }).first();
-      await error.waitFor({ state: 'visible', timeout: 5000 });
+      const error = await waitLoginError(page);
       await fits(h, page, error, 'Login error');
       h.check('Login error page has no horizontal overflow', await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await h.screenshot(actor, 'error-' + viewport.width);
@@ -346,7 +340,7 @@ handlers['F001-004'] = async h => {
       const session = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value;
       h.check('Viewport login creates correct user session', session.account.account === h.user.identity.account && session.homeNamespace === h.user.identity.namespace);
       await h.screenshot(actor, 'success-' + viewport.width);
-    } finally { await context.close(); }
+    }); } finally { await context.close(); }
   }
 };
 handlers['F001-004'].actors = ['user'];
@@ -387,4 +381,28 @@ Object.assign(handlers, require('./session_cases.cjs').handlers);
 Object.assign(handlers, require('./script_cases.cjs').handlers);
 Object.assign(handlers, require('./notification_cases.cjs').handlers);
 Object.assign(handlers, require('./service_cases.cjs').handlers);
+Object.assign(handlers, require('./authoring_cases.cjs').handlers);
+Object.assign(handlers, require('./catalog_cases.cjs').handlers);
+Object.assign(handlers, require('./definition_browser_cases.cjs').handlers);
+Object.assign(handlers, require('./native_cases.cjs').handlers);
+Object.assign(handlers, require('./page_author_cases.cjs').handlers);
+Object.assign(handlers, require('./cas_identity_cases.cjs').handlers);
+Object.assign(handlers, require('./public_ui_cases.cjs').handlers);
+Object.assign(handlers, require('./todo_cases.cjs').handlers);
+Object.assign(handlers, require('./service_governance_cases.cjs').handlers);
+Object.assign(handlers, require('./service_scope_cases.cjs').handlers);
+Object.assign(handlers, require('./service_debug_cases.cjs').handlers);
+Object.assign(handlers, require('./feedback_cases.cjs').handlers);
+Object.assign(handlers, require('./file_cases.cjs').handlers);
+Object.assign(handlers, require('./callback_cases.cjs').handlers);
+Object.assign(handlers, require('./retention_cases.cjs').handlers);
+Object.assign(handlers, require('./ingress_cases.cjs').handlers);
+Object.assign(handlers, require('./audit_cases.cjs').handlers);
+Object.assign(handlers, require('./oauth_refresh_cases.cjs').handlers);
+Object.assign(handlers, require('./oauth_access_cases.cjs').handlers);
+Object.assign(handlers, require('./file_boundary_cases.cjs').handlers);
+Object.assign(handlers, require('./database_cases.cjs').handlers);
+Object.assign(handlers, require('./profile_cases.cjs').handlers);
+Object.assign(handlers, require('./page_validation_cases.cjs').handlers);
+Object.assign(handlers, require('./branding_cases.cjs').handlers);
 module.exports = { handlers };

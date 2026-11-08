@@ -4,12 +4,14 @@ const { isDeepStrictEqual: same } = require('node:util');
 const crypto = require('node:crypto');
 const absent = response => [200, 404].includes(response.status) && response.data?.error?.code === 2 && response.data.value == null;
 const validID = value => Number.isSafeInteger(value) && value > 0;
+const ownerRequest = (h, ...args) => (h.ownerApi || h.api)(...args);
 function originalActor(h, actor, r) {
   if (!same(actor?.identity, r.creation.actorIdentity) || actor?.origin !== r.creation.origin) throw new h.Blocked('Tracked resource requires its original actor and origin');
 }
 function readRoute(r) { return r.kind === 'namespace' ? '/cas/namespaces/' + r.id : r.collection + r.id; }
 const identityKey = intended => ['uuid', 'key', 'account', 'name'].find(key => typeof intended[key] === 'string' && intended[key]);
 function acknowledgedCreation(h, r) {
+  if (require('./cleanup_recovery.cjs').recoveredNamespace(r)) return true;
   const response = r.creation.response, key = identityKey(r.creation.intended);
   return r.creation.outcome === 'accepted' && response && h.good(response) && validID(r.id) && response.data.value?.id === r.id && (!key || response.data.value[key] === r.creation.intended[key]);
 }
@@ -24,7 +26,7 @@ async function createResource(h, actor, actorName, collection, intended, kind) {
     phase: 'intent', creation: { journalId: crypto.randomBytes(16).toString('hex'), actorIdentity: structuredClone(actor.identity), origin: actor.origin, identity, intended: structuredClone(intended), outcome: 'not-sent' } };
   h.state.resources.push(r); h.persist();
   r.creation.outcome = 'unknown'; h.persist();
-  const response = await h.api(actor, 'POST', collection, intended);
+  const response = await ownerRequest(h, actor, 'POST', collection, intended);
   r.creation.response = response;
   const value = response.data?.value;
   r.creation.outcome = h.good(response) ? 'accepted' : 'unconfirmed';
@@ -32,7 +34,9 @@ async function createResource(h, actor, actorName, collection, intended, kind) {
   h.persist(); // Persist returned identity even if the following assertion fails.
   h.check('Creation acknowledged the exact submitted identity', h.good(response) && validID(r.id) && (!key || value[key] === intended[key]), response);
   originalActor(h, actor, r);
-  const current = (await h.ok(actor, 'GET', readRoute(r))).value;
+  const ownerRead = await ownerRequest(h, actor, 'GET', readRoute(r));
+  h.check('Independent owner read succeeds', h.good(ownerRead), ownerRead);
+  const current = ownerRead.data.value;
   originalActor(h, actor, r);
   h.check('Independent owner read confirms the original created identity', current?.id === r.id && (!key || current[key] === intended[key]), current);
   r.creation.ownershipConfirmed = true; h.persist();
@@ -44,7 +48,7 @@ async function deleteResource(h, actor, r) {
   // Re-read that original identity, including after a journal reload; neither
   // the local phase nor a matching directory name authorizes a guessed DELETE.
   if (!acknowledgedCreation(h, r)) throw new h.Blocked('Unconfirmed original creation; retain intent without guessed deletion');
-  const route = readRoute(r), current = await h.api(actor, 'GET', route);
+  const route = readRoute(r), current = await ownerRequest(h, actor, 'GET', route);
   originalActor(h, actor, r);
   if (absent(current)) return { proof: 'Acknowledged exact original created identity independently absent' };
   h.check('Deletion reads the exact original owner resource', h.good(current) && current.data.value?.id === r.id, current);
@@ -55,12 +59,19 @@ async function deleteResource(h, actor, r) {
   }
   if (r.deletion) throw new h.Blocked('Original DELETE result remains open; no command replay without an owner receipt');
   r.deletion = { journalId: crypto.randomBytes(16).toString('hex'), outcome: 'unknown' }; h.persist();
-  const response = await h.api(actor, 'DELETE', r.collection + r.id);
+  const response = await ownerRequest(h, actor, 'DELETE', r.collection + r.id);
   r.deletion.response = response; r.deletion.outcome = h.good(response) ? 'acknowledged' : 'unconfirmed'; h.persist();
   h.check('Original DELETE is acknowledged', h.good(response), response);
-  const after = await h.api(actor, 'GET', route);
+  const after = await ownerRequest(h, actor, 'GET', route);
   originalActor(h, actor, r);
   h.check('Original owner independently confirms deletion', absent(after), after);
   return { proof: 'Original creation, journaled DELETE and independent exact owner absence' };
 }
-module.exports = { createResource, deleteResource };
+function guardFixtureAccountCleanup(h, r) {
+  if (r.kind !== 'account') return;
+  const namespace = /^\/cas\/namespaces\/([^/]+)\/accounts\/$/.exec(r.collection)?.[1];
+  const account = r.creation?.intended?.account;
+  if (namespace && account && h.state.resources.some(child => child !== r && child.phase !== 'deleted' && child.creation?.actorIdentity?.namespace === namespace && child.creation.actorIdentity.account === account)) throw new h.Blocked('Original account still owns unresolved created resources; retain its identity for formal cleanup');
+  if (namespace && account && h.state.resources.some(child => child !== r && child.phase !== 'deleted' && ['ordinary-file', 'feedback-ticket'].includes(child.kind) && child.actorIdentity?.namespace === namespace && child.actorIdentity.account === account)) throw new h.Blocked('Original account owns an unresolved file or feedback; retain creator for formal recovery and cleanup');
+}
+module.exports = { createResource, deleteResource, guardFixtureAccountCleanup };

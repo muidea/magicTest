@@ -108,9 +108,11 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     config = json.loads(Path(args.config).expanduser().read_text()) if args.config else {}
-    unknown = set(config) - {'credentials', 'output', 'catalog', 'cases', 'chrome'}
+    unknown = set(config) - {'credentials', 'output', 'catalog', 'cases', 'chrome', 'fileUploadMaxBytes'}
     if unknown:
         raise ValueError('Unknown regression config fields: ' + ', '.join(sorted(unknown)))
+    if 'fileUploadMaxBytes' in config and (type(config['fileUploadMaxBytes']) is not int or not 1 <= config['fileUploadMaxBytes'] <= 1024 ** 3):
+        raise ValueError('fileUploadMaxBytes requires the verified positive deployment content limit within the 1 GiB tool budget')
     catalog_path = Path(config.get('catalog', ROOT.parent / 'docs/acceptance/platform-catalog.json')).expanduser().resolve()
     owner = load_owner(catalog_path)
     catalog = json.loads(catalog_path.read_text())
@@ -122,6 +124,8 @@ def main():
     command = ['node', str(ROOT / 'regression/standard.cjs'), '--catalog', str(catalog_path)]
     if cases:
         command += ['--cases', ','.join(cases)]
+    if 'fileUploadMaxBytes' in config:
+        command += ['--file-upload-max-bytes', str(config['fileUploadMaxBytes'])]
     if args.dry_run:
         return subprocess.run(command + ['--dry-run', 'true'], cwd=ROOT).returncode
     for name in ['credentials', 'output']:
@@ -144,6 +148,7 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     inputs = tool_hashes()
     save(directory / 'inputs.json', {'suite': 'standard', 'selectedCases': cases or 'all required standard branches',
                                     'catalogDigest': owner.digest(catalog), 'toolHashes': inputs,
+                                    'fileUploadMaxBytes': config.get('fileUploadMaxBytes'),
                                     'coordination': 'exclusive local origin lock held through preflight, mutations, cleanup and report',
                                     'credentials': 'external private file, not archived'})
     before_path = owner.capture_health(catalog, directory / 'health-before')

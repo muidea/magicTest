@@ -35,7 +35,7 @@ python3 -B run_tests.py --target platform-standard --dry-run
 MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json python3 -B run_tests.py --target platform-standard
 ```
 
-配置可选`catalog`（唯一用例目录）、`cases`（常规用例ID数组，省略即全量）、`chrome`（已安装浏览器）。直接执行`python3 -B regression/run_standard.py --config <private-config> --dry-run`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的常规分项，运行入口存在不代表完整套件交付。
+配置可选`catalog`（唯一用例目录）、`cases`（常规用例ID数组，省略即全量）、`chrome`（已安装浏览器）和`fileUploadMaxBytes`（实际部署的文件上传上限字节，F049-003必填）。直接执行`python3 -B regression/run_standard.py --config <private-config> --dry-run`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的常规分项，运行入口存在不代表完整套件交付。
 
 每次在已登记运行目录下生成唯一子目录，保留`inputs.json`、`health-before`、`browser`、`health-after`、`results.json`和`report.json`。报告校验逐例证据摘要；只有常规分项全部通过、部署身份不变、前后健康、本次资源已独立确认清理且执行器成功，才返回成功。定向执行也报告完整常规目录覆盖率，其余项显示未执行；非零退出需根据逐例状态区分受阻、工具错误和产品失败。私密恢复状态自动留在仓库外，位置打印到终端，不归档其内容。当前浏览器夹具清理不代表历史基础设施登记器已全局核销。
 
@@ -45,13 +45,88 @@ MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json pyth
 
 注册账号的 `templateRefs` 只表示人工模板来源，不能用它断言注册来源的初始授权。执行器另通过公开 `subject-role-bindings` 集合读取原账号的绑定，核对注册来源、来源键、有效状态及精确角色集合，并保留实际登录和管理权限拒绝验证。目录仅在 `values:null` 且明确 `total:0` 时按空集读取；缺失或不完整结果保持受阻。
 
+[公开文档与管理概览执行器](~/codespace/magicTest/regression/public_ui_cases.cjs)覆盖 F064-001/002/003 与 F066-003。法律文档使用当前部署的真实文本，独立匿名读取并核对摘要；保留临时说明时同时验证其标识可见，不推导正式法律内容已确认。缺失文件和概览读取失败仅在当前浏览器注入，移除后验证真实读取恢复；真实 File 服务中断仍属专项。管理概览使用独立租户的真实空目录、CAS 注册待办长内容及正式驳回后的独立回读，覆盖 390、1366、1920 三宽度和实际处理入口；不写入伪造待办或修改法律原文。
+
+[待办执行器](~/codespace/magicTest/regression/todo_cases.cjs)覆盖 F052-001、F052-002 和 F066-001：由 CAS 真实注册申请产生持久待办，独立回读原请求、账号及来源投影，从待办目录实际跳转处理入口，分别批准和驳回后核对原来源终态及 pending 列表移除。双租户正例、普通成员拒绝及猜测来源身份核对访问范围；管理概览计数与当前租户账号目录对照，经快捷入口实际处理原事项。Panel 公开接口固定仅返回待处理事项，不将 pending 缺失宣称为直接读取了 Base 终态历史。原租户通过正式退役回收；不直接注入内部事件、修改待办存储或将重复查询当成重复事件交付验证。
+
+[授权快照比较](~/codespace/magicTest/regression/authority_snapshot.cjs)仅忽略 CAS 顶层授权集合及完整账号目录的排列顺序，保留重复元素、全部资源字段、权限和修订差异。其他数组保留顺序，不以 JSON 原始排列断言授权集合变化。[品牌清理](~/codespace/magicTest/regression/branding_cleanup.cjs)保存原账号、租户和每次请求结果；仅对已确认发生在命令准入前的精确繁忙拒绝进行有界重试，响应丢失或其他结果未知保持开放。`--resume-cleanup` 仅从原始清理证据恢复已拒绝的品牌清理及其所属租户，不创建替代夹具。
+
 [完整目录读取器](~/codespace/magicTest/regression/directory.cjs)固定原主体、origin、查询条件及页预算，检查分页总数、重复身份和短页；没有 owner 快照修订时不承诺并发原子快照。分类只读角色和租户管理员夹具使用完整分页，不凭第一页认定角色或账号不存在。F051-003 缺 reader 时报告正式候选／Installer／CAS 配套条件，不使用临时 Role 或初始化重放补权。
 
 [资源台账](~/codespace/magicTest/regression/resource_lifecycle.cjs)覆盖公共 `create/createAs/remove` 夹具入口。发送前原子持久化私密意图，创建响应后保存精确身份并独立读取；首次回读失败但已保存匹配的成功响应与精确 ID 时，清理可在原主体／origin 下重读原 ID，确认原提交身份后再删除，台账重载后同样适用；若原 ID 已独立确认不存在则只记录处置证明。删除前记意图，响应后独立确认原身份不存在。未知创建不重放、不猜 ID 删除；未知删除仍存在且无 owner 终态证明时保持开放。原主体／origin 变化阻断清理，未解决子项不能靠删除父租户掩盖。手写订阅等业务命令仍须各自提供原请求恢复与回收证明，公共 helper 不代替这些合同。
 
 [服务标识执行器](~/codespace/magicTest/regression/service_cases.cjs)覆盖 F037-003，创建同租户两个独立服务，验证重复 key 和不可编辑身份的精确拒绝阶段，并完整查询相关目录、回读两条原资源证明未覆盖。地址仅作合法外部服务元数据，不调用上游。失败／未知写入先登记，再保留原资源及清理开放状态。工具输入指纹自动包含全部运行 `.cjs` 模块，包含目录、公开探针及写入台账。
 
+[服务夹具](~/codespace/magicTest/regression/service_graph.cjs)、[服务治理执行器](~/codespace/magicTest/regression/service_governance_cases.cjs)和[服务范围执行器](~/codespace/magicTest/regression/service_scope_cases.cjs)使用正式发布、原requestId订阅回执、一次性Key和本机受控HTTP上游的随机marker。普通OAuth Endpoint没有被登记到订阅时不能作为Gateway成功凭据；secret退休与access token撤销分别验证。外部上游剥离内部身份Header，不能据此证明内部能力上游的租户传播。服务草稿、发布门禁、实际下载OpenAPI和原订阅Key的新冻结路由配对验证，未确认的服务命令阻断原服务及父租户清理。
+[服务调试执行器](~/codespace/magicTest/regression/service_debug_cases.cjs)通过真实Monaco剪贴板粘贴JSON，独立核对上游请求字节；先证明原慢请求到达上游，再以页面切换触发取消并验证迟到响应不会污染当前执行记录。指南验证在两个真实租户域名实际复制URL及调用示例，只按受限语法解析文本而不执行shell，使用各自原订阅Key无Cookie调用。订阅、凭据、轮换和清理均绑定原owner；当前账号不匹配时拒绝写入与清理。未声明响应格式通过实际OpenAPI和合同下载核对，不伪造schema。
+
+
+[owner传输](~/codespace/magicTest/regression/owner_transport.cjs)在发出请求前固定选择独立单次HTTP，复用原浏览器精确Cookie、Host和Origin，并明确本机租户Host连接映射；不跟跳转、不重试，不在未知浏览器写入后切换通道重放。UI操作、故障注入和无Cookie协议调用仍使用浏览器。资源公共创建／删除也使用此预选通道；原UI写入观察器显式保留唯一原路由转发，不因继承ownerApi替换原生产者。
+
+[CAS表单传输](~/codespace/magicTest/regression/cas_form_transport.cjs)在真实登录操作前选定，只转发浏览器原始同源登录／首次改密表单，保留原字节、Cookie、Origin、Host和真实跳转及Cookie响应。原身份与私密发送意图先持久化，每条表单命令只发送一次；网络失败、重复或变更主体时拒绝，不合成登录或错误后重发。Live显式选择已安装的完整Chrome；浏览器域名映射与APIRequest连接映射分别配置。
+
+[工单执行器](~/codespace/magicTest/regression/feedback_cases.cjs)覆盖F054-001/002及F050-003：真实附件二进制、原requestId消息回执、双方状态和页面顺序，以及同租户普通成员／外租户主体对非空私有工单的隔离。外租户有权限查询自身空列表属于范围隔离；精确附件拒绝可以是owner定义的HTTP404纯文本。正式聚合删除后独立回读原工单和消息，不据此宣称独立File物理字节已验证删除。
+
+[普通文件执行器](~/codespace/magicTest/regression/file_cases.cjs)覆盖F049-001/002：原上传回包、token视图和精确ID相互核对，管理GET／DELETE保留原fileSource，下载比对原始二进制。共享入口在写入前以随机不存在路径检查HTTP404，SPA兜底或上游错误立即失败，避免反复遗留文件。原上传已确认时才允许正式精确删除，再分别核对ID、token和字节路由；HTTP500不能算删除后访问通过。未知上传／删除不重放，未解决文件或工单阻断其原创建账号及租户清理。
+
+[公开证据派生工具](~/codespace/magicTest/regression/evidence_derivative.py)仅按仓外私密清单中的原File token替换错误文本中的回显，生成独立目录；先校验原证据摘要，再按依赖顺序重算公开引用，保留原用例判定、数值错误码及处置事实。原始字节须保留在仓外私密目录，公开目录以`redaction-provenance.json`列出原文件与派生文件摘要；不得把派生报告当作未经转换的原输出，不改写或丢弃原失败历史。它不是通用秘密检测器。
+
+[文件边界执行器](~/codespace/magicTest/regression/file_boundary_cases.cjs)覆盖F049-003常规分项。私密编排配置须显式提供实际部署上限`fileUploadMaxBytes`（字节），不能把工具预算当作产品合同；执行0、L−1、L、L+1实际上传，以原token、精确ID和完整流式摘要回读，并逐个正式清理原文件。[流式传输](~/codespace/magicTest/regression/file_stream_transport.cjs)复用原Cookie/Origin，明确multipart实际长度，不重试未知上传，不因文件大而截取验证。上传接纳中断另属专项。
+
+[数据库资源执行器](~/codespace/magicTest/regression/database_cases.cjs)覆盖F047-001/002：通过[独立PostgreSQL夹具](~/codespace/magicTest/regression/postgres_fixture.cjs)验证实际连接、资源编辑、规划容量、状态、精确租户独占、正式存储选项与控制台；异常分支验证规范化重复及真实错误连接。夹具仅使用本机既有镜像ID、确认的Panel网络和无持久卷新容器；不使用生产数据库或直接SQL。原平台记录及placement正式删除后才移除精确容器；原命令结果未知时保留，不盲目重试。placement只有正式目录读取，不能假设存在单项GET。规格字段不代表实际硬限额。
+
+[页面拒绝执行器](~/codespace/magicTest/regression/page_validation_cases.cjs)补齐F067-003/F068-002的草稿子分项：正式check/save配对验证结构、属性和引用拒绝，合法边框0/12、真实图片类型及8MiB公开JSON请求边界。PNG字节、base64与完整UTF-8请求分别计量；大图片证据保留两种表示的摘要，原命令字节留仓外私密台账。仅明确拒绝且原模型/页面/图片/版本完整保持时确认意图；未知结果不重放。正式发布、导入、安装和运行尚未覆盖，整例保持部分验证。
+
+[概览权限执行器](~/codespace/magicTest/regression/profile_cases.cjs)核对F066-002的目录/指标四组合、原账号会话撤权、独立owner计数和正式租户切换中实际旧GET响应迟到。缺内置角色保持受阻；无Panel入口的组合验证明确拒绝页面，不假定概览读取角色同时授予管理入口。
+
+离线[模型夹具生成工具](~/codespace/magicTest/regression/model_fixture.py)接收当前`ApplicationModelArtifact`非秘密JSON，经仓外Go overlay调用Runner当前正式`Build`/`Parse`，默认vendor、关闭自动网络下载，核对确定性、回读摘要与可移植身份；输出目录必须新建且位于源码仓外。它不创建发布历史、上传引用或安装，源码成功不能替代部署验收。使用：
+
+```bash
+python3 -B ~/codespace/magicTest/regression/model_fixture.py \
+  --runner ~/codespace/magicRunner \
+  --artifact /tmp/current-nonsecret-artifact.json \
+  --output /tmp/new-portable-fixture
+```
+
+[第一方回调执行器](~/codespace/magicTest/regression/callback_cases.cjs)在真实BFF首跳Location保留原授权、state和S256材料，每个探针仅改变nonce、state或S256一项进行对照，观察后续浏览器真实授权及回调，正常会话和探针退出均独立回读；已确认失败在原探针正式处置后继续核对其他独立分支，最后汇总断言；未完成分支仍报告partial。原code、state和nonce仅留在仓外私密journal。
+
+[OAuth应用接入执行器](~/codespace/magicTest/regression/oauth_access_cases.cjs)分别执行机密授权码和Endpoint客户端凭据流程，用租户实际discovery/JWKS验证RS256签名、issuer、完整受众、原主体、客户端、空间、授权修订和到期；无Cookie introspection及UserInfo独立回读。身份scope不生成业务授权，机器主体保留原Endpoint及所属账号；未声明流程拒绝与两类原凭据正式撤销配对检查。
+
+[刷新族执行器](~/codespace/magicTest/regression/oauth_refresh_cases.cjs)以普通账号真实授权码及S256、独立机密客户端取得刷新凭据，核对轮换、已消费凭据重放、当前族失效、参数错误不消费、双请求并发和客户端正式撤销。每个原命令在发送前记入仓外私密台账，结果未知不重放；独立无Cookie introspection与CAS审计核对实际主体、租户、客户端及原族。真实到期和CAS真实5xx仍属条件专项。授权码等字符串被证据脱敏器移除，数值业务错误码保留用于诊断。
+
+[审计事件执行器](~/codespace/magicTest/regression/audit_cases.cjs)从真实错误密码、成功登录和退出产生CAS事件，保留原同账号会话；账号角色条件变更和服务正式修改独立回读。平台操作日志入口按其platform/home声明验证平台内服务变更，不通过切换active namespace绕过范围；租户操作日志读取和正式授权变更审计仍有未验证合同，完整用例保持partial。原操作日志按精确服务/动作/原主体/目标空间公开条件查询，限制读取预算；读取原日志，不直接写日志或用令牌撤销事件替代授权变更。
+
+[品牌继承执行器](~/codespace/magicTest/regression/branding_cases.cjs)覆盖F055-001的平台品牌设置、双租户继承、单租户名称/主题/PNG图标覆盖和正式重置；核对独立owner、匿名Host投影及真实登录页。平台原标量使用原资源身份/最新版本条件恢复，保留原素材；未知命令和并发修改阻止覆盖。租户原图片重置后独立读取404。文件、工单和CAS身份清理按原主体会话读取，仅401/code11时重新认证一次，不重放未知业务操作。
+
+[日志留存边界执行器](~/codespace/magicTest/regression/retention_cases.cjs)通过正式双策略合同验证16项越界、清理参数上下界、条件并发、读取失败及缩短取消。共享环境所有测试成功写入均设永久保留0，最后按精确最新版本恢复原策略；未知写不重放，不覆盖其他维护者修改。正数最大天数及实际清理必须使用独立日志owner。
+
+[租户启停台账](~/codespace/magicTest/regression/namespace_availability.cjs)在每次状态写入前持久化精确版本和输入，要求CAS完成回执及独立回读。未知结果阻止重复状态写；已确认CAS事实与入口投影分别核销，显式原运行清理可调用既有入口恢复命令。原资源恢复不执行新用例，也不改变原失败报告。
+
+实体作者的独立回读与API准备、API专用模型断言也在执行前选用owner传输。F018-002仍使用真实浏览器注入原响应丢失。原字段冲突已获明确VersionConflict、但回读被网络变化打断时，可用`--reconcile-authoring-conflicts true --authoring-conflict-evidence <原逐例证据>`配合原私密状态单独核销；[核销工具](~/codespace/magicTest/regression/authoring_conflict_recovery.cjs)要求不可变证据中的原拒绝、原较新保存快照，以及当前精确owner完整回读一致。仅确认原意图并正式清理原对象，不执行用例或重发PUT。
+
+[原清理恢复](~/codespace/magicTest/regression/cleanup_recovery.cjs)以`--resume-tracked-cleanup <原cleanup.json>`恢复原私密台账中的精确资源，须使用原凭据、`--private-state`、同候选`--baseline-health`和新的`--output`；不执行新用例。可选`--namespace-creation-proofs`提供原CAS日志与公开回执，缺原条件版本或终态证明仍开放。`--dns-failure-proofs`仅接受原attempt内逐例文件、SHA256和journal映射，匹配原Host、POST路径及字节长度的ENOTFOUND，再完整读取原模板key不存在；超时和其他网络错误不适用。`--reconcile-retired-credentials true`仅接受原正式父订阅DELETE回包中已有的精确凭据身份，独立确认Panel/CAS终态。所有追加处置保留原unknown和原失败报告，不伪造丢失的成功响应；直接子执行器恢复须由调用方持有同环境互斥锁。
+
+[模型作者执行器](~/codespace/magicTest/regression/authoring_cases.cjs)覆盖 F015-002、F018-001/002/003 和 F067-004。使用独立应用定义，配对预检只读、实体及脚本绑定原子保存、自增业务主键与定义身份、同版本冲突、功能块阶段拒绝和页面读／预检／写权限。丢失响应由真实浏览器在唯一原保存已返回后中断，再按原定义ID、实体ID、版本及目标摘要独立回读；不重发未知保存。私密台账保留原保存意图，未确认时保留对应定义，不能靠清理父资源掩盖。页面只读成员复用正式发布负责人角色，并与同租户普通成员及跨租户管理员配对；预检校验原实体／字段引用及过期版本，独立回读原模型保持不变。预检结果不证明运行数据权。
+
+[原生编排执行器](~/codespace/magicTest/regression/native_cases.cjs)覆盖 F021-001/002/003、F022-001/002/003：真实向导首组件自动打开、多组件前后切换及草稿保存，空组件门禁与取消无创建，未确认输入跨页签及手动刷新保持、显式保存后步骤往返、跨组件迟到响应和三宽度表格，本地无标签／平台标签镜像读取，缺失镜像重试和旧建议迟到保护。UI 原 POST 通过共享资源台账先记录意图，再精确转发一次，独立 owner 回读后才可清理；回读失败保留原身份。镜像场景需要本地已有 `postgres:17.7-alpine3.22` 、`muidea/magicbase:master` 及 `muidea/magicfile:master`，执行器核对实际镜像身份及标签，缺条件明确受阻，不拉取或构建镜像。元数据与草稿成功不代表实际部署、挂载、入口或运行能力通过。
+
+F026-002配合[原生构建准入台账](~/codespace/magicTest/regression/native_admission.cjs)，先用真实本地镜像完成合法预检，再验证缺组件依赖、缺本地镜像在预检与正式构建中的精确组件拒绝；缺镜像草稿还执行正式修订预检和发布拒绝。完整包目录、原草稿和完整修订目录均独立核对。发布请求中的正例构建digest仅用于非空信封对照，只有先命中组件错误才通过，不将其声称为无效修订的匹配发布digest。实际命令写前记台账；未知、非目标拒绝或意外成功保留原身份，阻断原父定义删除，不重放或猜ID清理；不代替成功发布、安装和恢复验证。
+
+品牌布局执行器通过本轮临时租户的公开品牌owner设置长名称，独立核对Host解析后的品牌与实际解码的图标／登录素材，覆盖三宽度登录控件遮挡、Panel与Portal口径。写入前登记原意图；仅沿正式重置及独立回读结束，不修改平台全局品牌或上传替代素材。执行器存在不等于Live已通过。
+
+[页面作者执行器](~/codespace/magicTest/regression/page_author_cases.cjs)覆盖 F067-002、F068-003：真实未保存离页确认、原输入保持、同版本双作者冲突，以及一条原页面保存提交后丢失响应、独立完整回读和界面只读恢复。图片通过真实上传控件独立保存；取消页面保留图片，已引用图片的界面与owner删除均拒绝，删除确认前新增引用会再次阻断；清除全部引用并保存后通过正式成员命令释放精确原字节。所有原写命令先记台账，未确认时阻断父定义清理；不重发未知保存，不代替发布/安装/运行场景。
+
+原意图核销还支持互斥的 `--reconcile-rejected-definitions true` 和 `--reconcile-authoring-writes true`，沿用原 `--private-state`、凭据与基线，并使用新的输出目录。前者仅接受创建前模型包前缀校验的精确拒绝回包、原主体／UUID及完整目录不存在证明，不处理未知创建；后者仅接受原页面／成员 PUT 成功回包、原定义身份、确切新版本与完整内容的独立回读，不处理无回包或内容已改变的写入。两者均不执行新用例、不创建替代夹具、不重放业务命令；原报告保留，核销及后续正式清理另存新 attempt。所有恢复模式须显式选择且互斥，错误参数在浏览器启动前拒绝。
+
+[分类名称执行器](~/codespace/magicTest/regression/catalog_cases.cjs)覆盖 F051-001/002，核对分类创建与改名、实际应用/服务分类展示、独立File标签保存/回读/详情展示，以及父子目录、同名不同身份、租户隔离，以及改名／删除目录后应用与服务原名称字符串保持。分类目录不是跨资源稳定ID关系，不推导在用删除保护。File标签不创建分类目录；原文件和分类正式清理后才汇总展示断言，失败仍保留原证据。
+
+[实体作者浏览器执行器](~/codespace/magicTest/regression/definition_browser_cases.cjs)覆盖 F012-001/002/003、F013-003 和 F016-002：实际目录及字段分页、父节点明细、迟到响应、空态与原实体删除后的失效选择，390／1366／1920 三宽度长内容及操作，字段弹窗取消／确认／冲突，脚本引用保护及草稿取消。字段确认后仍需保存原实体才会落库；模型草稿保存只更新显式提交的实体，省略实体不代表删除。UI 的原 PUT／DELETE 在转发前记录台账，独立 owner 回读确认后才能清理定义，错误回包或回读失败均保留原现场。
+
+已成功返回的原实体 DELETE 若因后续回读中断而未核销，可将 `standard.cjs` 的 `--private-state` 指向原状态、`--output` 指向新的证据目录，提供常规必需的凭据及健康基线参数，并显式传入 `--reconcile-authoring-deletions true`。该模式核对原主体、原定义及原删除回包，只读确认同一实体缺失，再通过原资源台账正式清理原定义；不执行用例或创建替代夹具。未知 DELETE、缺原回包或身份不符仍保持开放。该处置不改写原失败报告，也不处理租户未知删除。
+
 租户正式删除后，BFF可能拒绝再查询该租户子资源，403不能作为不存在的证明。执行器保留子身份，结合原租户DELETE回执、公开持久退役记录和独立目录不存在证明，核对已审查的聚合清理合同；不声称逐个删除后仍可读取子资源。只读`--reconcile-cleanup`模式向唯一新attempt追加原失败资源的处置证明，不重放DELETE、不修改旧记录，也不会回落为常规执行。
+
+注册夹具在新租户创建后等待已发布入口生效：每次读取精确原租户身份、版本、启用及有效期，再匿名GET会话入口；仅404允许最多5次一秒等待，必须得到未认证响应才进入用例。其他响应或持续404直接失败，不重发写命令，不改变禁用／过期租户统一404断言。
 
 [公开首跳探针](~/codespace/magicTest/regression/public_probe.cjs)在原浏览器页面使用原会话 Cookie，只读同源 GET；禁止自动跳转，记录 Chromium 原始首跳状态及 Location。301／302／307／308 后最终404不能满足统一404断言。普通登录流程仍按正式跳转执行。
 
@@ -69,6 +144,8 @@ python3 -B -m unittest regression.test_run_standard
 [执行器](~/codespace/magicTest/regression/standard.cjs)读取权威目录，为所选常规分项逐项输出结果；[具体断言](~/codespace/magicTest/regression/standard_cases.cjs)只登记已有实现，未覆盖全部步骤、缺少夹具或没有执行器的分项明确受阻。它仍不是已交付的完整常规套件，不能以已注册handler数推断完整覆盖。
 
 [身份与模板断言](~/codespace/magicTest/regression/identity_cases.cjs)使用正式登录／首次改密表单、错误密码提示、CAS会话与授权目录及BFF精确退出。CAS OAuth管理接口由同租户真实审计账号回读；平台治理账号不能代替租户本地OAuth身份。退出保留原BFF凭据副本验证服务端失效，并核对另一独立会话保持；该结果只证明当前会话退出。模板验证包含真实授权操作、委派上限、来源权限并集、撤回和在用删除门禁。
+
+登录布局及共享拒绝登录分支统一使用[登录就绪工具](~/codespace/magicTest/regression/login_readiness.cjs)，有界等待真实 CAS 表单与明确凭据错误反馈；`networkidle` 不代表初始化或交互就绪。失败时在关闭上下文前采集路径、状态、耗时、可见性和截图，不记录查询参数、请求体、凭据或浏览器错误正文；取证失败保留原异常，不重发认证命令。错误密码、注册审核、密码重置与账号禁用共用该门禁，隔离延迟DOM测试和真实认证回归分别记账。
 
 ```sh
 node ~/codespace/magicTest/regression/standard.cjs --dry-run true
@@ -399,3 +476,7 @@ python3 run_tests.py --preset load-aging
 - [platform/README.md](~/codespace/magicTest/platform/README.md)
 - [vmi/README.md](~/codespace/magicTest/vmi/README.md)
 - [session/USAGE.md](~/codespace/magicTest/session/USAGE.md)
+
+正式服务回归由[服务图执行器](~/codespace/magicTest/regression/service_graph.cjs)维护原订阅requestId和owner回执，经正式发布、订阅、凭据及Gateway调用本机受控HTTP上游。真实上游收到的随机请求标识作为独立转发证据，拒绝分支同时验证未到达上游；测试上游在本轮资源清理后关闭。未知申请／撤销不重发，未确认子记录阻断父服务及租户清理，凭据不归档。
+
+未知Host和证书边界由[入口隔离执行器](~/codespace/magicTest/regression/ingress_cases.cjs)只读验证：完整CAS目录确认随机名称不存在，公共浏览器入口不得回落默认租户；使用实际入口证书链，在严格证书名校验下核对不匹配Host于HTTP前失败，不修改证书或部署。

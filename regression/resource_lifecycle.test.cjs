@@ -1,6 +1,17 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createResource, deleteResource } = require('./resource_lifecycle.cjs');
+test('pending owned file or feedback protects its original fixture account until formal disposition', () => {
+  const { guardFixtureAccountCleanup } = require('./resource_lifecycle.cjs');
+  const account = { kind: 'account', collection: '/cas/namespaces/tenant-a/accounts/', creation: { intended: { account: 'member' } } };
+  for (const kind of ['ordinary-file', 'feedback-ticket']) {
+    const child = { kind, phase: 'created', actorIdentity: { account: 'member', namespace: 'tenant-a' } };
+    const h = { Blocked: Error, state: { resources: [account, child] } };
+    assert.throws(() => guardFixtureAccountCleanup(h, account), /retain creator/);
+    child.actorIdentity.namespace = 'tenant-b'; guardFixtureAccountCleanup(h, account);
+    child.actorIdentity.namespace = 'tenant-a'; child.phase = 'deleted'; guardFixtureAccountCleanup(h, account);
+  }
+});
 function fixture(mode) {
   const actor = { identity: { account: 'original', namespace: 'tenant' }, origin: 'https://tenant.invalid' };
   let stored, reads = 0; const commands = [], journal = [];
@@ -40,6 +51,21 @@ test('successful creation persists exact owner identity before read, and cleanup
   await deleteResource(f.h, f.actor, r);
   assert.equal(f.stored(), undefined);
   assert.deepEqual(f.commands.map(c => c.method), ['POST', 'GET', 'GET', 'DELETE', 'GET']);
+});
+test('selected owner transport owns the entire lifecycle and a failed write never falls back to browser replay', async () => {
+  const f = fixture();
+  f.h.ownerApi = f.h.api;
+  f.h.api = () => { throw Error('browser transport must not be selected after owner transport'); };
+  await f.create();
+  await deleteResource(f.h, f.actor, f.h.state.resources[0]);
+  assert.deepEqual(f.commands.map(c => c.method), ['POST', 'GET', 'GET', 'DELETE', 'GET']);
+  const lost = fixture('create-lost'); lost.h.ownerApi = lost.h.api;
+  lost.h.api = () => { throw Error('must not replay'); };
+  await assert.rejects(lost.create(), /create response lost/);
+  await assert.rejects(lost.create(), /never replay POST/);
+  await assert.rejects(deleteResource(lost.h, lost.actor, lost.h.state.resources[0]), /Unconfirmed original creation/);
+  assert.equal(lost.commands.length, 1);
+  assert.equal(lost.h.state.resources[0].creation.outcome, 'unknown');
 });
 test('accepted original creation recovers after first read failure and persisted journal reload without replaying POST', async () => {
   for (const mode of ['first-read-lost', 'first-read-unavailable']) {
@@ -125,4 +151,13 @@ test('lost DELETE response permits exact absence read, and never replays an unce
     else await assert.rejects(deleteResource(f.h, f.actor, r), /no command replay/);
     assert.equal(f.commands.filter(c => c.method === 'DELETE').length, 1);
   }
+});
+
+test('original creator account remains while any created resource is unresolved', () => {
+  const { guardFixtureAccountCleanup } = require('./resource_lifecycle.cjs');
+  const account = { kind: 'account', collection: '/cas/namespaces/a/accounts/', creation: { intended: { account: 'delegator' } } };
+  const child = { kind: 'role-template', phase: 'created', creation: { actorIdentity: { account: 'delegator', namespace: 'a' } } };
+  const h = { state: { resources: [account, child] }, Blocked: Error };
+  assert.throws(() => guardFixtureAccountCleanup(h, account), /unresolved created resources/);
+  child.phase = 'deleted'; assert.doesNotThrow(() => guardFixtureAccountCleanup(h, account));
 });

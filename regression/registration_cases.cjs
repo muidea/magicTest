@@ -22,8 +22,25 @@ async function fixture(h, suffix) {
   const p = (await h.ok(h.admin, 'POST', reg + 'profiles/', { key: h.state.prefix + '-' + suffix,
     name: '注册回归初始门户模板', description: '仅引用受控门户用户预设', accessProfileKeys: ['portal-user'], status: 2 })).value;
   h.namespaceDependent(ns.id, reg + 'profiles/', p.id, 'registration-profile');
-  const anon = await h.anonymous(ns.name);
+  const anon = await h.anonymous(ns.name, actor => waitForRegistrationIngress(h, ns, actor));
   return { ns, base, reg, p, portal, anon, bootstrap: accountList[0] };
+}
+
+// A new watched-file ingress can become active after the onboarding response.
+// This prepares only our exact newly-created enabled fixture, never a disabled
+// tenant assertion or an unknown write. A 404 is not a successful probe.
+async function waitForRegistrationIngress(h, ns, actor, pause = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  const original = h.state.resources.find(r => r.kind === 'namespace' && r.id === ns.id && r.name === ns.name && r.phase === 'created');
+  const created = original?.creation?.response?.data?.value;
+  h.check('Registration ingress wait belongs to the original tracked namespace', original?.creation?.ownershipConfirmed === true && created?.id === ns.id && created?.name === ns.name && actor.identity.namespace === ns.name);
+  for (let attempt = 0; attempt <= 5; attempt++) {
+    const current = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + ns.id)).value;
+    h.check('Ingress readiness never waits for a foreign, changed or unavailable namespace', current.id === ns.id && current.name === ns.name && current.updateTime === ns.updateTime && current.status === 2 && current.startTime <= Date.now() && current.expireTime > Date.now(), current);
+    const response = await h.api(actor, 'GET', '/api/v1/web/session/');
+    if (response.status === 401 || (response.status === 200 && response.data?.error?.code === 11)) return;
+    h.check('Only a transient missing new registration ingress permits another read', response.status === 404 && attempt < 5, { attempt, response });
+    await pause(1000);
+  }
 }
 
 async function policy(h, f, changes = {}) {
@@ -181,4 +198,5 @@ handlers['F002-004'] = async h => {
   h.check('Public policy does not advertise unavailable CAPTCHA', equal(policyValue((await h.ok(f.anon, 'GET', publicPolicy)).value), policyValue(initial)));
 };
 for (const handler of Object.values(handlers)) handler.actors = ['user', 'tenantAdmin', 'otherTenantAdmin'];
-module.exports = { handlers, directoryValues, registrationAuthority, registrationBindingRoute };
+module.exports = { handlers, directoryValues, registrationAuthority, registrationBindingRoute, waitForRegistrationIngress,
+  createRegistrationFixture: fixture, setRegistrationPolicy: policy, submitRegistration: submit, reviewRegistration: review };

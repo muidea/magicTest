@@ -229,6 +229,397 @@
       "layer": "browser-api",
       "target": "platform-standard",
       "limitation": "F037-003重复标识及身份不可编辑的精确拒绝，完整目录与两个独立owner回读；不调用外部上游，不覆盖其余服务主链。"
+    },
+    {
+      "id": "platform-standard-authoring",
+      "path": "~/codespace/magicTest/regression/authoring_cases.cjs",
+      "layer": "api",
+      "limitation": "F015-002、F018-001/002/003、F067-004 使用正式模型/脚本/页面合同、实际浏览器丢失响应及原身份回读；完整交付仍要求当前候选完整回归和清理门禁。"
+    },
+    {
+      "id": "platform-standard-category-names",
+      "path": "~/codespace/magicTest/regression/catalog_cases.cjs",
+      "layer": "api",
+      "limitation": "F051-001/002分类创建编辑、应用/服务名称字符串与实际页面、独立File标签owner写入/回读和实际详情呈现；完整Live结果及失败单独记账，不覆盖只读角色目录配套。"
+    },
+    {
+      "id": "platform-standard-authoring-test",
+      "path": "~/codespace/magicTest/regression/authoring_cases.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "真实Chromium隔离HTTP验证原保存提交后响应丢失与伪回执拒绝；仅工具测试，Live另行验证。"
+    },
+    {
+      "id": "platform-standard-definition-browser",
+      "path": "~/codespace/magicTest/regression/definition_browser_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "F012-001/002/003、F013-003及F016-002真实浏览器目录分页、迟到响应、空/失效选择、三宽度、字段取消/更新/冲突及脚本引用保护；独立owner回读和原命令台账。登记不代表Live通过或全量交付。"
+    },
+    {
+      "id": "platform-standard-definition-browser-test",
+      "path": "~/codespace/magicTest/regression/definition_browser_cases.test.cjs",
+      "layer": "tool",
+      "limitation": "Chromium隔离HTTP核对原PUT/DELETE发送前台账及拒绝伪回执；原实体删除的只读核销拒绝无回执、跨主体和裸404。仅工具测试。"
+    },
+    {
+      "id": "platform-standard-native",
+      "path": "~/codespace/magicTest/regression/native_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "真实多组件草稿、空组件与取消；已有本地镜像OCI Env/端口/卷/健康/启动建议、输入保留、错误重试及迟到响应；不构建/拉取镜像或代替实际部署。"
+    },
+    {
+      "id": "platform-standard-native-test",
+      "path": "~/codespace/magicTest/regression/native_cases.test.cjs",
+      "layer": "tool",
+      "limitation": "隔离HTTP/Chromium核对原POST发送前台账、精确一次、身份失配/回读失败/丢失响应保留；不代替Live。"
+    },
+    {
+      "id": "platform-standard-page-author",
+      "path": "~/codespace/magicTest/regression/page_author_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "真实页面取消/冲突/原保存响应丢失及只读核对；图片独立上传保存、引用保护和正式释放；不代替冻结发布、安装或运行。"
+    },
+    {
+      "id": "platform-standard-page-author-test",
+      "path": "~/codespace/magicTest/regression/page_author_cases.test.cjs",
+      "layer": "tool",
+      "limitation": "隔离HTTP/Chromium核对一条原页面PUT在响应丢失后必须独立回读，不接受假回执或未知结果重放；不代替Live。"
+    },
+    {
+      "id": "platform-standard-cas-identity",
+      "path": "~/codespace/magicTest/regression/cas_identity_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "账号/Endpoint/OAuth真实凭据生命周期及原身份清理；不代替已安装实例业务授权或外部OIDC。登记与工具测试不代表Live通过。"
+    },
+    {
+      "id": "platform-standard-cas-identity-test",
+      "path": "~/codespace/magicTest/regression/cas_identity_cases.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "账号/Endpoint/OAuth真实凭据生命周期及原身份清理；不代替已安装实例业务授权或外部OIDC。登记与工具测试不代表Live通过。"
+    },
+    {
+      "id": "platform-standard-public-ui",
+      "path": "~/codespace/magicTest/regression/public_ui_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "当前临时法律文本的公开字节、缺失提示/重试及三宽度展示；管理台真实空态、注册待办长内容和读取失败。正式法律确认、真实File故障和部署验收独立记录。"
+    },
+    {
+      "id": "platform-standard-todos",
+      "path": "~/codespace/magicTest/regression/todo_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "真实CAS注册来源经Base持久待办及Panel投影，批准/驳回、普通用户和双租户范围、管理概览计数及快捷处理；不代替重复事件或故障恢复专项。"
+    },
+    {
+      "id": "platform-standard-authority-snapshot",
+      "path": "~/codespace/magicTest/regression/authority_snapshot.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "仅对CAS顶层授权集合归一化顺序；保留所有字段、重复元素及未知数组顺序；完整账号目录由分页读取器取得。"
+    },
+    {
+      "id": "platform-standard-brand-cleanup",
+      "path": "~/codespace/magicTest/regression/branding_cleanup.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "原身份品牌清理只对已证实的准入前繁忙拒绝进行有界重试；未知写入不重发，需独立owner回读。"
+    },
+    {
+      "id": "login-readiness",
+      "path": "~/codespace/magicTest/regression/login_readiness.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "等待真实CAS表单及拒绝反馈，失败关闭前保留无敏感值的时间线和截图；隔离DOM测试不代替Live认证及owner回读。"
+    },
+    {
+      "id": "login-readiness-tests",
+      "path": "~/codespace/magicTest/regression/login_readiness.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "等待真实CAS表单及拒绝反馈，失败关闭前保留无敏感值的时间线和截图；隔离DOM测试不代替Live认证及owner回读。"
+    },
+    {
+      "id": "service-graph",
+      "path": "~/codespace/magicTest/regression/service_graph.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "正式服务发布、订阅、凭据及租户/主体边界，原请求回执和独立owner回读；本机临时上游不代替内部安装实例。"
+    },
+    {
+      "id": "service-governance-cases",
+      "path": "~/codespace/magicTest/regression/service_governance_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "正式服务发布、订阅、凭据及租户/主体边界，原请求回执和独立owner回读；本机临时上游不代替内部安装实例。"
+    },
+    {
+      "id": "service-graph-tests",
+      "path": "~/codespace/magicTest/regression/service_graph.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "隔离工具测试保护原订阅回执、未知提交不重放、主体门禁及独立上游证明；不代替Live。"
+    },
+    {
+      "id": "owner-transport",
+      "path": "~/codespace/magicTest/regression/owner_transport.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "原浏览器会话的公开owner API单次请求；保留虚拟Host、精确Cookie、禁重试和跳转。真实UI仍使用浏览器。"
+    },
+    {
+      "id": "owner-transport-tests",
+      "path": "~/codespace/magicTest/regression/owner_transport.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "隔离真实HTTP测试验证Host、Cookie更新/清理和写入不重放；不替代Live。"
+    },
+    {
+      "id": "cleanup-recovery",
+      "path": "~/codespace/magicTest/regression/cleanup_recovery.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "仅恢复不可变原清理台账；CAS创建ID须来自原日志并公开回读精确资源，不伪造成功响应。"
+    },
+    {
+      "id": "cleanup-recovery-tests",
+      "path": "~/codespace/magicTest/regression/cleanup_recovery.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "保护原身份、日志摘要和owner回执门禁；隔离测试不替代原资源清理。"
+    },
+    {
+      "id": "platform-standard-service-scope",
+      "path": "~/codespace/magicTest/regression/service_scope_cases.cjs",
+      "layer": "browser-api",
+      "limitation": "F045-003常规跨服务/伪造租户上下文与F046-003管理调试范围；真实发布、订阅Key及上游marker回读。自然到期、管理审计与跨运行稳定性分别验收，不从handler登记推导通过。"
+    },
+    {
+      "id": "platform-standard-service-scope-tests",
+      "path": "~/codespace/magicTest/regression/service_scope_cases.test.cjs",
+      "layer": "tool",
+      "limitation": "隔离验证原服务命令意图、响应丢失及独立owner确认失败后不可重放；不替代Live服务合同/权限验收。"
+    },
+    {
+      "id": "platform-standard-service-debug",
+      "path": "~/codespace/magicTest/regression/service_debug_cases.cjs",
+      "layer": "browser-api",
+      "limitation": "F044-001/002/003通过真实工作台JSON输入、受控原上游、原请求取消及三宽度布局验证；执行结果、候选及清理以当次证据为准，transport取消不宣称服务端脚本停止。"
+    },
+    {
+      "id": "platform-native-admission",
+      "path": "~/codespace/magicTest/regression/native_admission.cjs",
+      "layer": "api",
+      "limitation": "负例实际build/publication命令写前登记；仅组件准入明确拒绝与完整owner目录未变才终结。未知或意外接受不重放、不猜删；不能代替成功发布、安装及恢复验证。"
+    },
+    {
+      "id": "platform-cas-form-transport",
+      "path": "~/codespace/magicTest/regression/cas_form_transport.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "仅转发真实原CAS表单一次，私密journal先持久化，浏览器处理Location/Set-Cookie；不合成登录，不重试未知命令。"
+    },
+    {
+      "id": "platform-feedback",
+      "path": "~/codespace/magicTest/regression/feedback_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "普通creator、同租户manager、peer与外租户admin的工单附件/回复/状态及范围；正式manager聚合删除，不声称独立File-byte不存在，004及故障专项仍开放。"
+    },
+    {
+      "id": "platform-ordinary-file",
+      "path": "~/codespace/magicTest/regression/file_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "普通共享/私有与self文件真实有限样本，原token到精确owner ID，正式删除和ID/token/字节独立回读；不代替bound引用或上传上限/故障专项。"
+    },
+    {
+      "id": "platform-first-party-callback",
+      "path": "~/codespace/magicTest/regression/callback_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "真实BFF首跳每次仅改变nonce/state/S256一项；各探针独立核对与处置后继续，最后汇总安全断言；回调替换、原code消费／重用与完整审计尚未完成。"
+    },
+    {
+      "id": "platform-retention-boundaries",
+      "path": "~/codespace/magicTest/regression/retention_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "双策略16个越界负例、永久保留及清理参数上下界、条件并发、UI读取失败与缩短取消；正数天数最大值须隔离日志owner，不清理共享历史。"
+    },
+    {
+      "id": "platform-ingress-boundary",
+      "path": "~/codespace/magicTest/regression/ingress_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "随机不存在租户Host、5个浏览器只读入口、无BFF Cookie；以实际证书链与严格TLS隔离验证Host不匹配，不改证书／路由／部署。"
+    },
+    {
+      "id": "platform-namespace-availability",
+      "path": "~/codespace/magicTest/regression/namespace_availability.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "精确原账号、expectedVersion、状态命令台账、CAS完成回执与独立回读；入口恢复与原状态写分开，未知不重放。"
+    },
+    {
+      "id": "platform-audit-events",
+      "path": "~/codespace/magicTest/regression/audit_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "真实登录失败／成功／退出、账号授权变更和服务条件修改，独立完整CAS与operation-log回读；授权变更审计事件正式合同缺口保持partial，不将token撤销当该合同。"
+    },
+    {
+      "id": "platform-oauth-refresh",
+      "path": "~/codespace/magicTest/regression/oauth_refresh_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "普通主体真实授权码/S256、机密客户端，独立刷新introspection、轮换／重放／并发／客户端撤销及错误分类；真实到期和CAS5xx单列专项。原命令写前台账、未知不重放，配对客户端撤销围栏清理。"
+    },
+    {
+      "id": "platform-oauth-access",
+      "path": "~/codespace/magicTest/regression/oauth_access_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "机密授权码与机器client_credentials真实签发、租户discovery/JWKS验签、独立introspection/UserInfo、原CAS修订与Endpoint角色、未声明流程拒绝及原凭据正式撤销；工具登记不表示Live已通过。"
+    },
+    {
+      "id": "platform-file-boundaries",
+      "path": "~/codespace/magicTest/regression/file_boundary_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "F049-003常规内容边界：显式部署上限L、0/L-1/L/L+1、原主体完整目录和独立流式字节摘要、逐文件正式清理；接纳中断仍为隔离专项。"
+    },
+    {
+      "id": "platform-file-stream-transport",
+      "path": "~/codespace/magicTest/regression/file_stream_transport.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "有限self文件multipart流式上传/摘要下载，原浏览器Cookie/Host绑定、单次派发无重定向重试；1GiB工具预算不代表产品上限。"
+    },
+    {
+      "id": "platform-file-stream-transport-test",
+      "path": "~/codespace/magicTest/regression/file_stream_transport.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "隔离真实HTTP验证11MiB+3精确字节、空内容、Cookie更新、响应丢失单次派发和重定向/预算门禁；不代替Live。"
+    },
+    {
+      "id": "platform-database-boundaries",
+      "path": "~/codespace/magicTest/regression/database_cases.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "F047-001独立PostgreSQL实际连接、目录/规格/状态/独占范围与正式explorer；F047-002规范化重复和真实错误连接。原命令未知保留，不将登记或源码测试当Live通过。"
+    },
+    {
+      "id": "platform-database-boundaries-test",
+      "path": "~/codespace/magicTest/regression/database_cases.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "拒绝用认证/私有凭据合同/超时冒充重复或真实连接错误，仅工具门禁。"
+    },
+    {
+      "id": "platform-profile-intersection",
+      "path": "~/codespace/magicTest/regression/profile_cases.cjs",
+      "layer": "browser",
+      "limitation": "F066-002内置目录/指标四组合、原会话撤权、实际owner计数及正式跨租户切换/迟到只读结果；Live单独留证。"
+    },
+    {
+      "id": "platform-model-fixture-producer",
+      "path": "~/codespace/magicTest/regression/model_fixture.py",
+      "layer": "tool",
+      "limitation": "离线通过仓外Go overlay调用当前Runner正式Build/Parse并默认vendor验证；不创建发布修订或上传引用，不代表Live安装及清理完成。"
+    },
+    {
+      "id": "platform-model-fixture-tests",
+      "path": "~/codespace/magicTest/regression/test_model_fixture.py",
+      "layer": "tool",
+      "limitation": "保护源目录、原输出、非法输入、超时和成功退出无产物的失败处理；不代替正式codec或Live验收。"
+    },
+    {
+      "id": "platform-evidence-derivative",
+      "path": "~/codespace/magicTest/regression/evidence_derivative.py",
+      "layer": "tool",
+      "limitation": "仅对已知原opaque File token生成公开脱敏派生，校验原链与重算派生证据SHA256；不改原始字节/用例判定，不等于通用秘密扫描。"
+    },
+    {
+      "id": "platform-evidence-derivative-tests",
+      "path": "~/codespace/magicTest/regression/test_evidence_derivative.py",
+      "layer": "tool",
+      "limitation": "原失败字节保留、错误码/判定保持、完整摘要链、损坏原证据拒绝、路径和覆盖保护。"
+    },
+    {
+      "id": "platform-disposable-postgres",
+      "path": "~/codespace/magicTest/regression/postgres_fixture.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "仅本机既有镜像ID、单一Panel网络、独立无持久卷空库；原平台记录未终结时保留原容器，不访问生产SQL或修改共享数据库。"
+    },
+    {
+      "id": "platform-disposable-postgres-test",
+      "path": "~/codespace/magicTest/regression/postgres_fixture.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "工具身份、镜像/网络、无持久卷、凭据参数和失败保留检查；不计Live通过。"
+    },
+    {
+      "id": "platform-page-validation",
+      "path": "~/codespace/magicTest/regression/page_validation_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "F067-003/F068-002正式check/save拒绝、真实图片类型和公开JSON字节边界；发布/导入/安装/运行未验证，整例保持partial。"
+    },
+    {
+      "id": "platform-page-validation-tests",
+      "path": "~/codespace/magicTest/regression/page_validation_cases.test.cjs",
+      "layer": "tool",
+      "limitation": "未知/意外接受/401/冲突/独立原内容改变均保留命令；精确JSON信封和图片原字节双摘要保护，不代替Live。"
+    },
+    {
+      "id": "platform-branding-inheritance",
+      "path": "~/codespace/magicTest/regression/branding_cases.cjs",
+      "layer": "browser-api",
+      "target": "platform-standard",
+      "limitation": "F055-001平台设置、双租户继承、精确名称/主题/PNG覆盖、真实Host登录与重置；Live逐轮单列。"
+    },
+    {
+      "id": "platform-branding-profile",
+      "path": "~/codespace/magicTest/regression/branding_profile.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "原平台标量与素材独立快照、身份/版本条件PUT恢复；未知命令和并发修改阻止覆盖，不DELETE平台素材。"
+    },
+    {
+      "id": "platform-branding-profile-tests",
+      "path": "~/codespace/magicTest/regression/branding_profile.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "空/仅素材/显式原值恢复，未知响应、错误资源、并发版本、素材改变和跨主体保护。"
+    },
+    {
+      "id": "platform-branding-transport-tests",
+      "path": "~/codespace/magicTest/regression/branding_transport.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "真实HTTP/Chromium的原Host/Cookie/字节、有限路由和响应丢失不重发；不替代Live。"
+    },
+    {
+      "id": "platform-cleanup-authentication",
+      "path": "~/codespace/magicTest/regression/cleanup_authentication.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "文件/工单/CAS清理仅精确原主体401/code11后重新登录一次；先独立确认原会话，不重放业务写。"
+    },
+    {
+      "id": "platform-cleanup-authentication-tests",
+      "path": "~/codespace/magicTest/regression/cleanup_authentication.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "原回执保持、错主体、403/404/5xx及新认证失败拒绝，双工单角色及CAS原管理身份保护。"
     }
   ],
   "scenarios": [
@@ -258,7 +649,8 @@
         "platform-standard-handlers",
         "platform-standard-identity",
         "platform-standard-registration",
-        "platform-standard-session"
+        "platform-standard-session",
+        "platform-standard-cas-identity"
       ]
     },
     {
@@ -282,7 +674,8 @@
         "panel-context",
         "platform-standard-orchestrator",
         "platform-standard-handlers",
-        "platform-standard-identity"
+        "platform-standard-identity",
+        "platform-standard-cas-identity"
       ]
     },
     {
@@ -311,7 +704,11 @@
       "candidateAssets": [
         "panel-definition",
         "platform-standard-orchestrator",
-        "platform-standard-handlers"
+        "platform-standard-handlers",
+        "platform-standard-authoring",
+        "platform-standard-definition-browser",
+        "platform-standard-page-author",
+        "platform-page-validation"
       ]
     },
     {
@@ -332,7 +729,10 @@
       "candidateAssets": [
         "platform-standard-orchestrator",
         "platform-standard-handlers",
-        "platform-standard-script"
+        "platform-standard-script",
+        "platform-standard-authoring",
+        "platform-standard-definition-browser",
+        "platform-model-fixture-producer"
       ]
     },
     {
@@ -353,7 +753,8 @@
       "candidateAssets": [
         "native-source",
         "deployment-regression",
-        "platform-standard-orchestrator"
+        "platform-standard-orchestrator",
+        "platform-standard-native"
       ]
     },
     {
@@ -423,7 +824,8 @@
         "panel-runtime",
         "base-api",
         "platform-standard-orchestrator",
-        "platform-standard-handlers"
+        "platform-standard-handlers",
+        "platform-database-boundaries"
       ]
     },
     {
@@ -447,7 +849,13 @@
         "panel-service",
         "platform-standard-orchestrator",
         "platform-standard-handlers",
-        "platform-standard-service-identity"
+        "platform-standard-service-identity",
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport",
+        "cleanup-recovery",
+        "platform-standard-service-scope",
+        "platform-standard-service-debug"
       ]
     },
     {
@@ -467,7 +875,12 @@
         "panel-subscription",
         "panel-service",
         "key-first-call",
-        "platform-standard-orchestrator"
+        "platform-standard-orchestrator",
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport",
+        "cleanup-recovery",
+        "platform-standard-service-scope"
       ]
     },
     {
@@ -485,7 +898,10 @@
       "candidateAssets": [
         "file-api",
         "platform-standard-orchestrator",
-        "platform-standard-handlers"
+        "platform-standard-handlers",
+        "platform-standard-category-names",
+        "platform-file-boundaries",
+        "platform-file-stream-transport"
       ]
     },
     {
@@ -509,7 +925,8 @@
         "panel-profile",
         "platform-standard-orchestrator",
         "platform-standard-handlers",
-        "platform-standard-notification"
+        "platform-standard-notification",
+        "platform-standard-todos"
       ]
     },
     {
@@ -530,7 +947,12 @@
         "panel-profile",
         "panel-context",
         "platform-standard-orchestrator",
-        "platform-standard-handlers"
+        "platform-standard-handlers",
+        "platform-standard-public-ui",
+        "platform-standard-todos",
+        "platform-profile-intersection",
+        "platform-branding-inheritance",
+        "platform-branding-profile"
       ]
     },
     {
@@ -586,9 +1008,9 @@
       "caseId": "F012-001",
       "status": "partial",
       "assetIds": [
-        "panel-definition"
+        "platform-standard-definition-browser"
       ],
-      "finding": "只定位包树／实体查询；完整分页、父子导航及失效选择待补。"
+      "finding": "真实浏览器根/父/独立目录分页、字段/功能块/能力原身份及迟到响应围栏，owner确认原模型未变；Live和完整目录仍单独判定。"
     },
     {
       "caseId": "F029-001",
@@ -624,14 +1046,6 @@
         "panel-subscription"
       ],
       "finding": "往返测试使用旧Endpoint凭据绑定；按当前合同重写并补退订与授权回读。"
-    },
-    {
-      "caseId": "F042-001",
-      "status": "partial",
-      "assetIds": [
-        "key-first-call"
-      ],
-      "finding": "当前ApiKey签发后首次GET已有取证工具；轮换、旧Key失效及独立当前角色判定待补。"
     },
     {
       "caseId": "F001-003",
@@ -746,6 +1160,635 @@
         "platform-standard-resource-lifecycle"
       ],
       "finding": "已有精确handler及原主体/owner回读和清理；工具复核及单次定向运行不构成完整常规套件稳定执行资格。逐次结果见当前运行证据。"
+    },
+    {
+      "caseId": "F015-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-authoring",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现此常规分项的公开操作及独立owner回读；源码/工具检查与当前候选Live/原操作处置分别留证，不能据此推导常规全量已完成。"
+    },
+    {
+      "caseId": "F018-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-authoring",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现此常规分项的公开操作及独立owner回读；源码/工具检查与当前候选Live/原操作处置分别留证，不能据此推导常规全量已完成。"
+    },
+    {
+      "caseId": "F018-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-authoring",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现此常规分项的公开操作及独立owner回读；源码/工具检查与当前候选Live/原操作处置分别留证，不能据此推导常规全量已完成。"
+    },
+    {
+      "caseId": "F018-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-authoring",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现此常规分项的公开操作及独立owner回读；源码/工具检查与当前候选Live/原操作处置分别留证，不能据此推导常规全量已完成。"
+    },
+    {
+      "caseId": "F051-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-category-names",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现此常规分项的公开操作及独立owner回读；源码/工具检查与当前候选Live/原操作处置分别留证，不能据此推导常规全量已完成。"
+    },
+    {
+      "caseId": "F067-004",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-authoring",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现此常规分项的公开操作及独立owner回读；源码/工具检查与当前候选Live/原操作处置分别留证，不能据此推导常规全量已完成。"
+    },
+    {
+      "caseId": "F010-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-identity"
+      ],
+      "finding": "原账号通过正式BFF切换两个受管空间，查询原空间资源并恢复；homeNamespace保持。Live与清理由当前候选证据判定。"
+    },
+    {
+      "caseId": "F012-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-definition-browser"
+      ],
+      "finding": "真实空态、沿原实体ID正式删除、原树/详情失效选择及独立owner不存在确认；模型草稿省略实体不替代删除。"
+    },
+    {
+      "caseId": "F012-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-definition-browser"
+      ],
+      "finding": "390/1366/1920三宽度长实体/字段内容、可见区操作和浏览器异常；不以仅DOM存在代替按钮可操作。"
+    },
+    {
+      "caseId": "F013-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-definition-browser"
+      ],
+      "finding": "真实字段弹窗取消、局部确认、原实体保存、他人修改后冲突与保留输入；独立完整模型回读。"
+    },
+    {
+      "caseId": "F016-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-definition-browser"
+      ],
+      "finding": "被绑定脚本真实删除拒绝及UI禁用，取消脚本/实体草稿保持独立保存的脚本库与绑定。"
+    },
+    {
+      "caseId": "F021-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-native",
+        "platform-standard-resource-lifecycle"
+      ],
+      "finding": "已实现原生草稿/本地镜像公开操作及独立owner证据；最终当轮Live、重复完整执行和清理另行判定，不由handler登记推导通过。"
+    },
+    {
+      "caseId": "F021-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-native",
+        "platform-standard-resource-lifecycle"
+      ],
+      "finding": "已实现原生草稿/本地镜像公开操作及独立owner证据；最终当轮Live、重复完整执行和清理另行判定，不由handler登记推导通过。"
+    },
+    {
+      "caseId": "F022-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-native",
+        "platform-standard-resource-lifecycle"
+      ],
+      "finding": "已实现原生草稿/本地镜像公开操作及独立owner证据；最终当轮Live、重复完整执行和清理另行判定，不由handler登记推导通过。"
+    },
+    {
+      "caseId": "F022-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-native",
+        "platform-standard-resource-lifecycle"
+      ],
+      "finding": "已实现原生草稿/本地镜像公开操作及独立owner证据；最终当轮Live、重复完整执行和清理另行判定，不由handler登记推导通过。"
+    },
+    {
+      "caseId": "F067-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-page-author"
+      ],
+      "finding": "新增完整常规执行器及原身份/版本/内容回读；具体Live、重复完整执行与清理由当前运行独立判定，不从登记推导通过。"
+    },
+    {
+      "caseId": "F068-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-page-author"
+      ],
+      "finding": "新增完整常规执行器及原身份/版本/内容回读；具体Live、重复完整执行与清理由当前运行独立判定，不从登记推导通过。"
+    },
+    {
+      "caseId": "F022-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-native"
+      ],
+      "finding": "新增完整常规执行器及原身份/版本/内容回读；具体Live、重复完整执行与清理由当前运行独立判定，不从登记推导通过。"
+    },
+    {
+      "caseId": "F004-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-cas-identity"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。"
+    },
+    {
+      "caseId": "F007-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-cas-identity"
+      ],
+      "finding": "已补身份/凭据生命周期或拒绝门禁取证，仍需正式服务发布、订阅和同租户真实调用正例，不能用CAS audience拒绝替代服务隔离；保持partial。"
+    },
+    {
+      "caseId": "F007-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-cas-identity"
+      ],
+      "finding": "已补身份/凭据生命周期或拒绝门禁取证，仍需正式服务发布、订阅和同租户真实调用正例，不能用CAS audience拒绝替代服务隔离；保持partial。"
+    },
+    {
+      "caseId": "F007-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-cas-identity"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。"
+    },
+    {
+      "caseId": "F008-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-cas-identity"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。"
+    },
+    {
+      "caseId": "F064-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-public-ui"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。临时法律内容仅验当前展示机制。"
+    },
+    {
+      "caseId": "F064-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-public-ui"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。临时法律内容仅验当前展示机制。"
+    },
+    {
+      "caseId": "F064-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-public-ui"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。临时法律内容仅验当前展示机制。"
+    },
+    {
+      "caseId": "F066-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-public-ui"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。"
+    },
+    {
+      "caseId": "F052-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-todos"
+      ],
+      "finding": "已补常规执行器；实际候选、逐项Live与正式清理以当次完整报告为准，本盘点不宣称完整目录覆盖或专项通过。"
+    },
+    {
+      "caseId": "F052-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-todos"
+      ],
+      "finding": "已补真实来源、独立owner回读和浏览器执行器；以当次候选、逐项实跑及正式清理证据判断，不从登记推导Live或完整目录通过。"
+    },
+    {
+      "caseId": "F066-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-todos"
+      ],
+      "finding": "已补真实来源、独立owner回读和浏览器执行器；以当次候选、逐项实跑及正式清理证据判断，不从登记推导Live或完整目录通过。"
+    },
+    {
+      "caseId": "F008-002",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F040-002",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F040-003",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F041-002",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F041-003",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F042-001",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F042-002",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F042-003",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F043-003",
+      "status": "partial",
+      "assetIds": [
+        "service-governance-cases",
+        "service-graph",
+        "owner-transport"
+      ],
+      "finding": "已补正式发布/订阅/凭据公开API、原请求回执和真实Gateway/受控上游执行器；是否通过以同候选当次全量报告和原资源清理证明为准，不从登记推导完整验证。"
+    },
+    {
+      "caseId": "F045-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-scope",
+        "service-graph"
+      ],
+      "finding": "新增正式服务A/B及各自有效订阅Key，再用AKey调用B；伪造Header由真实Gateway验证，外部上游无内部上下文泄漏。内部上游已验证租户传递尚缺安装夹具，执行器保持partial，不将外部Header剥离认作内部正例。"
+    },
+    {
+      "caseId": "F046-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-scope",
+        "service-graph"
+      ],
+      "finding": "补齐正式发布/订阅Key、独立上游marker、验证后的租户header及原主体权限门禁；实际结果和原清理须由当次证据判定。"
+    },
+    {
+      "caseId": "F039-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-scope",
+        "service-graph"
+      ],
+      "finding": "新增原发布/修改草稿/活跃发布拒绝替换/正式停用再发布完整流程；实际下载OpenAPI与原订阅Key真实新上游路由配对，原写命令持久记账。稳定资格与清理看当次证据。"
+    },
+    {
+      "caseId": "F044-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-debug",
+        "service-graph"
+      ],
+      "finding": "补实际JSON样例及原字节回读、非法输入、受控原请求被UI切换取消与迟到回包、390/1366/1920三宽度；实际执行及完整清理需当次结果。"
+    },
+    {
+      "caseId": "F044-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-debug",
+        "service-graph"
+      ],
+      "finding": "补实际JSON样例及原字节回读、非法输入、受控原请求被UI切换取消与迟到回包、390/1366/1920三宽度；实际执行及完整清理需当次结果。"
+    },
+    {
+      "caseId": "F044-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-debug",
+        "service-graph"
+      ],
+      "finding": "补实际JSON样例及原字节回读、非法输入、受控原请求被UI切换取消与迟到回包、390/1366/1920三宽度；实际执行及完整清理需当次结果。"
+    },
+    {
+      "caseId": "F046-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-scope",
+        "service-graph"
+      ],
+      "finding": "真实管理员和普通账号分别订阅日额1服务，按Portal路径先成功再超额拒绝；伪造管理调试标记不绕额，管理路径仍可用。定向证据不累计成完整回归。"
+    },
+    {
+      "caseId": "F043-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-scope",
+        "service-graph"
+      ],
+      "finding": "补齐双租户当前Host指南真实复制，按复制的公开URL及正式订阅Key无Cookie调用真实Gateway；原owner身份用于订阅、凭据和清理，实际通过以当次证据为准。"
+    },
+    {
+      "caseId": "F043-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-scope",
+        "service-graph"
+      ],
+      "finding": "新增门户/Panel/订阅指南原地址与未声明响应真实下载及公开合同检查；真实Live和原资源清理以当次证据为准。"
+    },
+    {
+      "caseId": "F039-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-service-scope",
+        "service-graph"
+      ],
+      "finding": "新增门户/Panel/订阅指南原地址与未声明响应真实下载及公开合同检查；真实Live和原资源清理以当次证据为准。"
+    },
+    {
+      "caseId": "F021-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-native"
+      ],
+      "finding": "新增真实未确认组件输入、步骤门禁、手动刷新、缺镜像错误、跨组件迟到读取及三宽度表格；取消后确认无定义写入及完整owner目录不变，Live以当次报告为准。"
+    },
+    {
+      "caseId": "F055-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-public-ui"
+      ],
+      "finding": "新增长品牌名称、当前部署图标和登录素材、三宽度登录遮挡检查及Panel/Portal口径；只改本轮租户并正式重置回读，实际执行和清理以当次证据为准。"
+    },
+    {
+      "caseId": "F057-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-cas-identity"
+      ],
+      "finding": "补普通账号个人审计、独立CAS正式目录原事件、同租户其他主体及外租户真实事件正例；伪造筛选及管理目录ID猜测不扩大原主体读取权。保留审计历史，Live以当次证据为准。"
+    },
+    {
+      "caseId": "F026-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-native",
+        "platform-native-admission"
+      ],
+      "finding": "补合法本地镜像预检正例，缺组件依赖和缺本地镜像的预检/正式build负例，及原生定义修订预检与正式发布缺镜像拒绝；独立完整包/修订目录不变。非空正例digest仅作发布请求信封对照，不冒充无效修订的匹配摘要。Live以当次报告为准。"
+    },
+    {
+      "caseId": "F054-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-feedback"
+      ],
+      "finding": "新增精确creator/manager的正常工单、原附件真实字节和正式message requestId/resolveOnly、完整目录与租户边界；清理不重发未知命令。工具和注册不代表Live完成。"
+    },
+    {
+      "caseId": "F054-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-feedback"
+      ],
+      "finding": "新增精确creator/manager的正常工单、原附件真实字节和正式message requestId/resolveOnly、完整目录与租户边界；清理不重发未知命令。工具和注册不代表Live完成。"
+    },
+    {
+      "caseId": "F050-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-feedback"
+      ],
+      "finding": "与私有工单范围场景复用完整执行器，但独立创建与清理原工单，核对普通用户、同租户peer、跨租户管理员与非空消息/附件对照。Live以独立逐例结果为准。"
+    },
+    {
+      "caseId": "F049-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-ordinary-file"
+      ],
+      "finding": "补原始二进制、公开匿名与私有owner、同租户peer/外租户metadata/token/download范围和原文件清理；工具/注册不计Live通过。"
+    },
+    {
+      "caseId": "F049-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-ordinary-file"
+      ],
+      "finding": "补原始二进制、公开匿名与私有owner、同租户peer/外租户metadata/token/download范围和原文件清理；工具/注册不计Live通过。"
+    },
+    {
+      "caseId": "F001-006",
+      "status": "partial",
+      "assetIds": [
+        "platform-first-party-callback"
+      ],
+      "finding": "normal/nonce/state/S256独立探针完成后统一断言；后续中断不能抹除已确认安全失败。回调替换、原code消费／重用和完整审计继续开放。"
+    },
+    {
+      "caseId": "F058-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-retention-boundaries"
+      ],
+      "finding": "双策略16个越界负例、永久保留及清理参数上下界、条件并发、UI读取失败与缩短取消；正数天数最大值须隔离日志owner，不清理共享历史。"
+    },
+    {
+      "caseId": "F062-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-ingress-boundary"
+      ],
+      "finding": "未知Host和实际证书名不匹配执行器已补；是否通过以同候选Live证据为准。"
+    },
+    {
+      "caseId": "F057-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-audit-events"
+      ],
+      "finding": "补真实事件生产到owner持久回读和源／主体／空间／结果关联，不直接造日志；授权变更完整审计合同待证据定案。"
+    },
+    {
+      "caseId": "F001-005",
+      "status": "partial",
+      "assetIds": [
+        "platform-oauth-refresh"
+      ],
+      "finding": "常规刷新族完整执行器已实现，真实授权／独立introspection和同族审计；原命令未知不重放，真实到期及CAS5xx仍依专项条件。"
+    },
+    {
+      "caseId": "F008-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-oauth-access"
+      ],
+      "finding": "机密授权码与Endpoint机器流程完整常规断言已实现；实际issuer验签、独立UserInfo/introspection、原CAS授权修订、未声明流程及凭据撤销配对验证。"
+    },
+    {
+      "caseId": "F049-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-file-boundaries",
+        "platform-file-stream-transport",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现正式命令、原身份写前台账和独立owner回读；工具/Live/清理分别留证，登记不表示通过或完整套件稳定资格。"
+    },
+    {
+      "caseId": "F051-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-standard-category-names",
+        "platform-ordinary-file",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现正式命令、原身份写前台账和独立owner回读；工具/Live/清理分别留证，登记不表示通过或完整套件稳定资格。"
+    },
+    {
+      "caseId": "F047-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-database-boundaries",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已补正式重复登记/只读错误连接断言及原ID/自动placement清理；Live结果单独留证，不从注册推导通过。"
+    },
+    {
+      "caseId": "F066-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-profile-intersection",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已实现原账号独立权限来源与实际概览交集、撤权、治理范围及迟到响应；尚未由登记推断Live通过。"
+    },
+    {
+      "caseId": "F047-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-database-boundaries",
+        "platform-disposable-postgres",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "新增独立实际数据库夹具与原ID公开目录/placement/存储选项/浏览器explorer回读；写前台账、未知不重放、正式删除目录与placement后才移除精确容器。Live按独立报告记录。"
+    },
+    {
+      "caseId": "F067-003",
+      "status": "partial",
+      "assetIds": [
+        "platform-page-validation",
+        "platform-standard-page-author",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已补独立草稿的正式check/save拒绝及完整原内容保持；F068另测合法边框0/12、真实图片类型、公开8MiB JSON信封边界及正式图片释放。发布、导入、安装和运行阶段仍开放，整例不能计通过。"
+    },
+    {
+      "caseId": "F068-002",
+      "status": "partial",
+      "assetIds": [
+        "platform-page-validation",
+        "platform-standard-page-author",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "已补独立草稿的正式check/save拒绝及完整原内容保持；F068另测合法边框0/12、真实图片类型、公开8MiB JSON信封边界及正式图片释放。发布、导入、安装和运行阶段仍开放，整例不能计通过。"
+    },
+    {
+      "caseId": "F055-001",
+      "status": "partial",
+      "assetIds": [
+        "platform-branding-inheritance",
+        "platform-branding-profile",
+        "platform-standard-orchestrator"
+      ],
+      "finding": "完整继承/覆盖/重置、真实Host登录、原平台条件恢复与素材保持，在20261108T025210Z-a9987f38独立Live通过；逐轮原证据单列，注册和本次定向不代表全量通过。"
     }
   ]
 }

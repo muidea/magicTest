@@ -1,5 +1,6 @@
 // Current public CAS/BFF contracts. No private state or role-definition writes.
 const handlers = {};
+const { sameAuthority } = require('./authority_snapshot.cjs');
 const runner = '/modules/kernel/runner';
 const authorization = '/internal/modules/kernel/authorization';
 const ref = (module, key) => ({ module, key });
@@ -8,20 +9,31 @@ const casBase = n => '/cas/namespaces/' + n + '/';
 const profile = 'portal-user';
 const catalogCollection = '/panel/infra/catalogs/';
 const serviceCollection = '/panel/hub/services/';
-const rejectedAuthentication = r => r.status === 401 || r.data?.error?.code === 11;
-const authoritySets = new Set(['templateRefs', 'effectiveRoles', 'effectivePrivileges', 'roleRefs']);
-function canonical(value, key = '') {
-  if (Array.isArray(value)) {
-    const values = value.map(item => canonical(item));
-    return authoritySets.has(key) ? values.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) : values;
+handlers['F010-001'] = async h => {
+  const targets = [h.need('tenantA').name, h.need('tenantB').name, h.credentials.namespace];
+  const resources = [];
+  for (const [index, actor] of ['tenantAdmin', 'otherTenantAdmin', 'admin'].entries()) resources.push(await h.createAs(actor, catalogCollection, { name: h.state.prefix + '-switch-' + index, description: '精确管理目标探针', parent: null }, 'catalog'));
+  const actor = await h.login(h.credentials.account, h.credentials.password);
+  const original = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value;
+  try {
+    for (const [index, namespace] of targets.entries()) {
+      await h.ok(actor, 'PUT', '/api/v1/web/session/namespace', { namespace });
+      const session = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value;
+      h.check('Managed switch preserves original account/home namespace and exposes exact active target', session.homeNamespace === original.homeNamespace && session.account.id === original.account.id && session.account.account === original.account.account && session.activeNamespace === namespace, session);
+      const rows = await h.directory(actor, catalogCollection);
+      h.check('Public query belongs only to selected managed namespace', rows.some(r => r.id === resources[index].id && r.name === resources[index].name) && resources.filter((_, i) => i !== index).every(other => !rows.some(r => r.id === other.id)), { namespace, ids: rows.map(r => r.id) });
+    }
+  } finally {
+    const current = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value;
+    if (current.activeNamespace !== original.activeNamespace) await h.ok(actor, 'PUT', '/api/v1/web/session/namespace', { namespace: original.activeNamespace });
+    h.check('Managed context is formally restored without changing account ownership', (await h.ok(actor, 'GET', '/api/v1/web/session/')).value.activeNamespace === original.activeNamespace);
   }
-  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(name => [name, canonical(value[name], name)]));
-  return value;
-}
-
+};
+handlers['F010-001'].actors = ['tenantAdmin', 'otherTenantAdmin'];
+const rejectedAuthentication = r => r.status === 401 || r.data?.error?.code === 11;
 async function exact(h, actor, route, before, message) {
   const after = (await h.ok(actor, 'GET', route)).value;
-  h.check(message, JSON.stringify(canonical(after)) === JSON.stringify(canonical(before)));
+  h.check(message, sameAuthority(after, before));
 }
 
 async function template(h, n, suffix, roleRefs, actorName = 'admin') {
