@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { withOriginalCasForms } = require('./cas_form_transport.cjs');
 async function fixture(action) {
   const seen = [], captured = [], journal = [], records = [];

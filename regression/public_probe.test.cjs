@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { publicGet } = require('./public_probe.cjs');
 
 test('public GET records the first hop, original Cookie and Location without following redirects', async () => {

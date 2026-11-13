@@ -5,9 +5,16 @@ const { isDeepStrictEqual: same } = require('node:util');
 const { readDirectory } = require('./directory.cjs');
 const packages = '/panel/application/deployment-packages/';
 const definitions = '/panel/application/definitions/';
+const validationMessages = {
+  'invalid-port': ['components.api.ports.bad: 组件端口声明无效，仅支持 HTTP/TCP'],
+  'duplicate-port': ['components.api.ports.first: 组件端口与 second 重复', 'components.api.ports.second: 组件端口与 first 重复'],
+  'unsafe-mount': ['components.api.mounts: 挂载目标必须是安全的规范绝对路径'],
+  'sensitive-literal': ['components.api.environment.DATABASE_PASSWORD: 敏感环境变量必须使用 secretRef']
+};
 function targetRejection(response, variant) {
   if (response?.status !== 400 || response.data?.error?.code !== 4 || response.data.value != null) return false;
   const message = response.data.error.message;
+  if (validationMessages[variant]) return validationMessages[variant].includes(message);
   if (variant === 'missing-dependency') return message === 'components.api.dependsOn: 组件依赖引用无效';
   return variant === 'missing-image' && message === '组件 api 镜像解析失败: deployment image is not prepared in the local docker daemon';
 }
@@ -25,7 +32,7 @@ async function snapshot(h, actor, r) {
   return value;
 }
 async function probe(h, { intended, variant, definitionId }) {
-  if (!['missing-dependency', 'missing-image'].includes(variant)) throw new h.Blocked('Unknown native admission diagnostic');
+  if (!['missing-dependency', 'missing-image', ...Object.keys(validationMessages)].includes(variant)) throw new h.Blocked('Unknown native admission diagnostic');
   if (definitionId !== undefined && (!Number.isSafeInteger(definitionId) || definitionId < 1 || variant !== 'missing-image')) throw new h.Blocked('Invalid original native revision identity');
   const route = definitionId ? definitions + definitionId + '/revisions/' : packages + 'builds/';
   if (h.state.resources.some(r => r.kind === 'native-admission-probe' && r.route === route && same(r.intended, intended))) throw new h.Blocked('Original native admission command already exists; no POST replay');

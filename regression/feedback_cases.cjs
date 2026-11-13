@@ -84,6 +84,59 @@ async function cleanup(h, r) {
   r.phase = 'deleted'; h.persist();
   return { proof: 'Original creator and tenant manager, acknowledged aggregate DELETE and independent exact ticket/message absence. File cleanup is covered by the owner aggregate acknowledgement; no independent File-byte absence claim.' };
 }
+async function postDeleteUpload(h, r, exchange = feedbackAttachment) {
+  const actor = h[r.creator?.actorName], manager = h[r.manager?.actorName];
+  original(h, actor, r.creator); original(h, manager, r.manager);
+  if (r.phase !== 'deleted' || r.creation?.outcome !== 'confirmed' || r.deletion?.outcome !== 'acknowledged' ||
+      !ticketMatches(r.deletion.response?.data?.value, r) || !h.good(r.deletion.response) ||
+      r.commands?.some(c => c.outcome !== 'confirmed' || c.kind === 'post-delete-upload'))
+    throw new h.Blocked('Post-delete probe requires exact original acknowledged deletion; no upload replay');
+  for (const [reader, base] of [[actor, portal], [manager, panel]]) {
+    if (!absent(await h.api(reader, 'GET', base + r.id))) throw new h.Blocked('Original deleted ticket absence not confirmed; no post-delete upload');
+  }
+  const bytes = Buffer.from('post-delete-' + h.state.prefix), file = { name: 'post-delete.bin', bytes };
+  // Keep this resource open until the negative command is independently
+  // confirmed. A lost response cannot disappear behind a prior deleted phase.
+  r.phase = 'created';
+  const c = intent(h, r, actor, 'POST', portal + r.id + '/attachments/',
+    { name: file.name, size: bytes.length, digest: hash(bytes) }, 'post-delete-upload');
+  c.response = await exchange(actor, 'POST', c.route, file, h.observe); h.persist();
+  h.check('Fresh upload to exact original deleted ticket reaches owner NotFound without an attachment receipt', absent(c.response), c.response);
+  for (const [reader, base] of [[actor, portal], [manager, panel]])
+    h.check('Rejected post-delete upload cannot recreate original ticket', absent(await h.api(reader, 'GET', base + r.id)));
+  c.outcome = 'confirmed'; h.persist();
+  await cleanup(h, r);
+}
+handlers['F054-004'] = async h => {
+  const target = await ticket(h, 'delete-target'), peer = await ticket(h, 'delete-peer');
+  await upload(h, target); await upload(h, peer);
+  h.check('Byte-identical attachments have independent exact ticket consumer bindings',
+    target.attachment.digest === peer.attachment.digest && target.attachment.size === peer.attachment.size && target.attachment.fileRef !== peer.attachment.fileRef);
+  await message(h, target, h.user, 'portal', '删除目标消息：' + h.state.prefix);
+  await message(h, peer, h.user, 'portal', '保持对照消息：' + h.state.prefix);
+  const before = (await h.ok(h.tenantAdmin, 'GET', panel + peer.id)).value;
+  const peerMessages = await h.directory(h.tenantAdmin, messages('panel') + '?feedbackId=' + peer.id);
+  const bytes = await feedbackAttachment(h.user, 'GET', portal + peer.id + '/attachments/' + peer.attachment.fileRef, undefined, h.observe);
+  h.check('Peer attachment has real readable bytes before target deletion', bytes.status === 200 && Buffer.isBuffer(bytes.data.bytes));
+  await cleanup(h, target);
+  for (const [actor, base] of [[h.user, portal], [h.tenantAdmin, panel]]) {
+    const download = await feedbackAttachment(actor, 'GET', base + target.id + '/attachments/' + target.attachment.fileRef, undefined, h.observe);
+    h.check('Exact original deleted ticket attachment is unavailable through both owner download surfaces',
+      download.status === 404 && download.data?.text === 'feedback attachment is unavailable\n', download);
+    h.check('Complete scoped feedback directory no longer exposes original deleted ticket', !(await h.directory(actor, base)).some(v => v.id === target.id));
+  }
+  await postDeleteUpload(h, target);
+  h.check('Target deletion and rejected upload preserve entire independent peer ticket and ordered messages',
+    same((await h.ok(h.tenantAdmin, 'GET', panel + peer.id)).value, before) &&
+    same(await h.directory(h.tenantAdmin, messages('panel') + '?feedbackId=' + peer.id), peerMessages));
+  for (const [actor, base] of [[h.user, portal], [h.tenantAdmin, panel]]) {
+    const download = await feedbackAttachment(actor, 'GET', base + peer.id + '/attachments/' + peer.attachment.fileRef, undefined, h.observe);
+    h.check('Deleting another consumer of identical content preserves peer exact original downloadable bytes',
+      download.status === 200 && Buffer.isBuffer(download.data.bytes) && download.data.bytes.equals(bytes.data.bytes));
+  }
+  await cleanup(h, peer);
+  await h.partial('Formal ticket/message deletion, both owner download refusals, rejected fresh post-delete upload and byte-identical independent peer consumer preservation verified. Single-reference sharing and independent File retirement proof remain unverified; interrupted File cleanup and a previously dispatched upload arriving after deletion are separate special conditions.');
+};
 handlers['F054-001'] = async h => {
   const r = await ticket(h, 'exchange'); await upload(h, r);
   const first = await message(h, r, h.user, 'portal', '提交者补充：' + h.state.prefix);
@@ -139,5 +192,5 @@ handlers['F054-002'] = async h => {
   h.check('Unauthorized probes leave original private ticket unchanged', ticketMatches(owner, r) && owner.status === 'WAITING' && owner.privacy === 'PRIVATE' && same(owner.attachments.map(JSON.parse), [r.attachment]));
 };
 handlers['F050-003'] = handlers['F054-002'];
-for (const [id, handler] of Object.entries(handlers)) { handler.actors = id === 'F054-001' ? ['user', 'tenantAdmin'] : ['user', 'tenantAdmin', 'otherTenantAdmin']; handler.transport = 'owner-api'; }
-module.exports = { handlers, cleanup, ticket, upload, attachmentDenied };
+for (const [id, handler] of Object.entries(handlers)) { handler.actors = ['F054-001', 'F054-004'].includes(id) ? ['user', 'tenantAdmin'] : ['user', 'tenantAdmin', 'otherTenantAdmin']; handler.transport = 'owner-api'; }
+module.exports = { handlers, cleanup, ticket, upload, attachmentDenied, postDeleteUpload };

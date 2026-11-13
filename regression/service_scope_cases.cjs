@@ -128,6 +128,53 @@ async function portalCall(h, actor, f, headers = {}) {
   h.observe({ kind: 'original-portal-subscription-call', actor: actor.identity, origin: actor.origin, route, headers, result, received });
   return { result, marker, received };
 }
+const absent = r => [200,404].includes(r.status) && r.data?.error?.code === 2 && r.data.value == null;
+async function unsubscribe(h, actor, subscription, credential) {
+  const r = subscription.resource, c = credential.resource, owner = h.tenantAdmin;
+  if (r.unsubscribe || !same(actor.identity,r.actorIdentity) || actor.origin !== r.actorOrigin || !same(owner.identity,r.ownerIdentity) ||
+      r.phase !== 'created' || c.phase !== 'created' || c.parentSubscriptionId !== r.id || c.endpointAuthorityCommands?.some(v => v.outcome === 'unknown')) throw new h.Blocked('Original subscriber retirement or actor unresolved; no replacement DELETE');
+  const before = (await h.ok(owner,'GET',graph.subscriptions + r.id)).value;
+  h.check('Original subscriber retirement preserves exact active subscription, service and immutable human identity',before.id === r.id && before.service.id === r.serviceId && before.status === 2 && same(before.subscriberRef,r.original.subscriberRef));
+  // The Portal resource ID is serviceId; it resolves this actor's subscription.
+  const intent = {method:'DELETE',route:'/portal/service/subscriptions/' + r.serviceId,actorIdentity:structuredClone(actor.identity),origin:actor.origin,
+    before,credential:structuredClone(credential.value),outcome:'unknown'};
+  r.unsubscribe = intent; h.persist();
+  intent.response = await h.api(actor,intent.method,intent.route); h.persist();
+  h.check('Exact original ordinary subscriber DELETE is acknowledged by public owner',h.good(intent.response),intent.response);
+  const current = await h.api(owner,'GET',graph.subscriptions + r.id), all = await h.directory(owner,graph.subscriptions);
+  h.check('Independent exact and complete owner reads prove only the original subscription absent',absent(current) && !all.some(v => v.id === r.id || v.service?.id === r.serviceId && same(v.subscriberRef,r.original.subscriberRef)),{current,all});
+  const base = '/cas/namespaces/' + owner.identity.namespace + '/', client = await h.api(owner,'GET',base + 'oauth/clients/' + encodeURIComponent(credential.value.clientId));
+  const endpoint = await h.api(owner,'GET',base + 'endpoints/' + credential.value.endpointId);
+  const credentials = await h.directory(owner,base + 'oauth/clients/' + encodeURIComponent(credential.value.clientId) + '/credentials/');
+  h.check('Independent CAS confirms exact original client disabled, Endpoint absent and original credential terminal after subscription aggregate retirement',
+    h.good(client) && client.data.value.clientId === credential.value.clientId && client.data.value.status === 1 && absent(endpoint) &&
+    credentials.some(v => v.id === credential.value.credentialId && v.clientId === credential.value.clientId && ['revoked','expired'].includes(v.status)) && credentials.every(v => v.status !== 'active'),{client,endpoint,credentials});
+  intent.proof = {current,client,endpoint,credentials}; intent.outcome = 'confirmed';
+  r.phase = 'deleted'; c.phase = 'deleted'; c.retiredByOriginalSubscription = {subscriptionId:r.id,proof:'Original subscriber acknowledged DELETE; exact independent Panel/CAS terminal facts, no credential DELETE replay.'}; h.persist();
+}
+handlers['F041-001'] = async h => {
+  const approval = await graph.fixture(h,'subscription_approval_lifecycle',{requireApproval:true}), pending = await graph.subscribe(h,approval);
+  h.check('Approval service creates original pending subscription without active lease',pending.value.status === 5,pending.value);
+  const refused = await portalCall(h,h.user,approval);
+  h.check('Pending original subscriber is refused at subscription admission without reaching upstream',refused.result.status === 403 && /subscription.*unavailable/.test(refused.result.data?.error?.message || '') && refused.received.length === 0,refused);
+  await command(h,pending.resource,'PUT',graph.subscriptions + 'approve/' + pending.value.id,{},async response => {
+    const after = (await h.ok(h.tenantAdmin,'GET',graph.subscriptions + pending.value.id)).value;
+    h.check('Owner approval activates only exact original pending service/subscriber and future expiry',h.good(response) && after.id === pending.value.id && after.service.id === approval.service.id && same(after.subscriberRef,pending.value.subscriberRef) && after.status === 2 && after.expireTime > Date.now(),after);
+  });
+  const approvedKey = await graph.credential(h,pending,'approved-lifecycle-key'); await graph.succeeds(h,h.user,approval,approvedKey);
+  const automatic = await graph.fixture(h,'subscription_automatic_lifecycle'), active = await graph.subscribe(h,automatic);
+  h.check('No-approval service automatically enables exact original subscription with future expiry',active.value.status === 2 && active.value.expireTime > Date.now(),active.value);
+  const automaticKey = await graph.credential(h,active,'automatic-lifecycle-key'); await graph.succeeds(h,h.user,automatic,automaticKey);
+  for (const [f,s,key,peer,peerKey] of [[approval,pending,approvedKey,automatic,automaticKey],[automatic,active,automaticKey]]) {
+    await unsubscribe(h,h.user,s,key);
+    const denied = await graph.call(h,h.user,f,key.apiKey);
+    h.check('Original retired subscription Key cannot continue invoking or reach its upstream', [401,403,404].includes(denied.status) && !f.up.requests.some(v => v.marker === denied.marker),denied);
+    const portal = (await h.directory(h.user,'/portal/services/')).find(v => v.id === f.service.id);
+    h.check('Original service remains visible and no active subscriber lease survives retirement',!!portal && (!portal.leaseTerm || portal.leaseTerm.status !== 2),portal);
+    if (peer) await graph.succeeds(h,h.user,peer,peerKey);
+  }
+  await h.partial('Original pending approval, automatic activation, actual ApiKey invocation, ordinary subscriber retirement and independent Panel/CAS credential/Endpoint terminal facts are verified. Subscription rejection and renewal/credential lifetime propagation remain user-preserved capability gaps; no supported public commands were found, so the whole case is not passed.');
+};
 handlers['F046-002'] = async h => {
   const f = await graph.fixture(h, 'portal_quota', { dailyQuota: 1 });
   const without = await portalCall(h, h.tenantAdmin, f);
@@ -231,5 +278,99 @@ handlers['F045-003'] = async h => {
   await graph.succeeds(h, h.user, a, credential);
   await h.partial('External upstream isolation is proven, but internal upstream verified-tenant propagation requires a formally installed internal capability fixture. Do not infer it from stripped external headers.');
 };
+function quotaBoundary(h, probes, upstream, limit, diagnostic) {
+  const markers = new Set(probes.map(p => p.marker));
+  h.check('Finite quota burst contains distinct original request identities', markers.size === probes.length && probes.length > limit);
+  const accepted = probes.filter(p => p.status === 200), refused = probes.filter(p => p.status === 429 && diagnostic.test(p.data?.error?.message || ''));
+  h.check('Burst reaches the exact target quota gate with the declared number of successes and excess refusals', accepted.length === limit && refused.length === probes.length - limit, probes);
+  const received = upstream.filter(r => markers.has(r.marker));
+  h.check('Independent controlled upstream proves every accepted marker executes exactly once and refused markers have no execution',
+    received.length === limit && accepted.every(p => p.data.marker === p.marker && received.filter(r => r.marker === p.marker && r.method === 'GET' && r.path === '/probe' && !r.authorizationPresent).length === 1) &&
+    refused.every(p => !received.some(r => r.marker === p.marker)), { probes, received });
+}
+handlers['F046-001'] = async h => {
+  const f = await graph.fixture(h,'management_quota_bypass',{dailyQuota:1}), owner = h.tenantAdmin;
+  const subscriptions = async () => (await h.directory(owner,graph.subscriptions)).filter(s => s.service.id === f.service.id);
+  h.check('New original management sample has no implicit subscription', (await subscriptions()).length === 0);
+  managedSuccess(h,await managed(h,owner,f));
+  h.check('Actual management success does not create an implicit subscriber or lease', (await subscriptions()).length === 0);
+  const original = await graph.subscribe(h,f,owner), credential = await graph.credential(h,original);
+  const baseline = await subscriptions();
+  await graph.succeeds(h,owner,f,credential);
+  const refused = async () => {
+    const response = await graph.call(h,owner,f,credential.apiKey);
+    h.check('Same original management account on subscription path reaches the exact exhausted daily quota and no upstream',
+      response.status === 429 && /totalizator daily limit exceeded/.test(response.data?.error?.message || '') && !f.up.requests.some(r => r.marker === response.marker),response);
+  };
+  await refused();
+  for (let i=0;i<2;i++) managedSuccess(h,await managed(h,owner,f));
+  await refused();
+  h.check('Explicit management calls preserve complete original subscription facts and do not restore its daily allowance',same(await subscriptions(),baseline));
+  await graph.retireCredential(h,credential);await graph.retire(h,original);
+  await h.partial('Original authorized management route succeeds before subscription and after the same account exhausts its actual subscription daily quota; no implicit subscription or quota reset, exact upstream markers and original subscription facts verified. Independent durable management-debug source/audit record is not proven by this route or aggregate metric, so whole F046-001 remains partial.');
+};
+async function quotaBurst(h, actor, f, credential, count, sameSecond = false) {
+  const markers = Array.from({length:count}, () => crypto.randomBytes(12).toString('hex'));
+  // Advance the real clock; never change server time or reset a counter.
+  if (sameSecond) await actor.page.evaluate(() => new Promise(resolve => setTimeout(resolve, 1050 - Date.now() % 1000)));
+  const probes = await actor.page.evaluate(async ({key,service,markers}) => Promise.all(markers.map(async marker => {
+    const startedAt = Date.now();
+    const response = await fetch('/api/v1/gateway/services/' + service + '/probe?marker=' + marker, {
+      credentials:'omit',headers:{Authorization:'ApiKey ' + key},signal:AbortSignal.timeout(15000)
+    });
+    const data = await response.json();
+    return {marker,status:response.status,data,startedAt,completedAt:Date.now()};
+  })), {key:credential.apiKey,service:f.service.key,markers});
+  h.observe({kind:'finite-original-key-quota-burst',actor:actor.identity,serviceId:f.service.id,subscriptionId:credential.resource.parentSubscriptionId,probes,received:f.up.requests.filter(r => markers.includes(r.marker))});
+  if (sameSecond && new Set(probes.flatMap(p => [Math.floor(p.startedAt / 1000),Math.floor(p.completedAt / 1000)])).size !== 1) {
+    const error = new h.Blocked('Original QPS burst crossed a real UTC second; admission boundary is not proven, no replacement burst or counter reset');
+    error.quotaWindowUnproven = true; throw error;
+  }
+  return probes;
+}
+function graphOwner(h, subscription) {
+  const owner = [h.admin,h.tenantAdmin,h.otherTenantAdmin].find(a => a && same(a.identity,subscription.resource.ownerIdentity));
+  if (!owner) throw new h.Blocked('Exact original subscription owner unavailable');
+  return owner;
+}
+handlers['F045-001'] = async h => {
+  const qps = await graph.fixture(h,'qps_boundary',{maxQPS:2}), qpsSubscription = await graph.subscribe(h,qps), qpsKey = await graph.credential(h,qpsSubscription);
+  let qpsWindowProven = false;
+  try {
+    quotaBoundary(h,await quotaBurst(h,h.user,qps,qpsKey,5,true),qps.up.requests,2,/qps exceeded/);
+    qpsWindowProven = true;
+  } catch (error) {
+    if (!error.quotaWindowUnproven) throw error;
+    h.observe({kind:'original-qps-window-unproven',reason:error.message,continuation:'Keep original window open; no replacement burst. Continue only independent daily allowance and lifecycle assertions.'});
+  }
+  // A distinct request in the next natural second, using the same Key.
+  await h.user.page.evaluate(() => new Promise(resolve => setTimeout(resolve,1050 - Date.now() % 1000)));
+  await graph.succeeds(h,h.user,qps,qpsKey);
+  const daily = await graph.fixture(h,'daily_boundary',{dailyQuota:2}), original = await graph.subscribe(h,daily), key = await graph.credential(h,original);
+  const originalBaseline = (await h.ok(graphOwner(h,original),'GET',graph.subscriptions + original.value.id)).value;
+  const invalid = await graph.call(h,h.user,daily,'sk_' + crypto.randomBytes(24).toString('base64url'));
+  h.check('Invalid original credential is rejected before quota admission without upstream effect',invalid.status === 401 && !daily.up.requests.some(r => r.marker === invalid.marker),invalid);
+  quotaBoundary(h,await quotaBurst(h,h.user,daily,key,5),daily.up.requests,2,/totalizator daily limit exceeded/);
+  const account = await h.createAs('tenantAdmin','/cas/namespaces/' + h.user.identity.namespace + '/accounts/',{
+    account:h.state.prefix + '-quota-peer',displayName:'独立订阅配额成员',password:h.state.password,status:2,roleTemplateKeys:['portal-user']
+  },'account');
+  const peer = await h.login(account.account,h.state.password,h.user.identity.namespace,h.state.password + '-quota-peer');
+  const peerSubscription = await graph.subscribe(h,daily,peer), peerKey = await graph.credential(h,peerSubscription);
+  const peerBaseline = (await h.ok(graphOwner(h,peerSubscription),'GET',graph.subscriptions + peerSubscription.value.id)).value;
+  quotaBoundary(h,await quotaBurst(h,peer,daily,peerKey,5),daily.up.requests,2,/totalizator daily limit exceeded/);
+  const foreign = await graph.fixture(h,'foreign_daily_boundary',{dailyQuota:2},'otherTenantAdmin');
+  const foreignSubscription = await graph.subscribe(h,foreign,h.otherTenantAdmin), foreignKey = await graph.credential(h,foreignSubscription);
+  const foreignBaseline = (await h.ok(graphOwner(h,foreignSubscription),'GET',graph.subscriptions + foreignSubscription.value.id)).value;
+  quotaBoundary(h,await quotaBurst(h,h.otherTenantAdmin,foreign,foreignKey,5),foreign.up.requests,2,/totalizator daily limit exceeded/);
+  for (const [f,s,c,actor,baseline] of [[daily,original,key,h.user,originalBaseline],[daily,peerSubscription,peerKey,peer,peerBaseline],[foreign,foreignSubscription,foreignKey,h.otherTenantAdmin,foreignBaseline]]) {
+    const exhausted = await graph.call(h,actor,f,c.apiKey);
+    h.check('Other subscriptions or tenants cannot reset the original exhausted daily budget',exhausted.status === 429 && /totalizator daily limit exceeded/.test(exhausted.data?.error?.message || '') && !f.up.requests.some(r => r.marker === exhausted.marker),exhausted);
+    h.check('Quota execution preserves exact original subscription identity and lease',same((await h.ok(graphOwner(h,s),'GET',graph.subscriptions + s.value.id)).value,baseline));
+  }
+  for (const [s,c] of [[qpsSubscription,qpsKey],[original,key],[peerSubscription,peerKey],[foreignSubscription,foreignKey]]) {
+    await graph.retireCredential(h,c); await graph.retire(h,s);
+  }
+  await h.partial((qpsWindowProven ? 'Single-Gateway same-UTC-second QPS gate verified. ' : 'Original QPS request window crossed a UTC second and remains unproven; no replacement burst or reset. ') + 'Atomic daily admission, finite same-Key requests, a later natural-second successful request, invalid-credential non-consumption and independent subscription/tenant budgets verified by exact quota refusals and real upstream execution. Maximum concurrency is a user-preserved capability gap; multi-Gateway reservation and independent public counter reads are not proven. Natural daily rollover remains a separate special condition.');
+};
 for (const handler of Object.values(handlers)) { handler.actors = ['user', 'tenantAdmin', 'otherTenantAdmin']; handler.transport = 'owner-api'; }
-module.exports = { handlers, managed, command, copiedProbe };
+module.exports = { handlers, managed, command, copiedProbe, unsubscribe, quotaBoundary, quotaBurst };

@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { subscribe, cleanupSubscription, cleanupCredential, rotate, call, succeeds } = require('./service_graph.cjs');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 function harness(mode) {
   const requests = [], actor = { identity: { account: 'member', namespace: 'test' }, origin: 'https://test.example' };
   const subject = { namespace: 'test', subject: 'account:3', accountId: 3 };

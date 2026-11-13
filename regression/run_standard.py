@@ -10,18 +10,48 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def run_browser(command, private, directory, *, startup_seconds=120):
+    """Bound launch only; preserve original unknown business commands after launch."""
+    marker = private / 'browser-started.json'
+    if marker.exists():
+        raise ValueError('Fresh browser execution must not reuse a startup marker')
+    started = time.monotonic()
+    process = subprocess.Popen(command, cwd=ROOT, start_new_session=True)
+    while process.poll() is None and not marker.exists():
+        if time.monotonic() - started >= startup_seconds:
+            # Kill only the session created above, never a platform service or
+            # unrelated browser. Kernel D-state descendants may outlive signals.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            code = process.wait(timeout=10)
+            save(directory / 'browser-startup.json', {
+                'status': 'blocked', 'reason': 'Browser launch deadline exceeded before post-launch marker',
+                'startupBudgetSeconds': startup_seconds, 'driverExit': code,
+                'disposition': 'Original private state retained; no retry, resource cleanup or kernel-thread termination claimed',
+            })
+            return code
+        time.sleep(min(0.1, startup_seconds))
+    return process.wait()
+
+
 def tool_hashes():
     runtime = ROOT / 'regression'
-    paths = [runtime / 'run_standard.py'] + sorted(path for path in runtime.glob('*.cjs') if not path.name.endswith('.test.cjs'))
+    paths = sorted(path for path in runtime.iterdir() if path.is_file() and
+                   (path.suffix == '.cjs' and not path.name.endswith('.test.cjs') or
+                    path.suffix == '.py' and not path.name.startswith('test_')))
     return {path.name: 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
 
 
@@ -108,11 +138,15 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     config = json.loads(Path(args.config).expanduser().read_text()) if args.config else {}
-    unknown = set(config) - {'credentials', 'output', 'catalog', 'cases', 'chrome', 'fileUploadMaxBytes'}
+    unknown = set(config) - {'credentials', 'output', 'catalog', 'cases', 'chrome', 'fileUploadMaxBytes', 'deliveryFixtureConfig', 'databaseFixtureMode', 'runtimeSnapshotConfig'}
     if unknown:
         raise ValueError('Unknown regression config fields: ' + ', '.join(sorted(unknown)))
     if 'fileUploadMaxBytes' in config and (type(config['fileUploadMaxBytes']) is not int or not 1 <= config['fileUploadMaxBytes'] <= 1024 ** 3):
         raise ValueError('fileUploadMaxBytes requires the verified positive deployment content limit within the 1 GiB tool budget')
+    if 'databaseFixtureMode' in config and (config['databaseFixtureMode'] not in ['bounded', 'isolated-tmpfs-only'] or config['databaseFixtureMode'] == 'isolated-tmpfs-only' and not config.get('deliveryFixtureConfig')):
+        raise ValueError('databaseFixtureMode requires bounded or isolated-tmpfs-only with dedicated deliveryFixtureConfig')
+    if 'runtimeSnapshotConfig' in config and (not isinstance(config['runtimeSnapshotConfig'], str) or not config['runtimeSnapshotConfig'].strip()):
+        raise ValueError('runtimeSnapshotConfig requires a non-empty private file path')
     catalog_path = Path(config.get('catalog', ROOT.parent / 'docs/acceptance/platform-catalog.json')).expanduser().resolve()
     owner = load_owner(catalog_path)
     catalog = json.loads(catalog_path.read_text())
@@ -126,6 +160,12 @@ def main():
         command += ['--cases', ','.join(cases)]
     if 'fileUploadMaxBytes' in config:
         command += ['--file-upload-max-bytes', str(config['fileUploadMaxBytes'])]
+    if 'deliveryFixtureConfig' in config:
+        command += ['--delivery-fixture-config', str(Path(config['deliveryFixtureConfig']).expanduser().resolve())]
+    if 'databaseFixtureMode' in config:
+        command += ['--database-fixture-mode', config['databaseFixtureMode']]
+    if 'runtimeSnapshotConfig' in config:
+        command += ['--runtime-snapshot-config', str(Path(config['runtimeSnapshotConfig']).expanduser().absolute())]
     if args.dry_run:
         return subprocess.run(command + ['--dry-run', 'true'], cwd=ROOT).returncode
     for name in ['credentials', 'output']:
@@ -149,8 +189,11 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     save(directory / 'inputs.json', {'suite': 'standard', 'selectedCases': cases or 'all required standard branches',
                                     'catalogDigest': owner.digest(catalog), 'toolHashes': inputs,
                                     'fileUploadMaxBytes': config.get('fileUploadMaxBytes'),
+                                    'runtimeSnapshotConfigDigest': 'sha256:' + hashlib.sha256(Path(config['runtimeSnapshotConfig']).expanduser().read_bytes()).hexdigest() if config.get('runtimeSnapshotConfig') else None,
+                                    'databaseFixtureMode': config.get('databaseFixtureMode', 'bounded'),
                                     'coordination': 'exclusive local origin lock held through preflight, mutations, cleanup and report',
-                                    'credentials': 'external private file, not archived'})
+                                    'credentials': 'external private file, not archived',
+                                    'deliveryFixtureConfigDigest': 'sha256:' + hashlib.sha256(Path(config['deliveryFixtureConfig']).expanduser().read_bytes()).hexdigest() if config.get('deliveryFixtureConfig') else None})
     before_path = owner.capture_health(catalog, directory / 'health-before')
     before = json.loads(before_path.read_text())
     if before['results'][0]['status'] != 'passed':
@@ -160,7 +203,7 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
                 '--output', str(directory / 'browser'), '--baseline-health', str(before_path)]
     if config.get('chrome'):
         command += ['--chrome', str(Path(config['chrome']).expanduser())]
-    browser_exit = subprocess.run(command, cwd=ROOT).returncode
+    browser_exit = run_browser(command, private, directory)
     after_path = owner.capture_health(catalog, directory / 'health-after')
     after = json.loads(after_path.read_text())
     browser_path = directory / 'browser/results.json'

@@ -33,6 +33,11 @@ async function editJSON(page, value) {
   await page.keyboard.press('ControlOrMeta+V');
 }
 async function choose(page, name) {
+  const operation = spec.operations.find(v => v.name === name);
+  if (!operation) throw Error('Unknown exact debugger fixture operation');
+  const header = page.locator('code').filter({ hasText: '/api/v1/gateway/services/' }).first();
+  const changed = !(await header.innerText()).trim().endsWith('/' + operation.key);
+  const originalField = changed ? await parameter(page).elementHandle() : null;
   const item = page.getByRole('menuitem').filter({ hasText: name });
   // Ant switches the actual control at lg=992. Wait for the control for the
   // requested viewport; a transient old render must not select the other branch.
@@ -44,20 +49,36 @@ async function choose(page, name) {
     await select.locator('.ant-select-selector').click();
     await page.locator('.ant-select-item-option').filter({ hasText: name }).click();
   }
+  if (changed) {
+    // selectedOperation changes its visible header before the effect resets
+    // Ant's form. resetFields remounts the old field. Wait for that exact DOM
+    // generation to disappear on EVERY change, including slow -> fast.
+    try {
+      await page.waitForFunction(node => !node.isConnected, originalField, { timeout: 10000 });
+      await parameter(page).waitFor({ state: 'visible' });
+    } finally { await originalField?.dispose(); }
+  }
 }
 async function invoke(h, f, page, marker, path, body) {
   await parameter(page).fill(marker);
+  const dispatched = [], observe = request => {
+    const url = new URL(request.url());
+    if (url.searchParams.get('marker') === marker) dispatched.push({ method: request.method(), path: url.pathname });
+  };
+  page.on('request', observe);
   const pending = page.waitForResponse(r => new URL(r.url()).pathname.includes('/gateway/subscribed-services/' + f.service.key + '/') && new URL(r.url()).searchParams.get('marker') === marker);
   pending.catch(() => {});
   let response;
   try { await send(page).click(); response = await pending; }
   catch (error) {
     h.observe({ kind: 'debugger-unresolved-input', marker, path, alerts: await page.locator('.ant-alert,.ant-form-item-explain-error').allTextContents(),
+      currentFieldValue: await parameter(page).inputValue(), dispatched, received: f.up.requests.filter(r => r.marker === marker),
       buttons: await page.locator('button').evaluateAll(nodes => nodes.map(n => ({ text: n.innerText, label: n.getAttribute('aria-label'), disabled: n.disabled, visible: !!(n.offsetWidth || n.offsetHeight) }))), accessibility: await page.locator('body').ariaSnapshot(),
       editorText: (await page.locator('.monaco-editor').allTextContents()).map(s => s.slice(0, 5000)) });
     await h.screenshot(h.user, 'unresolved-debug-' + crypto.createHash('sha256').update(marker).digest('hex').slice(0, 8));
     throw error;
   }
+  finally { page.off('request', observe); }
   const value = await response.json();
   const received = f.up.requests.filter(r => r.marker === marker);
   h.observe({ kind: 'debugger-ui-response', marker, status: response.status(), value, received });
@@ -86,22 +107,42 @@ handlers['F044-002'] = async h => {
   await page.getByText('请填写marker', { exact: true }).waitFor();
   h.check('Missing required query is rejected before any upstream call', f.up.requests.length === before);
   await choose(page, 'Slow original');
+  // Operation change resets Ant's form in an effect. Waiting for the old
+  // required-field error to clear proves that reset completed before filling
+  // the new operation; otherwise it can erase input written to the old form.
+  await page.getByText('请填写marker', { exact: true }).waitFor({ state: 'hidden' });
   const original = crypto.randomBytes(10).toString('hex'), gate = f.up.hold(original);
   const canceled = [], observeFailure = request => {
     if (new URL(request.url()).searchParams.get('marker') === original) canceled.push(request.failure()?.errorText);
   };
   page.on('requestfailed', observeFailure);
+  const dispatched = [], responses = [];
+  const originalRequest = request => {
+    const url = new URL(request.url());
+    if (url.searchParams.get('marker') === original) dispatched.push({ method: request.method(), path: url.pathname });
+  };
+  const originalResponse = response => {
+    const url = new URL(response.url());
+    if (url.searchParams.get('marker') === original) responses.push({ status: response.status(), path: url.pathname });
+  };
+  page.on('request', originalRequest); page.on('response', originalResponse);
   const current = crypto.randomBytes(10).toString('hex');
   try {
-    await parameter(page).fill(original); await send(page).click();
+    await parameter(page).fill(original); await parameter(page).blur();
+    h.check('Selected slow operation retains exact original marker after form reset and blur', await parameter(page).inputValue() === original);
+    await send(page).click();
     const timeout = setTimeout(() => gate.started(), 10000);
     try { await gate.reached; } finally { clearTimeout(timeout); }
-    h.check('Original slow debugger request actually reached controlled upstream before cancellation', f.up.requests.some(r => r.marker === original && r.path === '/slow'));
+    const reached = f.up.requests.some(r => r.marker === original && r.path === '/slow');
+    h.observe({ kind: 'original-slow-request-stage', marker: original, dispatched, responses, canceled, reached,
+      alerts: await page.locator('.ant-alert,.ant-form-item-explain-error').allTextContents() });
+    if (!reached) await h.screenshot(h.user, 'slow-request-not-at-upstream');
+    h.check('Original slow debugger request actually reached controlled upstream before cancellation', reached, { dispatched, responses, canceled });
     // Operation change is the debugger's formal transport cancellation path.
     await choose(page, 'Current fast');
     await invoke(h, f, page, current, '/fast');
     h.check('Original browser transport is canceled after operation change', canceled.some(error => /ABORTED|CANCELED/.test(error)), canceled);
-  } finally { gate.release(); page.off('requestfailed', observeFailure); }
+  } finally { gate.release(); page.off('requestfailed', observeFailure); page.off('request', originalRequest); page.off('response', originalResponse); }
   await new Promise(resolve => setTimeout(resolve, 300));
   await page.getByRole('tab', { name: /^执行记录/ }).click();
   const records = page.getByRole('tabpanel', { name: /^执行记录/ });
@@ -136,4 +177,4 @@ handlers['F044-003'] = async h => {
   }
 };
 for (const handler of Object.values(handlers)) { handler.actors = ['user', 'tenantAdmin']; handler.transport = 'owner-api'; }
-module.exports = { handlers };
+module.exports = { handlers, choose };

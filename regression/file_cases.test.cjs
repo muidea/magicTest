@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { cleanup } = require('./file_cases.cjs');
 const { fileTransfer } = require('./owner_transport.cjs');
 class Blocked extends Error {}
@@ -43,7 +43,7 @@ test('public file route preflight rejects SPA fallback before creating any file'
   let requests = 0, writes = 0, closed = false;
   const server = http.createServer((req, res) => { requests++; if (req.method !== 'GET') writes++; res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><html>portal</html>'); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const { request } = require('playwright');
+  const { request } = require('./playwright.cjs');
   const context = await request.newContext();
   const origin = 'http://tenant-a.local.vpc:' + server.address().port;
   const h = { tenantAdmin: { origin, identity: { namespace: 'tenant-a' } }, browser: { newContext: async () => ({ cookies: (...args) => context.storageState().then(s => s.cookies), close: async () => { closed = true; } }) }, check: (label, ok) => assert.ok(ok, label) };

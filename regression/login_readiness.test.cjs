@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { waitLoginForm, waitLoginError, observeLogin } = require('./login_readiness.cjs');
 
 test('actual delayed login DOM and rejection feedback determine readiness after network idle', async () => {

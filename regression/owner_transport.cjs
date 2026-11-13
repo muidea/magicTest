@@ -1,9 +1,9 @@
 // A single public HTTP request with the original browser's current cookies.
 // The local Host map is the same one used by the regression browser; APIRequest
 // has separate OS DNS and does not inherit Chromium host-resolver-rules.
-const { request } = require('playwright');
+const { request } = require('./playwright.cjs');
 const { isDeepStrictEqual: same } = require('node:util');
-async function ownerExchange(actor, method, route, body, observe, mode = 'json') {
+async function ownerExchange(actor, method, route, body, observe, mode = 'json', readIdentity) {
   if (!actor?.identity || !actor.context || !route.startsWith('/') || route.startsWith('//')) throw Error('Owner request requires original browser identity and same-origin route');
   const origin = actor.origin, identity = structuredClone(actor.identity);
   const endpoint = mode === 'public-file-download' || route.startsWith('/api/') ? route : '/api/v1/web/proxy' + route;
@@ -17,10 +17,14 @@ async function ownerExchange(actor, method, route, body, observe, mode = 'json')
   const mapped = cookies.map(c => ({ ...c, domain: connect.hostname }));
   const transport = await request.newContext({ ignoreHTTPSErrors: true, storageState: { cookies: mapped, origins: [] } });
   try {
-    const response = await transport.fetch(connect.href, { method, headers: { Host: target.host, Origin: origin, ...(body === undefined || mode.endsWith('upload') ? {} : { 'Content-Type': 'application/json' }) },
-      ...(body === undefined ? {} : mode.endsWith('upload') ? { multipart: { file: { name: body.name, mimeType: 'application/octet-stream', buffer: body.bytes } } } : { data: body }), maxRedirects: 0, maxRetries: 0, timeout: 30000 });
+    // Namespace creation/replacement synchronously waits for its CAS owner.
+    // Observe the original command once; a timeout still forbids resending it.
+    const timeout = method === 'POST' && route === '/panel/namespace-onboardings/' ||
+      method === 'PUT' && /^\/panel\/namespace-onboardings\/[1-9][0-9]*$/.test(route) ? 120000 : 30000;
+    const response = await transport.fetch(connect.href, { method, headers: { Host: target.host, Origin: origin, ...(readIdentity ? { 'X-Magic-Expected-Installation': Buffer.from(JSON.stringify(readIdentity)).toString('base64url') } : {}), ...(body === undefined || mode.endsWith('upload') ? {} : { 'Content-Type': 'application/json' }) },
+      ...(body === undefined ? {} : mode.endsWith('upload') ? { multipart: { file: { name: body.name, mimeType: 'application/octet-stream', buffer: body.bytes } } } : { data: body }), maxRedirects: 0, maxRetries: 0, timeout });
     let data;
-    if (mode.endsWith('download') && response.status() === 200 && response.headers()['content-type']?.startsWith('application/octet-stream')) data = { bytes: await response.body() };
+    if (mode.endsWith('download') && response.status() === 200 && response.headers()['content-type']?.startsWith(mode === 'package-download' ? 'application/zip' : 'application/octet-stream')) data = { bytes: await response.body() };
     else { const text = await response.text(); try { data = JSON.parse(text); } catch { data = { text: text.slice(0, 1000) }; } }
     const result = { status: response.status(), data };
     observe({ kind: 'request', transport: 'public-owner-original-browser-cookies-one-shot', actor: identity, origin, method, route, ...(mode === 'json' ? { body, response: result } : { representation: mode, response: { status: result.status, ...(data.bytes ? { byteLength: data.bytes.length, digest: 'sha256:' + require('node:crypto').createHash('sha256').update(data.bytes).digest('hex') } : { data }) } }) });
@@ -62,4 +66,39 @@ async function brandingAsset(actor, route, file, observe = () => {}) {
   if (route !== '/panel/namespace-branding/assets/brand-icon' || !file || !Buffer.isBuffer(file.bytes) || file.bytes.length < 1 || file.bytes.length > 1024 * 1024 || typeof file.name !== 'string' || !/^[A-Za-z0-9_.-]+\.png$/.test(file.name)) throw Error('Exact finite tenant brand-icon upload required');
   return ownerExchange(actor, 'POST', route, file, observe, 'branding-upload');
 }
-module.exports = { ownerRequest, feedbackAttachment, fileTransfer, brandingAsset };
+async function packageContent(actor, route, observe = () => {}) {
+  if (!/^\/panel\/application\/(model|deployment)-packages\/[1-9][0-9]*\/content$/.test(route)) throw Error('Exact package content owner route required');
+  return ownerExchange(actor, 'GET', route, undefined, observe, 'package-download');
+}
+async function packageUpload(actor, file, observe = () => {}) {
+  return zipUpload(actor, file, observe, 'application-model-package');
+}
+async function deploymentPackageUpload(actor, file, observe = () => {}) {
+  return zipUpload(actor, file, observe, 'application-deployment-package');
+}
+async function zipUpload(actor, file, observe, purpose) {
+  if (!file || !Buffer.isBuffer(file.bytes) || !file.bytes.length || file.bytes.length > 64 * 1024 * 1024 ||
+      typeof file.name !== 'string' || !/^[A-Za-z0-9_-]+\.zip$/.test(file.name)) throw Error('Exact finite package upload required');
+  return ownerExchange(actor, 'POST', '/files/self/files/upload-references/?purpose=' + purpose, file, observe, 'package-upload');
+}
+// Finite caller-owned upload reference probes; this is not the ordinary-file API.
+async function referenceTransfer(actor, method, route, file, observe = () => {}) {
+  const url = new URL(route, actor.origin), upload = method === 'POST';
+  if (!route.startsWith('/') || route.startsWith('//') || url.origin !== actor.origin || url.hash ||
+      (upload ? route !== '/files/self/files/upload-references/?purpose=regression-reference-proof' ||
+        !file || !/^proof-[a-f0-9]{16}\.bin$/.test(file.name) || !Buffer.isBuffer(file.bytes) || file.bytes.length < 1 || file.bytes.length > 65536 :
+        method !== 'GET' || file !== undefined || !/^\/files\/bound-files\/bound_[A-Za-z0-9_-]{43}\/download$/.test(url.pathname) ||
+        [...url.searchParams].length !== 2 || !['namespace', 'consumer'].every(k => /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(url.searchParams.get(k) || ''))))
+    throw Error('Exact finite original upload-reference transfer required');
+  return ownerExchange(actor, method, route, file, observe, upload ? 'reference-upload' : 'file-download');
+}
+async function runtimeRead(actor, route, identity, observe = () => {}) {
+  if (!route.startsWith('/apps/') || !identity || !/^[1-9][0-9]{0,18}$/.test(identity.installationId) ||
+      !/^[a-f0-9]{32}$/.test(identity.deploymentId) || !/^sha256:[a-f0-9]{64}$/.test(identity.artifactDigest) ||
+      typeof identity.namespace !== 'string' || !identity.namespace || typeof identity.runtimeApplicationUuid !== 'string' || !identity.runtimeApplicationUuid ||
+      !Number.isSafeInteger(identity.generation) || identity.generation <= 0 || !Number.isSafeInteger(identity.executionEpoch) || identity.executionEpoch <= 0) throw Error('Exact runtime read identity required');
+  const wire = Object.fromEntries(['namespace', 'deploymentId', 'installationId', 'runtimeApplicationUuid', 'generation', 'executionEpoch', 'artifactDigest'].map(k => [k, identity[k]]));
+  observe({ kind: 'runtime-read-fence', route, identity: wire });
+  return ownerExchange(actor, 'GET', route, undefined, observe, 'json', wire);
+}
+module.exports = { ownerRequest, feedbackAttachment, fileTransfer, brandingAsset, packageContent, packageUpload, deploymentPackageUpload, runtimeRead, referenceTransfer };

@@ -45,3 +45,15 @@ test('CAS client and credential cleanup renews the original tenant manager witho
     assert.equal(f.logins.length, 1); assert.equal(reads, 2); assert.equal(r.outcome, 'accepted');
   }
 });
+
+test('restoring a limited creator uses its original acknowledged form and exact owned account',async()=>{
+ const {restoreScopedCreator}=require('./cleanup_authentication.cjs');
+ for(const mode of ['original','missing-account','password-changed','wrong-session']){
+  const identity={account:'limited',namespace:'one'},origin='https://one.example.invalid',pending=[{actor:'limitedTemplateManager',phase:'created',collection:'/cas/namespaces/one/role-templates/',creation:{actorIdentity:identity,origin}}];
+  const form={actor:identity,origin,path:'/oauth/login',phase:'browser-delivered',status:302,bodyBase64:Buffer.from(new URLSearchParams({account:'limited',namespace:'one',password:'original-private'}).toString()).toString('base64')};
+  const account={id:7,kind:'account',phase:'created',collection:'/cas/namespaces/one/accounts/',creation:{ownershipConfirmed:true,intended:{account:'limited'}}};let logins=0;
+  const h={Blocked:Error,state:{resources:mode==='missing-account'?[]:[account],originalCasForms:[form,...(mode==='password-changed'?[{...form,path:'/oauth/password/change'}]:[])]},observe(){},async login(name,password,ns){logins++;assert.equal(name,'limited');assert.equal(password,'original-private');assert.equal(ns,'one');return {identity,origin};},async ok(){return {value:{account:{id:mode==='wrong-session'?8:7},homeNamespace:'one'}};}};
+  if(mode==='original'){await restoreScopedCreator(h,pending);assert.equal(logins,1);assert.deepEqual(h.limitedTemplateManager.identity,identity);}
+  else {await assert.rejects(restoreScopedCreator(h,pending));assert.equal(h.limitedTemplateManager,undefined);if(mode!=='wrong-session')assert.equal(logins,0);}
+ }
+});

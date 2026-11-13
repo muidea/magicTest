@@ -1,6 +1,29 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { bindOriginalCleanup } = require('./cleanup_recovery.cjs');
+test('mixed original business journals route to only their recovery family and keep unrelated unknown writes unchanged', () => {
+  const { pendingBusinessReconciliation: select } = require('./cleanup_recovery.cjs');
+  const denial = { status: 200, data: { error: { code: 5, message: '读取安装页面需要应用实例运行权限' } } };
+  const row = (operation, response, phase = 'created') => ({ kind: 'business-record', phase, commands: [{ outcome: 'unknown', body: { operation }, response }] });
+  const update = row('update', denial), create = row('create', { status: 200, data: { value: { id: 'original' } } }),
+    lost = row('update'), confirmed = row('create'); confirmed.commands[0].outcome = 'confirmed';
+  const cancel = row('update'); cancel.commands[0].body.cancel = true;
+  const all = [update, create, lost, confirmed, row('update', denial, 'deleted'), { ...create, kind: 'foreign-resource' }, row('delete', denial), cancel];
+  const before = structuredClone(all);
+  assert.deepEqual(select(all, 'matrix-write-refusal'), [update]);
+  assert.deepEqual(select(all, 'business-create'), [create, cancel]);
+  assert.deepEqual(all, before);
+  assert.throws(() => select(all, 'guess'), /Unknown/);
+});
+test('review recovery binds original commands, conditional versions, frozen request and exact installation to immutable cleanup', () => {
+  const r = { kind: 'deployment-review-request', id: 7, phase: 'created', commands: [{ outcome: 'unknown', body: { expectedVersion: 2 }, response: { status: 409 } }],
+    last: { id: 7, planDigest: 'original' }, installation: { id: 9 }, operation: { id: 7, version: 3 }, placement: { executionInstanceId: 'original-base' } };
+  const original = { resources: [{ ...structuredClone(r), confirmed: false }], trace: [] };
+  assert.equal(bindOriginalCleanup({ resources: [r] }, original)[0], r);
+  for (const mutate of [v => v.commands[0].body.expectedVersion++, v => v.commands[0].response.status = 200, v => v.last.planDigest = 'replacement', v => v.installation.id++, v => v.operation.version++, v => v.placement.executionInstanceId = 'replacement']) {
+    const changed = structuredClone(r); mutate(changed); assert.throws(() => bindOriginalCleanup({ resources: [changed] }, original), /differs/);
+  }
+});
 test('brand restoration recovery binds exact original profile, last revision, asset journal, actor and origin', () => {
   const resource = { kind: 'branding-profile-restore', collection: '/panel/namespace-branding/', namespace: 'panel', phase: 'created', actorIdentity: { account: 'owner', namespace: 'panel' }, origin: 'https://panel.example', original: { override: { id: 7, resourceVersion: 2 } }, last: { override: { id: 7, resourceVersion: 3 } }, commands: [{ outcome: 'unknown', body: { expectedResourceId: 7, expectedResourceVersion: 3 } }], brandingCommands: [{ outcome: 'unknown', expectedDigest: 'original-bytes' }] };
   const original = { resources: [{ ...structuredClone(resource), confirmed: false }], trace: [] };
@@ -135,5 +158,65 @@ test('retired creator disposition requires immutable account retirement, current
     } };
     if (mode === 'valid') { await cleanupRetiredCreator(h, r, { resources: [account] }); assert.equal(r.phase, 'deleted'); assert.equal(r.creation.actorIdentity.account, 'creator'); assert.equal(r.recovery.actorIdentity.account, 'admin'); assert.equal(writes, 1); }
     else { await assert.rejects(cleanupRetiredCreator(h, r, { resources: [account] })); if (mode === 'response-lost') { await assert.rejects(cleanupRetiredCreator(h, r, { resources: [account] })); assert.equal(writes, 1); } else assert.equal(writes, 0); }
+  }
+});
+
+test('only exact pre-dispatch session refusal plus complete owner absence closes a creation intent', async () => {
+  const { confirmProxySessionRefusal } = require('./cleanup_recovery.cjs');
+  for (const mode of ['valid', 'namespace', 'timeout', 'generic-503', 'foreign-actor', 'existing-name', 'existing-uuid', 'incomplete-read']) {
+    const identity = { account:'original',namespace:'panel' }, uuid = 'a'.repeat(32), intended = {name:'original-resource',uuid};
+    const r = {kind:mode==='namespace'?'namespace':'definition',phase:'intent',collection:mode==='namespace'?'/panel/namespace-onboardings/':'/panel/application/definitions/',creation:{journalId:'original',outcome:'unconfirmed',actorIdentity:identity,origin:'https://panel.example.invalid',intended,identity:mode==='namespace'?{name:intended.name}:{uuid},response:{status:503,data:{text:'application session refresh is still in progress; retry shortly\n'}}}};
+    if(mode==='timeout') delete r.creation.response;
+    if(mode==='generic-503') r.creation.response.data.text='upstream unavailable\n';
+    const reads=[],h={Blocked:Error,admin:{identity:mode==='foreign-actor'?{...identity,account:'other'}:identity,origin:r.creation.origin},persist(){},check(label,c){assert.ok(c,label);},async directory(actor,route){reads.push(route);if(mode==='incomplete-read')throw Error('pagination incomplete');return mode==='existing-name'?[{name:intended.name}]:mode==='existing-uuid'?[{uuid}]:[];},api(){throw Error('no write or replay permitted');}};
+    if(['valid','namespace'].includes(mode)) {await confirmProxySessionRefusal(h,r);assert.equal(r.phase,'deleted');assert.equal(r.creation.outcome,'unconfirmed');assert.equal(r.reconciliation.noCommandReplayed,true);assert.deepEqual(reads,[mode==='namespace'?'/cas/namespaces/':r.collection]);}
+    else {await assert.rejects(confirmProxySessionRefusal(h,r));assert.equal(r.phase,'intent');}
+  }
+});
+
+
+test('original failed namespace closes only with terminal owner rollback and independent ID/name absence',async()=>{
+ const {confirmRolledBackNamespace}=require('./cleanup_recovery.cjs'),crypto=require('node:crypto');
+ for(const mode of ['rolled-back','pending','still-present','wrong-owner']){
+  const identity={account:'original',namespace:'panel'},origin='https://panel.example.invalid',creationId='a'.repeat(32),line='namespace provisioning failed namespace=original creationId='+creationId+' stage=administrator';
+  const r={kind:'namespace',collection:'/panel/namespace-onboardings/',phase:'intent',creation:{outcome:'unknown',actorIdentity:identity,origin,intended:{name:'original'}}};
+  const proof={name:'original',creationId,sourceContainer:'magiccas',sourceLine:line,sourceLogSha256:'sha256:'+crypto.createHash('sha256').update(line).digest('hex')};
+  const h={admin:{identity:mode==='wrong-owner'?{...identity,account:'other'}:identity,origin},Blocked:Error,persist(){},check(label,c){assert.ok(c,label);},async ok(){return {value:{creationId,name:'original',namespaceId:7,phase:mode==='pending'?'administrator':'rolled-back',version:2,failure:'original cause'}};},async api(a,m){assert.equal(m,'GET');return mode==='still-present'?{status:200,data:{value:{id:7}}}:{status:200,data:{error:{code:2},value:null}};},async directory(){return [];}};
+  if(mode==='rolled-back'){await confirmRolledBackNamespace(h,r,proof);assert.equal(r.phase,'deleted');assert.equal(r.creation.outcome,'unknown');assert.equal(r.reconciliation.noCommandReplayed,true);}
+  else{await assert.rejects(confirmRolledBackNamespace(h,r,proof));assert.equal(r.phase,'intent');}
+ }
+});
+test('runtime policy recovery binds immutable conditional commands, full inventory, original installations and retained owner revision', () => {
+  const r = { kind: 'runtime-policy-probe', id: 'original-journal', phase: 'created', origin: 'https://original.invalid', policyId: 'policy1',
+    actorIdentity: { account: 'original', namespace: 'panel' }, before: [{ id: 'policy1', version: 2 }], last: [{ id: 'policy1', version: 3 }],
+    inventory: [{ id: 'gateway1', incarnation: 'original' }], installations: [{ id: 7, receipt: { frozen: true } }], commands: [{ confirmed: false, body: { expectedVersion: 2 }, response: { status: 200 } }] };
+  const original = { resources: [{ ...structuredClone(r), confirmed: false }], trace: [] };
+  assert.equal(bindOriginalCleanup({ resources: [r] }, original)[0], r);
+  for (const mutate of [x => x.origin += '.foreign', x => x.policyId = 'replacement', x => x.actorIdentity.namespace = 'other',
+    x => x.before[0].version++, x => x.last[0].version++, x => x.inventory[0].incarnation = 'new', x => x.installations[0].receipt.frozen = false,
+    x => x.commands[0].confirmed = true, x => x.commands[0].body.expectedVersion++, x => x.commands[0].response.status = 409]) {
+    const changed = structuredClone(r); mutate(changed); assert.throws(() => bindOriginalCleanup({ resources: [changed] }, original), /differs/);
+  }
+});
+test('id-less business, member retirement and source effect cleanup bind one entire original snapshot without inventing ids', () => {
+  const { bindOriginalCleanup } = require('./cleanup_recovery.cjs');
+  for (const kind of ['business-record', 'member-access-retirement', 'source-effect-scenario']) {
+    const first = { kind, phase: 'created', origin: 'https://original.invalid',
+      actorIdentity: { account: 'original', namespace: 'panel' }, identity: { installationId: '11', deploymentId: 'original' },
+      scenarioDefinitionId: 31, installation: { id: 11 }, recordId: '21', targets: [{ id: 41, version: 1 }],
+      commands: [{ body: { operationId: 'original' }, outcome: 'unknown', response: { status: 200, data: { error: { code: 2 } } } }] };
+    const peer = structuredClone(first); peer.identity.installationId = '12'; peer.installation.id = 12; peer.recordId = '22';
+    const original = { resources: [first, peer].map(r => ({ ...structuredClone(r), confirmed: false, error: 'preserved refusal' })), trace: [] };
+    assert.deepEqual(bindOriginalCleanup({ resources: [first, peer] }, original), [first, peer]);
+    for (const mutate of [r => r.identity.installationId = 'other', r => r.installation.id++, r => r.recordId = 'other',
+      r => r.commands[0].body.operationId = 'other', r => r.commands[0].outcome = 'confirmed', r => r.commands[0].response.status = 409,
+      r => r.scenarioDefinitionId++, r => r.targets[0].version++, r => r.phase = 'prepared',
+      r => r.actorIdentity.account = 'other', r => r.extra = true, r => r.error = 'masked', r => r.confirmed = false]) {
+      const changed = structuredClone(first); mutate(changed);
+      assert.throws(() => bindOriginalCleanup({ resources: [changed] }, original), /differs from exact original/);
+    }
+    const duplicate = structuredClone(original); duplicate.resources.push(structuredClone(duplicate.resources[0]));
+    assert.throws(() => bindOriginalCleanup({ resources: [first] }, duplicate), /differs from exact original/);
+    assert.equal(Object.hasOwn(first, 'id'), false);
   }
 });

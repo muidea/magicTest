@@ -1,8 +1,5 @@
 {
   "name": "magictest-browser-tools",
   "private": true,
-  "description": "Reusable browser dependencies for platform regression tools",
-  "devDependencies": {
-    "playwright": "1.56.1"
-  }
+  "description": "Reusable browser dependencies for platform regression tools"
 }

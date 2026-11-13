@@ -1,9 +1,51 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { ownerRequest } = require('./owner_transport.cjs');
 const { feedbackAttachment } = require('./owner_transport.cjs');
+const { packageContent } = require('./owner_transport.cjs');
+const { packageUpload, deploymentPackageUpload } = require('./owner_transport.cjs');
+test('model upload sends exact finite ZIP once with original cookies and fixed purpose, evidence excludes bytes', async () => {
+  const browser = await chromium.launch({ headless: true }), seen = [], records = [], bytes = Buffer.from('PK\0private model');
+  const server = http.createServer(async (req, res) => {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    seen.push({ path: req.url, cookie: req.headers.cookie, body: Buffer.concat(chunks), contentType: req.headers['content-type'] });
+    res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ value: { uploadRef: 'a'.repeat(43) } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const origin = 'http://tenant-a.local.vpc:' + server.address().port, context = await browser.newContext();
+    await context.addCookies([{ url: origin, name: 'session', value: 'original', httpOnly: true }]);
+    const actor = { identity: { account: 'author', namespace: 'tenant-a' }, origin, context };
+    assert.equal((await packageUpload(actor, { name: 'proof.zip', bytes }, e => records.push(e))).status, 200);
+    assert.equal(seen.length, 1); assert.equal(seen[0].path, '/api/v1/web/proxy/files/self/files/upload-references/?purpose=application-model-package');
+    assert.equal(seen[0].cookie, 'session=original'); assert.ok(seen[0].body.includes(bytes)); assert.match(seen[0].contentType, /^multipart\/form-data/);
+    assert.doesNotMatch(JSON.stringify(records), /private model|session=|"bytes"/);
+    for (const file of [{ name: '../proof.zip', bytes }, { name: 'proof.zip', bytes: Buffer.alloc(0) }, { name: 'proof.txt', bytes }]) await assert.rejects(packageUpload(actor, file));
+    assert.equal(seen.length, 1);
+    assert.equal((await deploymentPackageUpload(actor, { name: 'native.zip', bytes }, e => records.push(e))).status, 200);
+    assert.equal(seen.length, 2); assert.equal(seen[1].path, '/api/v1/web/proxy/files/self/files/upload-references/?purpose=application-deployment-package');
+    assert.equal(seen[1].cookie, 'session=original'); assert.ok(seen[1].body.includes(bytes));
+    await assert.rejects(deploymentPackageUpload(actor, { name: '../native.zip', bytes })); assert.equal(seen.length, 2);
+    assert.doesNotMatch(JSON.stringify(records), /private model|session=|"bytes"/);
+  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+});
+test('ZIP transport preserves binary bytes and cannot read a substituted package path', async () => {
+  const browser = await chromium.launch({ headless: true }), seen = [], records = [];
+  const bytes = Buffer.concat([Buffer.from('PK\x03\x04'), Buffer.from([0, 255, 128]), Buffer.alloc(4096, 97)]);
+  const server = http.createServer((req, res) => { seen.push(req.url); res.setHeader('Content-Type', 'application/zip'); res.end(bytes); });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const origin = 'http://tenant-a.local.vpc:' + server.address().port, context = await browser.newContext();
+    const actor = { identity: { account: 'member', namespace: 'tenant-a' }, origin, context };
+    const result = await packageContent(actor, '/panel/application/model-packages/19/content', e => records.push(e));
+    assert.ok(result.data.bytes.equals(bytes)); assert.equal(seen.length, 1);
+    assert.doesNotMatch(JSON.stringify(records), /"bytes"|aaaaaa/);
+    for (const route of ['//foreign/', '/panel/application/model-packages/19/content?namespace=other', '/panel/application/model-packages/../content']) await assert.rejects(packageContent(actor, route));
+    assert.equal(seen.length, 1);
+  } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+});
 test('feedback multipart and binary transport preserves bytes, identity and single-dispatch boundary', async () => {
   const browser = await chromium.launch({ headless: true }), seen = [], records = [];
   const bytes = Buffer.from('PRIVATE-BINARY\0\r\n中文 Δ'), ref = 'bound_' + 'a'.repeat(43);

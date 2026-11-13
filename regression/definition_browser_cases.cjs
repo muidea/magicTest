@@ -16,6 +16,18 @@ async function settle(page) {
   await page.waitForLoadState('networkidle');
   await page.locator('.ant-spin-spinning').first().waitFor({ state: 'hidden' });
 }
+async function emptyDirectory(h, page) {
+  const list = card(page, '实体列表');
+  // Tree readiness does not prove that the separate table request rendered.
+  // Wait for the actual empty-table state, then retain its visible evidence.
+  await list.locator('.ant-table-placeholder .ant-empty').waitFor({ state: 'visible' });
+  await list.locator('.ant-spin-spinning').waitFor({ state: 'hidden' });
+  const text = await list.innerText(), rows = await list.locator('tbody tr[data-row-key]').count();
+  const createVisible = await page.getByRole('button', { name: /新增实体$/ }).isVisible();
+  const proof = { text, rows, createVisible };
+  h.observe({ kind: 'empty-directory-render', ...proof });
+  return { valid: /暂无数据|No data/.test(text) && rows === 0 && createVisible, proof };
+}
 // Some author forms reuse DOM ids. Scope by the rendered field container so
 // a modal label cannot resolve to the outer entity form's equally named input.
 function formInput(scope, label) {
@@ -164,7 +176,8 @@ handlers['F013-003'] = async h => {
 handlers['F012-002'] = async h => {
   const app = await a.definition(h, 'emptyselection'), page = h.admin.page;
   await open(h, app); await settle(page);
-  h.check('Empty real definition shows a current empty entity directory', (await card(page, '实体列表').innerText()).match(/暂无数据|No data/) && await page.getByRole('button', { name: /新增实体$/ }).isVisible());
+  const empty = await emptyDirectory(h, page);
+  h.check('Empty real definition shows a current empty entity directory', empty.valid, empty.proof);
   const populated = await a.save(h, app, await a.draft(h, app), [a.newEntity(h, app)]), entity = populated.entities[0];
   await open(h, app);
   await treeNode(page, entity.showName).click(); await card(page, '字段信息').waitFor({ state: 'visible' }); await settle(page);
@@ -182,7 +195,8 @@ handlers['F012-002'] = async h => {
       h.check('Independent entity owner confirms exact original ID absent', absent.data?.error?.code === 2 && absent.data.value == null, absent);
     }, undefined, 'DELETE');
   await open(h, app); await settle(page);
-  h.check('After deleting original entity, tree and current details contain no stale entity', await treeNode(page, entity.showName).count() === 0 && await card(page, '字段信息').count() === 0 && (await card(page, '实体列表').innerText()).match(/暂无数据|No data/));
+  const removed = await emptyDirectory(h, page);
+  h.check('After deleting original entity, tree and current details contain no stale entity', await treeNode(page, entity.showName).count() === 0 && await card(page, '字段信息').count() === 0 && removed.valid, removed.proof);
   const errors = [], listen = e => errors.push(e.message); page.on('pageerror', listen);
   try {
     await page.goto(h.admin.origin + view(app, entity), { waitUntil: 'networkidle' }); await settle(page);

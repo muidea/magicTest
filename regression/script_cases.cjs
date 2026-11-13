@@ -104,4 +104,52 @@ for {}
   await h.partial('AUTHOR-DEBUG-CANCEL: browser AbortError proves transport cancellation only. Executing-script cancellation is covered by owner source tests; this Live case stays partial until the same request has independent server-stop evidence.');
 };
 
+async function instanceReadOnly(h) {
+  const business = require('./business_cases.cjs'), authority = require('./application_authority_cases.cjs');
+  const { isDeepStrictEqual: equal } = require('node:util'), f = await require('./delivery_cases.cjs').fixture(h);
+  const base = '/cas/namespaces/panel/', templates = await h.directory(h.admin, base + 'role-templates/');
+  const ordinary = templates.find(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2);
+  h.check('Existing ordinary functional profile is available for dedicated instance author', ordinary?.roleRefs?.length > 0);
+  const refs = structuredClone(ordinary.roleRefs), keys = ['management-application-manager', 'management-entity-manager', 'management-namespace-application-operator'];
+  for (const key of keys) {
+    const ref = templates.flatMap(t => t.roleRefs || []).find(r => r.module === '/modules/kernel/runner' && r.key === key);
+    h.check('Author fixture selects existing system functional role: ' + key, !!ref);
+    if (!refs.some(r => equal(r, ref))) refs.push(ref);
+  }
+  const scope = [{ applicationUuid: f.installations[0].deploymentId, accessLevel: 'viewer' }];
+  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-readonly-author', name: '仅实例A查看的脚本作者', subjectType: 'account', status: 2, roleRefs: refs, applicationAccess: scope }, 'role-template');
+  const m = await authority.account(h, 'debug-author'); await authority.assign(h, m, group, scope);
+  const manager = await business.member(h, 'manager'), contexts = [], rows = [];
+  for (let i = 0; i < 2; i++) contexts.push(await business.runtime(h, f, i, manager));
+  let primary;
+  try {
+    for (const [i, c] of contexts.entries()) rows.push(await business.create(h, c, 'readonly-debug-' + i));
+    const snapshots = [];
+    for (const row of rows) snapshots.push(await business.record(h, manager, row));
+    const source = f.revision.entities[0], request = { mode: 'instance', timeout: 3000, applicationDefinitionId: f.application.id,
+      installationId: f.installations[0].id, entityName: source.name, entityPkgPath: source.pkgPath, functionName: 'block.Handle', input: { id: Number(rows[0].recordId) },
+      scriptContent: 'package block\nimport "context"\nimport "github.com/muidea/magicBase/internal/modules/blocks/interpreter/pkg/helper"\nfunc Handle(ctx context.Context,input map[string]any,output map[string]any) error { return helper.QueryEntityValue(ctx,input,output) }' };
+    const checked = (await h.ok(m.actor, 'POST', root + 'debug', request)).value;
+    h.check('Original ordinary author instance query returns exact real owner row through readonly helper', checked.valid === true && checked.mode === 'instance' && equal(checked.output, snapshots[0].data.value), checked);
+    const unchanged = async () => {
+      for (const [i, row] of rows.entries()) h.check('Independent original ordinary owner preserves complete real row in instance ' + i, equal(await business.record(h, manager, row), snapshots[i]));
+    };
+    await unchanged();
+    for (const name of ['UpdateEntityValue', 'DeleteEntityValue']) {
+      const body = { ...request, scriptContent: request.scriptContent.replace('return helper.QueryEntityValue(ctx,input,output)', '_ = helper.' + name + '(ctx,input,output); return nil'), input: { id: Number(rows[0].recordId), name: 'MUST NOT CHANGE' } };
+      const command = { route: root + 'debug', body, outcome: 'unknown' }; (rows[0].debugCommands ||= []).push(command); h.persist();
+      command.response = await h.api(m.actor, 'POST', command.route, body); h.persist();
+      const rejected = command.response.status === 200 && command.response.data?.error?.code === 4 && /实例验证仅允许查询，禁止写入和实体变更/.test(command.response.data.error.message) && command.response.data.value?.valid !== true;
+      await unchanged();
+      if (rejected) { command.outcome = 'rejected-and-unchanged'; h.persist(); }
+      h.check('Actual instance sandbox rejects swallowed ' + name + ' error at readonly write boundary', rejected, command.response);
+    }
+    const foreign = await h.api(m.actor, 'POST', root + 'debug', { ...request, installationId: f.installations[1].id, input: { id: Number(rows[1].recordId) } });
+    h.check('Same valid ordinary author is refused specifically at ungranted second-instance data-read gate', foreign.status === 200 && foreign.data?.error?.code === 5 && foreign.data.error.message === '实例查询需要该应用或该实例的数据读取权限', foreign);
+    await unchanged();
+  } catch (error) { primary = error; throw error; }
+  finally { await business.finishCleanup(h, rows.reverse(), primary); }
+}
+instanceReadOnly.transport = 'owner-api';
+handlers['F017-003'] = instanceReadOnly;
 module.exports = { handlers };

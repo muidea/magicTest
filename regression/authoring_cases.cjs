@@ -7,7 +7,7 @@ const clone = value => structuredClone(value);
 const fixture = (h, name) => JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression/' + name)));
 async function definition(h, suffix) {
   const body = fixture(h, 'fixture-definition-create-request.json');
-  Object.assign(body, { uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-' + suffix, pkgPrefix: h.state.prefix + suffix });
+  Object.assign(body, { uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-' + suffix, pkgPrefix: h.state.prefix + suffix.replaceAll('-', '') });
   return h.create(base, body, 'definition');
 }
 const draft = (h, app) => h.ok(h.admin, 'GET', base + app.id + '/model-draft').then(r => r.value);
@@ -196,4 +196,4 @@ handlers['F067-004'].actors = ['user', 'tenantAdmin'];
 // API-only commands select one-shot owner transport before execution.
 // F018-002 deliberately keeps its original browser response-loss injection.
 for (const id of ['F015-002', 'F018-001', 'F018-003', 'F067-004']) handlers[id].transport = 'owner-api';
-module.exports = { handlers, authoring: { definition, draft, save, newEntity, library, scriptBinding, journalSave } };
+module.exports = { handlers, authoring: { definition, draft, save, newEntity, library, scriptBinding, journalSave, command } };

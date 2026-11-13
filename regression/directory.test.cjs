@@ -45,3 +45,16 @@ test('subject mutation between responses refuses to continue',async()=>{
   h.ok=async()=>{who.identity.namespace='t002';return page([{id:1},{id:2}],3)};
   await assert.rejects(readDirectory(h,who,'/resources/',{pageSize:2}),/actor changed/);
 });
+
+test('explicit string directory identities preserve opaque values across complete pages', async () => {
+  const rows = [{ id: '9007199254740993' }, { id: 'a'.repeat(32) }, { id: '9223372036854775807' }];
+  const h = harness([page(rows.slice(0, 2), 3), page(rows.slice(2), 3, 2)]);
+  assert.deepEqual(await readDirectory(h, actor(), '/portal/applications/', { pageSize: 2, idFormat: 'string' }), rows);
+  for (const id of ['', ' ', 'a b', 'x\n', 'x\x00', 'x'.repeat(129), 7, null, undefined])
+    await assert.rejects(readDirectory(harness([page([{ id }], 1)]), actor(), '/portal/applications/', { pageSize: 2, idFormat: 'string' }), /identities/);
+  await assert.rejects(readDirectory(harness([page([{ id: '7' }], 1)]), actor(), '/resources/', { pageSize: 2 }), /identities/);
+  await assert.rejects(readDirectory(harness([page([{ id: '7' }, { id: '7' }], 2)]), actor(), '/portal/applications/', { pageSize: 2, idFormat: 'string' }), /identities/);
+  const invalid = harness([]);
+  await assert.rejects(readDirectory(invalid, actor(), '/resources/', { idFormat: 'any' }), /format/);
+  assert.equal(invalid.calls.length, 0);
+});

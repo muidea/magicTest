@@ -1,6 +1,7 @@
 // Public document and dashboard consumer scenarios. Missing-response fixtures
 // are browser-local and never modify File bytes or owner business facts.
 const crypto = require('node:crypto');
+const { waitLoginForm } = require('./login_readiness.cjs');
 const handlers = {};
 const viewports = [{ width: 390, height: 844 }, { width: 1366, height: 768 }, { width: 1920, height: 1080 }];
 const documents = [{ key: 'privacy', title: '隐私政策' }, { key: 'terms', title: '服务条款' }].map(d => ({ ...d, page: '/legal/' + d.key + '/', content: '/static/share/platform/legal/' + d.key + '.md' }));
@@ -38,6 +39,7 @@ async function open(h, actor, doc) {
 }
 handlers['F064-001'] = async h => anonymous(h, async actor => {
   await actor.page.goto(actor.origin + '/login/', { waitUntil: 'networkidle' });
+  await waitLoginForm(actor.page);
   for (const doc of documents) {
     const link = actor.page.getByRole('link', { name: doc.title, exact: true });
     h.check('Login exposes exact public legal page link', await link.count() === 1 && await link.getAttribute('href') === doc.page,

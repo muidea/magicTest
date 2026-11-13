@@ -52,6 +52,7 @@ async function boundaries(h) {
 async function management(h) {
   const baseline = await h.directory(h.admin, collection), beforePlacements = await h.directory(h.admin, placements);
   const physical = await require('./postgres_fixture.cjs').createPostgres(h);
+  const originalControls = require('./postgres_fixture.cjs').readControls(h, physical);
   const payload = { name: h.state.prefix + '-physical-db', catalog: 'regression', engine: 'postgresql', engineVersion: '17', address: physical.address,
     administrator: physical.username, password: physical.password, description: '独立无持久卷数据库；规格只作规划', cpuMillis: 1000, memoryBytes: 1024 ** 3,
     databaseLimit: 1, status: 'disabled', healthStatus: 'unknown' };
@@ -100,7 +101,7 @@ async function management(h) {
   };
   const overview = (await explore('overview')).overview, databases = (await explore('databases')).databases;
   h.check('Public explorer connects to actual PostgreSQL and reads the independent fixture database and owner', /^17\./.test(overview.serverVersion) && overview.databaseCount >= 2 && databases.some(d => d.name === physical.database && d.owner === physical.username), { overview, databases });
-  h.check('Planning edits preserve actual server identity, hard limits and database count', current.memoryBytes === 2 * 1024 ** 3 && physical.memoryLimitBytes === 256 * 1024 ** 2 && overview.databaseCount === beforeOverview.databaseCount && overview.startedAt === beforeOverview.startedAt && overview.maxConnections === beforeOverview.maxConnections);
+  h.check('Planning edits preserve actual server identity, observed container controls and database count', current.memoryBytes === 2 * 1024 ** 3 && same(require('./postgres_fixture.cjs').readControls(h, physical), originalControls) && overview.databaseCount === beforeOverview.databaseCount && overview.startedAt === beforeOverview.startedAt && overview.maxConnections === beforeOverview.maxConnections, originalControls);
   const page = h.admin.page;
   await page.goto(h.admin.origin + '/panel/database/?tab=instance', { waitUntil: 'networkidle' });
   const row = page.locator('tr[data-row-key="' + created.id + '"]');

@@ -80,6 +80,10 @@ async function uiReadFailure(h, r) {
   } finally { page.off('request', watch); }
 }
 async function boundaries(h) {
+  // Positive retention can make old records eligible for deletion. Admit it
+  // only after proving this is the dedicated isolated fixture daemon.
+  const isolated = !!h.deliveryFixtureConfig;
+  if (isolated) await require('./delivery_cases.cjs').fixture(h);
   const original = await read(h);
   h.check('Complete policy owner read has both declared policies and safe conditional revision', Number.isSafeInteger(original.resourceVersion) && original.resourceVersion >= 0 && same(Object.keys(original.policies).sort(), ['operationLog', 'securityAudit']));
   const r = { kind: 'log-retention-restore', phase: 'created', original, last: original, actorIdentity: structuredClone(h.admin.identity), origin: h.admin.origin, commands: [] };
@@ -106,8 +110,14 @@ async function boundaries(h) {
     h.check('Same-version concurrent retention writes have exactly one acknowledged winner and one explicit conflict', outcomes.filter(h.good).length === 1 && outcomes[loser].data?.error?.code === 19, outcomes);
     h.check('Independent owner confirms exactly one revision and both winning policies', same(after, outcomes[winner].data.value) && after.resourceVersion === before.resourceVersion + 1 && same(after.policies, { securityAudit: bodies[winner].securityAudit, operationLog: bodies[winner].operationLog }));
     commands[winner].outcome = 'confirmed'; commands[loser].outcome = 'rejected-conflict'; r.last = after; h.persist();
+    if (isolated) {
+      for (const days of [1, 36500]) {
+        const policy = { ...high, retentionDays: days };
+        await write(h, r, { securityAudit: policy, operationLog: policy });
+      }
+    }
   } finally { await restore(h, r); }
-  await h.partial('Out-of-range limits, zero-day permanent retention, both cleanup-limit extrema, concurrent conditional writes and UI read-failure/shortening-cancel verified. Positive retentionDays=36500 requires an isolated log owner: shared failure history is never made eligible for deletion by this executor.');
+  if (!isolated) await h.partial('Out-of-range limits, zero-day permanent retention, both cleanup-limit extrema, concurrent conditional writes and UI read-failure/shortening-cancel verified. Positive retentionDays=36500 requires an isolated log owner: shared failure history is never made eligible for deletion by this executor.');
 }
 boundaries.transport = 'owner-api';
 module.exports = { handlers: { 'F058-002': boundaries }, restore, fields };

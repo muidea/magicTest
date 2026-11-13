@@ -11,6 +11,7 @@ async function identity(h, app, value) { h.check('Draft owner returns the exact 
 async function save(h, app, member, before, content, actor = h.admin) {
   const pathname = route(app, member), payload = { expectedDefinitionVersion: before.definitionVersion, content };
   const intent = a.journalSave(h, app, pathname, payload);
+  intent.method = 'PUT'; intent.before = structuredClone(before); h.persist();
   intent.response = await h.api(actor, 'PUT', pathname, payload); h.persist();
   h.check('Original conditional ' + member + ' command succeeds', h.good(intent.response), intent.response);
   const current = await read(h, app, member); await identity(h, app, current);
@@ -200,6 +201,78 @@ handlers['F068-003'] = async h => {
   await h.screenshot(h.admin, 'image-released-after-all-page-references-cleared');
   await btn(dialog, '关闭页面设计器').click(); await dialog.waitFor({ state: 'hidden' });
 };
+// Author history is exercised through real controls before immutable delivery.
+function editedAuthorContent(before, title, text) {
+  const current = structuredClone(before), home = current.pages.find(p => p.key === 'home');
+  if (!home || home.components.length !== 2 || !home.components.some(c => c.key === 'intro' && c.type === 'text') || !home.components.some(c => c.key === 'records' && c.type === 'entity-table')) throw Error('Exact original two-component page required');
+  home.title = title; home.routes = ['/', '/author-confirmed'];
+  home.components = ['records', 'intro'].map((key, index) => {
+    const c = home.components.find(c => c.key === key);
+    c.layout.order = index + 1;
+    if (key === 'intro') c.properties.text = text;
+    return c;
+  });
+  return current;
+}
+async function selectAuthorComponent(h, dialog, key) {
+  const control = btn(dialog, '选择组件 ' + key);
+  const geometry = await control.evaluate(node => {
+    const r = node.getBoundingClientRect(), hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return { visibleWidth: r.width, visibleHeight: r.height, centerHitsControl: hit === node || node.contains(hit), hitTag: hit?.tagName, hitClass: hit?.className };
+  });
+  h.observe({ kind: 'author-component-pointer-geometry', componentKey: key, geometry });
+  // Exercise the real accessible button with keyboard input. Pointer coverage
+  // remains a separate recorded observation; never use force-click or DOM state.
+  await control.focus(); await control.press('Enter');
+  h.check('Real keyboard selection activates only the exact original component', await control.getAttribute('aria-pressed') === 'true');
+}
+async function prepareAuthorMain(h, authored) {
+  const before = authored.pages, title = '正式作者回归 ' + h.state.prefix, text = '<script>仅显示作者文本</script>';
+  let dialog = await open(h, authored.app);
+  await dialog.getByLabel('页面标题', { exact: true }).fill(title);
+  await dismissNotifications(h);
+  await btn(dialog, /^撤\s*销$/).click();
+  h.check('Real author undo restores the original title without an owner write', await dialog.getByLabel('页面标题', { exact: true }).inputValue() === before.content.pages[0].title && same(await read(h, authored.app, 'pages'), before));
+  await dismissNotifications(h);
+  await btn(dialog, /^重\s*做$/).click();
+  h.check('Real author redo restores the unsaved exact title', await dialog.getByLabel('页面标题', { exact: true }).inputValue() === title);
+  await dialog.getByLabel('页面路由', { exact: true }).fill('/\n/author-confirmed');
+  await selectAuthorComponent(h, dialog, 'intro');
+  await dialog.getByLabel('属性 text', { exact: true }).fill(text);
+  await btn(dialog, '下移 intro').click();
+  h.check('Real keyboard-accessible component move changes visible order with no owner write', same(await dialog.locator('[aria-label^="选择组件 "]').evaluateAll(nodes => nodes.map(n => n.getAttribute('aria-label'))), ['选择组件 records', '选择组件 intro']) && same(await read(h, authored.app, 'pages'), before));
+  const saved = await uiSave(h, authored.app, 'pages', () => btn(dialog, '保存页面').click());
+  h.check('Original conditional UI save persists every exact changed field and preserves all bindings, navigation and peer metadata', same(saved.content, editedAuthorContent(before.content, title, text)));
+  await synchronized(h, dialog); await h.screenshot(h.admin, 'author-history-order-saved');
+  await btn(dialog, '关闭页面设计器').click(); await dialog.waitFor({ state: 'hidden' });
+  dialog = await open(h, authored.app);
+  h.check('Reopening actual author UI reads original saved title and route', await dialog.getByLabel('页面标题', { exact: true }).inputValue() === title && await dialog.getByLabel('页面路由', { exact: true }).inputValue() === '/\n/author-confirmed');
+  await selectAuthorComponent(h, dialog, 'intro');
+  h.check('Reopening preserves exact escaped component text and saved full owner content', await dialog.getByLabel('属性 text', { exact: true }).inputValue() === text && same(await read(h, authored.app, 'pages'), saved));
+  await btn(dialog, '关闭页面设计器').click(); await dialog.waitFor({ state: 'hidden' });
+  authored.pages = saved;
+}
+handlers['F067-001'] = async h => {
+  const runtime = require('./page_runtime_cases.cjs'), business = require('./business_cases.cjs');
+  const f = await runtime.explicitFixture(h, undefined, undefined, { suffix: 'pageauthor', requestPrefix: 'page-author-', prepareAuthor: prepareAuthorMain });
+  let primary;
+  try {
+    const actor = await business.member(h, 'manager'), snapshots = [];
+    for (const installation of f.installations) {
+      const route = '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + installation.deploymentId;
+      const value = (await h.ok(actor, 'GET', route)).value;
+      h.check('Ordinary runtime consumes complete exact frozen author pages in each distinct installation', same(value.pages, f.revision.content.pages) && value.readIdentity.installationId === String(installation.id) && value.readIdentity.deploymentId === installation.deploymentId && value.readIdentity.runtimeApplicationUuid === installation.receipt.runtimeApplicationUuid);
+      snapshots.push({ route, value });
+    }
+    const current = await read(h, f.application, 'pages'), changed = structuredClone(current.content);
+    changed.pages[0].title = '未发布作者标题';
+    await save(h, f.application, 'pages', current, changed);
+    for (const snapshot of snapshots) h.check('Unpublished author change preserves full original installed runtime pages and fence', same((await h.ok(actor, 'GET', snapshot.route)).value, snapshot.value));
+    h.check('Independent immutable revision still contains exact published author title, route and component history result', same((await h.ok(h.admin, 'GET', route(f.application, 'revisions/' + f.revision.id))).value, f.revision));
+  } catch (error) { primary = error; throw error; }
+  finally { await runtime.disposeExplicitFixture(h, f, primary); }
+  await h.partial('Real author title/routes, undo/redo, component text/order, exact conditional save and reopen, readonly ready preflight, publication, dual installation and ordinary frozen runtime metadata verified. UI initial-page creation/navigation/action binding and formal ZIP import consumers remain unverified.');
+};
 // Only a proven pre-admission rejection can close a creation intent without a
 // resource ID. No generic error or directory absence proves an unknown POST.
 async function reconcileRejectedDefinitionCreations(h) {
@@ -217,22 +290,52 @@ async function reconcileRejectedDefinitionCreations(h) {
   }
   return proof;
 }
+async function reconcileRejectedPageWrite(h, r, evidence, evidenceSha256) {
+  const { sanitize } = require('./evidence_sanitizer.cjs'), c = r.pendingAuthoringSave, created = r.creation?.response?.data?.value;
+  const views = c?.payload?.content?.entityViews, keys = Object.keys(views || {});
+  const view = keys.length === 1 && views[keys[0]], message = c?.response?.data?.error?.message;
+  const layoutRefusal = !!view?.detail?.layout && message === 'entityViews ' + keys[0] + ': 首批不支持 detail 自定义 layout';
+  const primaryRefusal = view?.entity?.primaryKey === 'id' && view.fields?.filter(f => f.name === 'id').length === 1 && view.fields.find(f => f.name === 'id').readonly === false && message === 'entityViews ' + keys[0] + ' 字段 id 放宽或改变模型约束';
+  const invalidMetrics = c?.payload?.content?.pages?.flatMap(p => p.components || []).filter(component => component.type === 'metric-group' && component.properties === undefined && Array.isArray(component.metricGroup?.metrics));
+  const metricsRefusal = invalidMetrics?.length === 1 && message === '定义 JSON 缺少字段 "properties"';
+  if (r.kind !== 'definition' || r.phase === 'deleted' || r.collection !== base || !r.creation?.ownershipConfirmed || !created || created.id !== r.id || c?.confirmed !== false || c.route !== route(created, 'pages') || c.response?.status !== 400 || c.response.data?.error?.code !== 4 || c.response.data.value != null || !(layoutRefusal || primaryRefusal || metricsRefusal) || !same(h.admin.identity, r.creation.actorIdentity) || h.admin.origin !== r.creation.origin || !/^sha256:[a-f0-9]{64}$/.test(evidenceSha256)) throw new h.Blocked('Rejected page save requires exact original pre-write layout, primary constraint or component properties refusal and original author');
+  const writes = (evidence.trace || []).map((v, index) => ({ v, index })).filter(({ v }) => v.kind === 'request' && v.method === 'PUT' && v.route === c.route && v.origin === h.admin.origin && same(v.actor, h.admin.identity) && same(v.body, sanitize(c.payload)) && same(v.response, sanitize(c.response)));
+  if (writes.length !== 1) throw new h.Blocked('Original rejected page save is not uniquely bound to immutable case evidence');
+  const before = evidence.trace.slice(0, writes[0].index).filter(v => v.kind === 'request' && v.method === 'GET' && v.route === c.route && v.origin === h.admin.origin && same(v.actor, h.admin.identity) && h.good(v.response)).at(-1)?.response.data.value;
+  if (before?.applicationId !== r.id || before.applicationUuid !== created.uuid || before.applicationKey !== created.name || before.definitionVersion !== c.payload.expectedDefinitionVersion) throw new h.Blocked('Original pre-save page owner read is missing or changed');
+  const current = await read(h, created, 'pages');
+  h.check('Original rejected page write preserves exact conditional owner version and complete retained public page evidence', same(sanitize(current), before) && current.definitionVersion === c.payload.expectedDefinitionVersion, current);
+  c.disposition = { evidenceSha256, originalJournalId: c.journalId, outcome: 'rejected-before-owner-write', definitionVersion: current.definitionVersion, noCommandReplayed: true };
+  c.confirmed = true; h.persist(); return c.disposition;
+}
+// This current page DTO omits a nil detail-source pagination field. Preserve
+// the original journal; accept only that exact acknowledged representation.
+function acknowledgedPageContent(content) {
+  const current = structuredClone(content);
+  for (const source of current?.dataSources || [])
+    if (source.mode === 'detail' && source.pagination === null) delete source.pagination;
+  return current;
+}
 async function reconcileAcknowledgedAuthorWrites(h) {
   const pending = h.state.resources.filter(r => r.phase !== 'deleted' && r.pendingAuthoringSave?.confirmed === false);
   if (!pending.length) throw new h.Blocked('No original unconfirmed acknowledged author write');
   const proof = [];
   for (const r of pending) {
+    if (r.pendingAuthoringSave.route === base + r.id) {
+      proof.push(await require('./installed_icon_cases.cjs').reconcileImageUpload(h, r));
+      continue;
+    }
     const intent = r.pendingAuthoringSave, created = r.creation?.response?.data?.value, response = intent.response;
-    if (r.kind !== 'definition' || r.collection !== base || !created || !r.creation.ownershipConfirmed || created.id !== r.id || !same(h.admin.identity, r.creation.actorIdentity) || h.admin.origin !== r.creation.origin || intent.method !== 'PUT' || !['pages', 'package-members'].some(member => intent.route === route(created, member)) || !response || !h.good(response) || response.data.value?.applicationId !== r.id || response.data.value.applicationUuid !== created.uuid || response.data.value.applicationKey !== created.name || response.data.value.definitionVersion <= intent.payload.expectedDefinitionVersion || !same(response.data.value.content, intent.payload.content)) throw new h.Blocked('No exact original accepted author-write proof; retain journal without replay');
+    if (r.kind !== 'definition' || r.collection !== base || !created || !r.creation.ownershipConfirmed || created.id !== r.id || !same(h.admin.identity, r.creation.actorIdentity) || h.admin.origin !== r.creation.origin || intent.method !== 'PUT' || !['pages', 'package-members'].some(member => intent.route === route(created, member)) || !response || !h.good(response) || response.data.value?.applicationId !== r.id || response.data.value.applicationUuid !== created.uuid || response.data.value.applicationKey !== created.name || response.data.value.definitionVersion <= intent.payload.expectedDefinitionVersion || !same(response.data.value.content, intent.route === route(created, 'pages') ? acknowledgedPageContent(intent.payload.content) : intent.payload.content)) throw new h.Blocked('No exact original accepted author-write proof; retain journal without replay');
     const app = (await h.ok(h.admin, 'GET', base + r.id)).value;
     h.check('Original author write still belongs to the original exact definition', app.id === r.id && app.uuid === created.uuid && app.name === created.name);
     const current = (await h.ok(h.admin, 'GET', intent.route)).value;
-    h.check('Independent original owner confirms the complete acknowledged original save', current.applicationId === r.id && current.applicationUuid === created.uuid && current.definitionVersion === response.data.value.definitionVersion && same(current.content, intent.payload.content));
+    h.check('Independent original owner confirms the complete acknowledged original save', current.applicationId === r.id && current.applicationUuid === created.uuid && current.definitionVersion === response.data.value.definitionVersion && same(current.content, response.data.value.content));
     if (!same(h.admin.identity, r.creation.actorIdentity) || h.admin.origin !== r.creation.origin) throw new h.Blocked('Original actor changed during acknowledged-write read');
-    intent.reconciliation = { originalJournalId: intent.journalId, applicationId: r.id, applicationUuid: created.uuid, version: current.definitionVersion, contentDigest: 'sha256:' + crypto.createHash('sha256').update(JSON.stringify(current.content)).digest('hex'), noCommandReplayed: true };
+    intent.reconciliation = { originalJournalId: intent.journalId, applicationId: r.id, applicationUuid: created.uuid, version: current.definitionVersion, omittedDetailNullPagination: !same(intent.payload.content, response.data.value.content), contentDigest: 'sha256:' + crypto.createHash('sha256').update(JSON.stringify(current.content)).digest('hex'), noCommandReplayed: true };
     intent.confirmed = true; h.persist(); proof.push(intent.reconciliation);
   }
   return proof;
 }
-module.exports = { handlers, observeLostPageSave, reconcileRejectedDefinitionCreations, reconcileAcknowledgedAuthorWrites,
-  authorFixture: { fixture, read, save } };
+module.exports = { handlers, observeLostPageSave, reconcileRejectedDefinitionCreations, reconcileAcknowledgedAuthorWrites, reconcileRejectedPageWrite,
+  editedAuthorContent, authorFixture: { fixture, read, save } };

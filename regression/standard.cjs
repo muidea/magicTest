@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { isDeepStrictEqual: sameIdentity } = require('node:util');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { handlers } = require('./standard_cases.cjs');
 const { waitLoginForm, waitLoginError, observeLogin } = require('./login_readiness.cjs');
 const { withOriginalCasForms } = require('./cas_form_transport.cjs');
@@ -24,15 +24,20 @@ class Blocked extends Error {}
 class ProductFailure extends Error {}
 const selectCases = catalog => catalog.cases.filter(c => c.required && c.execution.some(p => p.suite === 'standard') && (!options.case || c.id === options.case) && (!options.cases || options.cases.split(',').includes(c.id)) && (!options.exclude || !options.exclude.split(',').includes(c.id)));
 async function main() {
-  const recoveryFlags = ['reconcile-authoring-deletions', 'reconcile-rejected-definitions', 'reconcile-authoring-writes', 'reconcile-authoring-conflicts', 'reconcile-cas-identities'];
+  const recoveryFlags = ['reconcile-authoring-deletions', 'reconcile-rejected-definitions', 'reconcile-authoring-writes', 'reconcile-rejected-page-writes', 'reconcile-authoring-conflicts', 'reconcile-cas-identities', 'reconcile-business-creates', 'reconcile-member-scopes', 'reconcile-matrix-write-refusals', 'reconcile-endpoint-template-refusals', 'reconcile-source-lifecycles', 'reconcile-proxy-session-refusals'];
   for (const flag of recoveryFlags) if (options[flag] && options[flag] !== 'true') throw Error('Recovery operation requires literal true: ' + flag);
   if ([...recoveryFlags, 'reconcile-cleanup', 'resume-cleanup', 'resume-tracked-cleanup'].filter(flag => options[flag]).length > 1) throw Error('Select exactly one recovery operation');
   if (options['authoring-conflict-evidence'] && !options['reconcile-authoring-conflicts']) throw Error('Original conflict evidence requires conflict recovery mode');
   if (options['reconcile-authoring-conflicts'] && !options['authoring-conflict-evidence']) throw Error('Conflict recovery requires the original immutable case evidence');
+  if (!!options['reconcile-rejected-page-writes'] !== !!options['author-write-refusal-evidence']) throw Error('Rejected page write recovery requires its original immutable case evidence and explicit recovery mode');
+  if (!!options['reconcile-source-lifecycles'] !== !!options['source-lifecycle-evidence']) throw Error('Source lifecycle recovery requires exact original immutable case and cleanup evidence');
   if (options['reconcile-namespace-ingress'] && (!options['resume-tracked-cleanup'] || options['reconcile-namespace-ingress'] !== 'true')) throw Error('Ingress recovery requires explicit original tracked cleanup and literal true');
   if (options['file-deletion-proofs'] && !options['resume-tracked-cleanup']) throw Error('File deletion proofs require explicit original tracked cleanup recovery');
   if (options['namespace-creation-proofs'] && !options['resume-tracked-cleanup']) throw Error('Namespace proofs require explicit original tracked cleanup recovery');
+  if (options['namespace-rollback-proofs'] && !options['resume-tracked-cleanup']) throw Error('Namespace rollback proofs require original tracked cleanup recovery');
   if ((options['dns-failure-proofs'] || options['reconcile-retired-credentials'] || options['reconcile-retired-creators']) && !options['resume-tracked-cleanup']) throw Error('Transport disposition requires explicit original tracked cleanup recovery');
+  if (options['package-refusal-proofs'] && !options['resume-tracked-cleanup']) throw Error('Package refusal disposition requires explicit original tracked cleanup recovery');
+  if (options['native-abort-proofs'] && !options['resume-tracked-cleanup']) throw Error('Native abort disposition requires original tracked cleanup recovery');
   if (options['reconcile-retired-creators'] && options['reconcile-retired-creators'] !== 'true') throw Error('Retired creator disposition requires literal true');
   if (options['reconcile-retired-credentials'] && options['reconcile-retired-credentials'] !== 'true') throw Error('Credential disposition requires literal true');
   if (options['dry-run'] === 'true') {
@@ -44,6 +49,7 @@ async function main() {
   for (const key of ['credentials', 'output', 'private-state', 'baseline-health']) if (!options[key]) throw Error('Missing --' + key);
   const out = path.resolve(options.output), priv = path.resolve(options['private-state']);
   if (priv === root || priv.startsWith(root + path.sep)) throw Error('Private state must stay outside repository');
+  if (recoveryFlags.some(flag => options[flag]) && !fs.existsSync(path.join(priv, 'state.json'))) throw Error('Recovery requires an existing original private state; never create replacement recovery state');
   if (fs.existsSync(path.join(out, 'results.json'))) throw Error('Output already contains results. Use a new output directory to preserve prior execution evidence.');
   fs.mkdirSync(priv, { recursive: true, mode: 0o700 });
   fs.mkdirSync(out, { recursive: true });
@@ -71,20 +77,35 @@ async function main() {
   };
   persist();
   const browser = await chromium.launch({ executablePath: options.chrome || chromium.executablePath(), headless: true, args: ['--no-sandbox', '--no-proxy-server', '--host-resolver-rules=MAP *.local.vpc 127.0.0.1'] });
+  // Direct original-state recovery may reuse the private directory. The
+  // orchestrator always creates a fresh one and rejects a preexisting marker.
+  if (!fs.existsSync(path.join(priv, 'browser-started.json'))) fs.writeFileSync(path.join(priv, 'browser-started.json'), JSON.stringify({ launched: true }), { mode: 0o600, flag: 'wx' });
   const sessions = [], teardowns = [];
   let trace = [], currentCase = 'preparation';
   const write = (name, value) => { const file = path.join(attemptDir, name); fs.writeFileSync(file, JSON.stringify(sanitize(value), null, 2) + '\n', { flag: 'wx' }); return path.relative(out, file); };
   const fail = message => { throw new ProductFailure(message); };
   const check = (message, condition, details) => { trace.push({ kind: 'assertion', message, passed: !!condition, details: sanitize(details) }); if (!condition) fail(message); };
+  // Installation lifecycle operations wait up to 30s for a Gateway route receipt
+  // and then stage/launch Base. A 30s client abort would cancel that server wait
+  // and turn a valid transition into "wait was canceled", so lifecycle POSTs use
+  // a bounded longer budget while every other request keeps the 30s bound.
+  const requestTimeout = (method, route) => {
+    if (method === 'POST' && /^\/panel\/application\/(installations|deployment-requests)\//.test(route)) return 120000;
+    // CAS management collection reads build per-item views over a growing
+    // identity directory; keep a bounded larger budget than ordinary reads.
+    if (method === 'GET' && /^\/cas\/namespaces\//.test(route)) return 90000;
+    return 30000;
+  };
   const api = async (actor, method, route, body, extraHeaders = {}, directPublic = false) => {
     if (directPublic && (method !== 'GET' || !route.startsWith('/') || route.startsWith('//'))) throw Error('Direct public probe must be a same-origin GET');
     const endpoint = directPublic || route.startsWith('/api/') ? route : '/api/v1/web/proxy' + route;
-    const result = directPublic ? await publicGet(actor, route) : await actor.page.evaluate(async ({ endpoint, method, body, extraHeaders }) => {
-      const r = await fetch(endpoint, { method, headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30000) });
+    const timeoutMs = requestTimeout(method, route);
+    const result = directPublic ? await publicGet(actor, route) : await actor.page.evaluate(async ({ endpoint, method, body, extraHeaders, timeoutMs }) => {
+      const r = await fetch(endpoint, { method, headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders }, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(timeoutMs) });
       const text = await r.text(); let data;
       try { data = JSON.parse(text); } catch { data = { text: text.slice(0, 1000) }; }
       return { status: r.status, data };
-    }, { endpoint, method, body, extraHeaders });
+    }, { endpoint, method, body, extraHeaders, timeoutMs });
     trace.push(sanitize({ kind: 'request', actor: actor.identity, origin: actor.origin, method, route, ...(directPublic ? { transport: 'direct-public-read' } : {}), body, headers: extraHeaders, response: result }));
     return result;
   };
@@ -151,7 +172,7 @@ async function main() {
     }
     await page.locator('input[name=password]').fill(password);
     await page.locator('form[action="/oauth/login"] button[type=submit]').click();
-    await page.waitForFunction(() => document.querySelector('form[action="/oauth/password/change"]') || ['/panel', '/portal'].some(p => location.pathname.startsWith(p)) || new URL(location.href).searchParams.has('error'), {}, { timeout: 30000 });
+    await page.waitForFunction(() => document.querySelector('form[action="/oauth/password/change"]') || ['/panel', '/portal'].some(p => location.pathname.startsWith(p)) || new URL(location.href).searchParams.has('error'), {}, { timeout: 60000 });
     if (await page.locator('form[action="/oauth/password/change"]').count()) {
       if (!newPassword) throw new Blocked('First password change needs a dedicated account credential');
       if (beforePasswordChange) await beforePasswordChange(actor);
@@ -189,7 +210,7 @@ async function main() {
     const addressed = { context, page, origin: targetOrigin, identity: actor.identity };
     sessions.push(addressed);
     trace.push({ kind: 'session-host-boundary', originalIdentity: actor.identity, sourceOrigin: actor.origin, targetOrigin, credentialSource: 'unchanged original BFF cookies; values never archived' });
-    await page.goto(targetOrigin + '/portal/', { waitUntil: 'networkidle', timeout: 30000 });
+    await page.goto(targetOrigin + '/portal/', { waitUntil: 'networkidle', timeout: 60000 });
     return addressed;
   }
   async function anonymous(namespace, prepareSessionCheck) {
@@ -224,7 +245,7 @@ async function main() {
       await form.account.fill(account);
       await form.password.fill(password);
       // One original command only; wait for its navigation and actual rendered feedback.
-      await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle', timeout: 30000 }), form.submit.click()]);
+      await Promise.all([page.waitForNavigation({ waitUntil: 'networkidle', timeout: 60000 }), form.submit.click()]);
       await waitLoginForm(page);
       await waitLoginError(page);
       check('Rejected login stays on official login form', new URL(page.url()).pathname === '/login/cas');
@@ -243,6 +264,9 @@ async function main() {
   };
   const screenshot = async (actor, label) => { const name = currentCase + '-' + label + '.png'; const file = path.join(attemptDir, name); if (fs.existsSync(file)) throw Error('Screenshot evidence label reused: ' + name); await actor.page.screenshot({ path: file, fullPage: true, animations: 'disabled' }); const relative = path.relative(out, file); trace.push({ kind: 'screenshot', path: relative, sha256: 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') }); return relative; };
   const h = { fileUploadMaxBytes: options['file-upload-max-bytes'] === undefined ? undefined : Number(options['file-upload-max-bytes']), teardowns, observe: event => trace.push(sanitize(event)), fs, path, root, state, persist, browser, login, anonymous, namespaceDependent, rejectedLogin, sessionAtOrigin, api, ownerApi, protocol, publicGet: (actor, route) => api(actor, 'GET', route, undefined, {}, true), ok, check, good, denied, inaccessible, invalid, Blocked, create, createAs, owned, screenshot, credentials, authorizedAdmin,
+    deliveryFixtureConfig: options['delivery-fixture-config'],
+    databaseFixtureMode: options['database-fixture-mode'],
+    runtimeSnapshotConfig: options['runtime-snapshot-config'],
     directory(actor, route, options) { return readDirectory(h, actor, route, options); },
     need(key) { if (!state.fixtures[key]) throw new Blocked('Missing current-run fixture: ' + key); return state.fixtures[key]; },
     async gone(collection, id) { const r = await api(admin, 'GET', collection + id); check('Owner confirms target absent', r.data?.error?.code === 2 && r.data.value == null, r); },
@@ -270,14 +294,45 @@ async function main() {
       const originalBytes = fs.readFileSync(options['resume-tracked-cleanup']);
       const original = JSON.parse(originalBytes);
       const pending = require('./cleanup_recovery.cjs').bindOriginalCleanup(state, original);
+      ownerHarness.originalCleanupEvidence = original;
+      ownerHarness.originalCleanupBytes = originalBytes;
+      ownerHarness.originalCleanupSha256 = 'sha256:' + crypto.createHash('sha256').update(originalBytes).digest('hex');
       const previousHealth = JSON.parse(fs.readFileSync(path.resolve(path.dirname(options['resume-tracked-cleanup']), '../../../health-before/results.json')));
       check('Recovery addresses the exact original deployment candidate', previousHealth.environment.fingerprint === baseline.environment.fingerprint);
+      if (options['native-abort-proofs']) {
+        const spec = JSON.parse(fs.readFileSync(options['native-abort-proofs']));
+        const originalCleanup = fs.readFileSync(spec.cleanupFile), diagnosis = fs.readFileSync(spec.diagnosisFile);
+        check('Native disposition inputs match immutable cleanup and exact original component diagnosis hashes',
+          'sha256:' + crypto.createHash('sha256').update(originalCleanup).digest('hex') === spec.cleanupSha256 &&
+          'sha256:' + crypto.createHash('sha256').update(diagnosis).digest('hex') === spec.diagnosisSha256);
+        const evidence = JSON.parse(originalCleanup), components = JSON.parse(diagnosis).observations, proofs = [];
+        for (const r of pending.filter(r => r.kind === 'native-runtime-request'))
+          proofs.push(await require('./native_runtime_cases.cjs').confirmPackageDisposition(ownerHarness, r, evidence, spec.cleanupSha256, components.filter(v => v.requestId === r.id)));
+        write('original-native-package-disposition.json', { proofs, trace });
+      }
+      const roleSourceProofs = [];
+      for (const resource of pending.filter(r => r.kind === 'account')) {
+        for (const command of resource.authorityCommands || []) {
+          if (command.outcome !== 'unknown' || !command.before || !command.actorIdentity || command.route !== resource.collection + resource.id) continue;
+          const proof = await require('./audit_cases.cjs').confirmRoleChange(ownerHarness, h.admin, resource, command);
+          roleSourceProofs.push({ accountId: resource.id, proof });
+        }
+      }
+      if (roleSourceProofs.length) write('original-role-source-confirmation.json', { originalCleanupSha256: 'sha256:' + crypto.createHash('sha256').update(originalBytes).digest('hex'), proofs: roleSourceProofs, trace });
       if (options['namespace-creation-proofs']) {
         const proofs = JSON.parse(fs.readFileSync(options['namespace-creation-proofs'])).entries;
         check('Namespace recovery contains distinct original owner proof references', Array.isArray(proofs) && new Set(proofs.map(p => p.name)).size === proofs.length);
         for (const resource of pending.filter(r => r.kind === 'namespace' && !r.id)) {
           const proof = proofs.find(p => p.name === resource.creation.intended.name);
           if (proof) await require('./cleanup_recovery.cjs').recoverNamespace(ownerHarness, resource, proof);
+        }
+      }
+      if(options['namespace-rollback-proofs']) {
+        const proofs=JSON.parse(fs.readFileSync(options['namespace-rollback-proofs'])).entries;
+        check('Rollback proof entries preserve distinct original namespace identities',Array.isArray(proofs) && new Set(proofs.map(p=>p.name)).size===proofs.length);
+        for(const resource of pending.filter(r=>r.kind==='namespace' && !r.id)) {
+          const proof=proofs.find(p=>p.name===resource.creation.intended.name);
+          if(proof)await require('./cleanup_recovery.cjs').confirmRolledBackNamespace(ownerHarness,resource,proof);
         }
       }
       if (options['reconcile-namespace-ingress']) for (const resource of pending.filter(r => r.kind === 'namespace' && r.id)) await require('./namespace_availability.cjs').reconcileIngress(ownerHarness, resource);
@@ -291,6 +346,7 @@ async function main() {
         check('Original pending children have one exact tenant owner', identities.every(identity => sameIdentity(identity, identities[0])));
         h[key] = await login(identities[0].account, state.fixtures[key + 'Password'], actorNamespace.name);
       }
+      await require('./cleanup_authentication.cjs').restoreScopedCreator(h,pending);
       if (options['file-deletion-proofs']) {
         const proofs = JSON.parse(fs.readFileSync(options['file-deletion-proofs']));
         check('File disposition binds the exact original cleanup bytes', proofs.originalCleanupDigest === 'sha256:' + crypto.createHash('sha256').update(originalBytes).digest('hex'));
@@ -312,6 +368,19 @@ async function main() {
           check('DNS proof binds exactly one pending original intent', matches.length === 1);
           const disposition = await require('./cleanup_recovery.cjs').confirmUnsentTemplate(ownerHarness, matches[0], JSON.parse(bytes));
           disposition.caseSha256 = proof.sha256; persist();
+        }
+      }
+      if (options['package-refusal-proofs']) {
+        const proofs = JSON.parse(fs.readFileSync(options['package-refusal-proofs']));
+        check('Package refusal proofs bind exact original cleanup bytes and distinct journals', proofs.originalCleanupDigest === 'sha256:' + crypto.createHash('sha256').update(originalBytes).digest('hex') &&
+          Array.isArray(proofs.entries) && proofs.entries.length > 0 && new Set(proofs.entries.map(p => p.journalId)).size === proofs.entries.length);
+        for (const proof of proofs.entries) {
+          check('Package refusal references exact original case in the immutable cleanup attempt', /^F031-00[23]\.json$/.test(proof.caseFile));
+          const bytes = fs.readFileSync(path.join(path.dirname(options['resume-tracked-cleanup']), proof.caseFile));
+          check('Package refusal original case bytes match explicit proof digest', proof.sha256 === 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex'));
+          const matches = pending.filter(r => r.kind === 'package-preview-request' && r.creation?.journalId === proof.journalId);
+          check('Package refusal proof binds one exact original request journal', matches.length === 1);
+          await require('./delivery_cases.cjs').reconcilePreviewRefusal(ownerHarness, matches[0], JSON.parse(bytes), proof.sha256);
         }
       }
       if (options['reconcile-retired-creators']) for (const resource of pending.filter(r => r.actor && !h[r.actor])) {
@@ -374,6 +443,41 @@ async function main() {
       for (const actor of sessions) { await actor.context.close(); }
       await browser.close();
       return;
+    } else if (options['reconcile-proxy-session-refusals'] === 'true') {
+      const pending = state.resources.filter(r => r.phase === 'intent' && r.creation?.outcome === 'unconfirmed' && r.creation.response?.status === 503);
+      if (!pending.length) throw new Blocked('No original acknowledged session refusals to reconcile');
+      const proofs = [];
+      for (const resource of pending) proofs.push(await require('./cleanup_recovery.cjs').confirmProxySessionRefusal(ownerHarness, resource));
+      write('proxy-session-refusal-reconciliation.json', { environment: baseline.environment, proofs, trace });
+      selected.length = 0;
+    } else if (options['reconcile-endpoint-template-refusals'] === 'true') {
+      const pending = state.resources.filter(r => r.phase !== 'deleted' && r.endpointAuthorityCommands?.some(c => c.outcome === 'unknown'));
+      if (!pending.length) throw new Blocked('No original pending Endpoint template refusal');
+      const proofs = [];
+      for (const resource of pending) proofs.push(await require('./service_contract_cases.cjs').reconcileEndpointTemplateRefusal(ownerHarness, resource));
+      write('endpoint-template-refusal-reconciliation.json', { environment: baseline.environment, proofs, trace });
+      selected.length = 0;
+    } else if (options['reconcile-matrix-write-refusals'] === 'true') {
+      const pending = require('./cleanup_recovery.cjs').pendingBusinessReconciliation(state.resources, 'matrix-write-refusal');
+      if (!pending.length) throw new Blocked('No original unresolved matrix write refusal');
+      const proofs = [];
+      for (const resource of pending) proofs.push(await require('./application_authority_cases.cjs').reconcileMatrixWriteRefusal(ownerHarness, resource));
+      write('matrix-write-refusal-reconciliation.json', { environment: baseline.environment, proofs, trace });
+      selected.length = 0;
+    } else if (options['reconcile-member-scopes'] === 'true') {
+      const pending = state.resources.filter(r => r.kind === 'account' && r.phase !== 'deleted' && r.authorityCommands?.some(c => c.outcome === 'unknown'));
+      if (!pending.length) throw new Blocked('No original unresolved member scope assignment');
+      const proofs = [];
+      for (const resource of pending) proofs.push(await require('./application_authority_cases.cjs').reconcile(ownerHarness, resource));
+      write('member-scope-reconciliation.json', { environment: baseline.environment, proofs, trace });
+      selected.length = 0;
+    } else if (options['reconcile-business-creates'] === 'true') {
+      const pending = require('./cleanup_recovery.cjs').pendingBusinessReconciliation(state.resources, 'business-create');
+      if (!pending.length) throw new Blocked('No original unresolved business records to reconcile');
+      const proofs = [];
+      for (const resource of pending) proofs.push(await require('./business_cases.cjs').reconcile(ownerHarness, resource));
+      write('business-create-reconciliation.json', { environment: baseline.environment, proofs, trace });
+      selected.length = 0;
     } else if (options['reconcile-cas-identities'] === 'true') {
       const original = state.resources.find(r => r.actor === 'tenantAdmin' && r.phase !== 'deleted');
       const identity = original?.actorIdentity || original?.creation?.actorIdentity;
@@ -388,6 +492,29 @@ async function main() {
       const bytes = fs.readFileSync(options['authoring-conflict-evidence']);
       const proof = await require('./authoring_conflict_recovery.cjs').reconcileConflict(ownerHarness, pending[0], JSON.parse(bytes), 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex'));
       write('authoring-conflict-reconciliation.json', { environment: baseline.environment, proof, trace });
+      selected.length = 0;
+    } else if (options['reconcile-rejected-page-writes'] === 'true') {
+      const pending = state.resources.filter(r => r.phase !== 'deleted' && r.pendingAuthoringSave?.confirmed === false);
+      if (pending.length !== 1) throw new Blocked('Rejected page recovery requires one original pending save');
+      const bytes = fs.readFileSync(options['author-write-refusal-evidence']);
+      const proof = await require('./page_author_cases.cjs').reconcileRejectedPageWrite(ownerHarness, pending[0], JSON.parse(bytes), 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex'));
+      write('rejected-page-write-reconciliation.json', { environment: baseline.environment, proof, trace });
+      selected.length = 0;
+    } else if (options['reconcile-source-lifecycles'] === 'true') {
+      const spec = JSON.parse(fs.readFileSync(options['source-lifecycle-evidence'])), originalBytes = fs.readFileSync(spec.originalCleanup);
+      check('Source recovery binds exact original cleanup bytes', spec.cleanupSha256 === 'sha256:' + crypto.createHash('sha256').update(originalBytes).digest('hex'));
+      const pending = require('./cleanup_recovery.cjs').bindOriginalCleanup(state, JSON.parse(originalBytes)).filter(r => r.kind === 'source-effect-scenario');
+      check('Source recovery explicitly covers distinct original pending installations', pending.length > 0 && Array.isArray(spec.entries) && spec.entries.length === pending.length &&
+        new Set(spec.entries.map(v => v.installationId)).size === pending.length);
+      const proofs = [];
+      for (const resource of pending) {
+        const ref = spec.entries.find(v => v.installationId === resource.identity.installationId);
+        check('Source recovery references an original case file in its immutable attempt', !!ref && /^F(?:033-001|071-005)\.json$/.test(ref.caseFile));
+        const bytes = fs.readFileSync(path.join(path.dirname(spec.originalCleanup), ref.caseFile));
+        check('Original source case bytes match the exact proof digest', ref.sha256 === 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex'));
+        proofs.push(await require('./source_effect_cases.cjs').reconcileLifecycle(ownerHarness, resource, JSON.parse(bytes), ref.sha256));
+      }
+      write('source-lifecycle-reconciliation.json', { environment: baseline.environment, originalCleanupSha256: spec.cleanupSha256, proofs, trace });
       selected.length = 0;
     } else if (options['reconcile-authoring-writes'] === 'true') {
       const proof = await require('./page_author_cases.cjs').reconcileAcknowledgedAuthorWrites(h);
@@ -404,6 +531,9 @@ async function main() {
       for (const resource of pending) await reconcileAuthorDeletion(h, resource);
       write('authoring-deletion-reconciliation.json', { environment: baseline.environment, trace, resources: pending.map(r => ({ id: r.id, ...r.pendingAuthoringSave.reconciliation })) });
       selected.length = 0; // Recovery never runs cases or creates replacement fixtures.
+    } else if (require('./delivery_fixture.cjs').dedicatedDeliveryOnly(selected, handlers, h.deliveryFixtureConfig, state)) {
+      await require('./delivery_cases.cjs').fixture(ownerHarness);
+      check('Explicit isolated delivery-only executors validate their original published owner fixture without unrelated generic tenants', true, { cases: selected.map(c => c.id) });
     } else {
       for (const namespace of [state.fixtures.tenantA, state.fixtures.tenantB].filter(Boolean)) {
         const current = (await ok(admin, 'GET', '/cas/namespaces/' + namespace.id)).value;
@@ -454,8 +584,7 @@ async function main() {
           for (const actor of handler.actors || []) if (!h[actor]) throw new Blocked('Missing original test actor ' + actor + ': ' + prepError);
           await authorizedAdmin();
           for (const name of handler.actors || []) {
-            const session = await (handler.transport === 'owner-api' ? ownerApi : api)(h[name], 'GET', '/api/v1/web/session/');
-            if (!good(session) || session.data.value?.account?.account !== h[name].identity.account || session.data.value?.homeNamespace !== h[name].identity.namespace) throw new Blocked('AUTH-INVALID: original actor session is unavailable: ' + name);
+            await require('./session_lifecycle.cjs').readyActor(h,name,handler.transport === 'owner-api' ? ownerApi : api);
           }
           await handler(handler.transport === 'owner-api' ? ownerHarness : h);
           check('Case has real assertions', trace.some(x => x.kind === 'assertion'));
@@ -472,16 +601,53 @@ async function main() {
       results.push({ caseId: entry.id, suite: 'standard', status, method, role: 'original-admin-and-dedicated-test-subjects', namespace: state.fixtures.tenantA?.name || credentials.namespace, resource: state.prefix, observedAt: new Date().toISOString(), environmentFingerprint: baseline.environment.fingerprint, actual: status === 'passed' ? '本次执行全部已声明常规断言，操作及独立回读见逐例证据。' : reason, ...(reason ? { reason } : {}), ...(defectId ? { defectId } : {}), evidence });
       if (handler) console.log(JSON.stringify({ caseId: entry.id, status, reason }));
       fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ ...baseline, runId: state.prefix, results }, null, 2) + '\n');
+      if (handler) {
+        const parked = await require('./session_lifecycle.cjs').parkSessions(sessions);
+        if (parked.length) write(entry.id + '-browser-lifecycle.json', { caseId: entry.id, results: parked });
+      }
     }
   } finally {
     trace = []; const cleanup = [];
     if (admin) for (const r of [...state.resources].reverse()) {
       if (r.phase === 'deleted') continue;
       try {
+        if (r.kind === 'tls-material-restore') {
+          const proof = await require('./tls_delivery_cases.cjs').restoreMaterial(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
         await authorizedAdmin();
         await require('./cleanup_authentication.cjs').renewCleanupOwners(h, r, ownerApi);
+        if (r.kind === 'deployment-material-probe') {
+          const proof = require('./deployment_material_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ kind: r.kind, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'native-lifecycle-probe') {
+          const proof = await require('./native_lifecycle_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ kind: r.kind, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'generated-service-graph') {
+          const proof = await require('./generated_service_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ kind: r.kind, confirmed: true, ...proof }); continue;
+        }
         require('./resource_lifecycle.cjs').guardFixtureAccountCleanup(h, r);
+        require('./business_action_cases.cjs').guardCleanup(h, r);
+        require('./scenario_commands.cjs').guard(h, r);
         require('./native_admission.cjs').guardDefinitionCleanup(h, r);
+        require('./native_package_cases.cjs').guardDefinitionCleanup(h, r);
+        require('./script_library_cases.cjs').guard(h, r);
+        if (r.capabilityAdmission?.some(c => c.outcome === 'unknown')) throw new Blocked('Original capability declaration command unresolved; preserve its exact definition');
+        if (r.modelDelivery) {
+          const proof = await require('./model_delivery.cjs').retained(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.scriptPublication?.outcome === 'confirmed') {
+          const proof = await require('./script_library_cases.cjs').retained(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'deployment-boundary') {
+          const proof = require('./deployment_cases.cjs').cleanupBoundary(h, r);
+          cleanup.push({ kind: r.kind, confirmed: true, ...proof }); continue;
+        }
         if (r.kind === 'branding-profile-restore') {
           const proof = await require('./branding_profile.cjs').restore(ownerHarness, r);
           cleanup.push({ ...r, confirmed: true, ...proof }); continue;
@@ -495,21 +661,85 @@ async function main() {
           const proof = await require('./file_cases.cjs').cleanup(ownerHarness, r);
           cleanup.push({ ...r, confirmed: true, ...proof }); continue;
         }
+        if (r.kind === 'delivery-fixture-restore') {
+          const proof = await require('./delivery_cases.cjs').restore(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'package-preview-request') {
+          const proof = await require('./delivery_cases.cjs').cleanupPreviewRequest(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'requester-preview-request') {
+          const proof = await require('./installation_request_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'bound-reference-probe') {
+          const proof = await require('./bound_reference_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'runtime-policy-probe') {
+          const proof = await require('./runtime_control_cases.cjs').cleanupPolicy(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'native-runtime-request') {
+          const proof = await require('./native_runtime_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ ...proof, ...r, confirmed: true }); continue;
+        }
+        if (r.kind === 'deployment-review-request') {
+          const proof = await require('./deployment_review_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (['native-provider-probe', 'native-package-probe'].includes(r.kind)) {
+          const proof = await require('./native_provider_access_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'deployment-review-guard') {
+          const proof = await require('./deployment_review_cases.cjs').reconcileGuard(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'package-integrity-probe') throw new Blocked('Original integrity upload/import/request lacks complete owner refusal and disposition; retain exact intent without replay');
+        if (r.kind === 'definition-metadata-restore') {
+          const proof = await require('./definition_metadata_cases.cjs').restore(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'instance-name-restore') {
+          const proof = await require('./instance_cases.cjs').restore(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'portal-identity-session') throw new Blocked('Original same-context identity verification remains incomplete; preserve login journal without replay');
+        if (r.kind === 'source-effect-scenario') throw new Blocked('Original source/effect scenario disposition is incomplete; retain exact source/task/target and installation, no guessed teardown or source replay');
+        if (r.kind === 'business-record') {
+          const proof = await require('./business_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
         if (r.kind === 'feedback-ticket') {
           const proof = await require('./feedback_cases.cjs').cleanup(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
+        if (r.kind === 'lifecycle-admission-probe') {
+          const proof = await require('./lifecycle_admission_cases.cjs').cleanup(ownerHarness, r);
           cleanup.push({ ...r, confirmed: true, ...proof }); continue;
         }
         if (r.kind === 'native-admission-probe') {
           const proof = await require('./native_admission.cjs').cleanup(ownerHarness, r);
           r.phase = 'deleted'; persist(); cleanup.push({ ...r, confirmed: true, ...proof }); continue;
         }
+        if (r.kind === 'member-access-retirement') {
+          const proof = await require('./application_authority_cases.cjs').retireAccess(ownerHarness, r);
+          cleanup.push({ ...r, confirmed: true, ...proof }); continue;
+        }
         if (r.authorityCommands?.some(command => command.outcome === 'unknown')) throw new Blocked('Original authority assignment command remains unresolved; retain exact original account and command journal');
+        if (r.kind === 'role-template' && state.resources.some(child => child.phase !== 'deleted' && child.endpointAuthorityCommands?.some(c => c.outcome === 'unknown' && (c.body.roleTemplateKeys.includes(r.creation?.intended?.key) || c.before?.templateRefs?.some(t => t.key === r.creation?.intended?.key))))) throw new Blocked('Original Endpoint template replacement unresolved; retain exact bound template');
         if (r.availability?.commands.some(command => command.outcome === 'unknown')) throw new Blocked('Original namespace availability command remains unresolved; preserve owner receipt and exact command journal');
         if (r.oauthPolicyCommand && r.oauthPolicyCommand.outcome !== 'confirmed') throw new Blocked('Original OAuth policy command remains unresolved; preserve namespace for owner confirmation');
         if (r.oauthPolicyCommands?.some(command => command.outcome !== 'confirmed')) throw new Blocked('Original access policy command remains unresolved; preserve namespace for owner confirmation');
         if (r.pendingAuthoringSave && r.pendingAuthoringSave.confirmed !== true) throw new Blocked('Original author save remains unresolved; retain its definition and exact command journal');
+        if (r.metadataJournal?.commands.some(c => c.outcome === 'unknown')) throw new Blocked('Original definition metadata command remains unresolved; retain exact original identity');
+        if (r.definitionRejections?.some(c => c.outcome === 'unknown')) throw new Blocked('Original negative definition creation remains unresolved; retain exact source and command journal');
+        require('./authority_retry_cases.cjs').protectCleanup(ownerHarness, r);
         if (r.pendingServiceCommands?.some(command => !command.confirmed)) throw new Blocked('Original service command remains unresolved; retain its exact owner resource and command journal');
         if (r.pendingDatabaseCommands?.some(command => !command.confirmed)) throw new Blocked('Original database command remains unresolved; retain its exact physical target and owner journal');
+        if (r.kind === 'database-instance' && require('./storage_admission_cases.cjs').pendingRequests(state, r.id)) throw new Blocked('Original storage approval request remains unresolved; retain its selected database instance and placement');
         if (r.kind === 'service' && state.resources.some(publication => publication.kind === 'publication' && publication.creation?.intended?.service?.id === r.id && publication.pendingServiceCommands?.some(command => !command.confirmed))) throw new Blocked('Original publication command remains unresolved; retain its exact service owner');
         if (r.kind.startsWith('service-graph-')) {
           const graph = require('./service_graph.cjs');
@@ -551,7 +781,7 @@ async function main() {
         }
         if (r.creation) {
           if (r.kind === 'service' && state.resources.some(attempt => attempt.kind === 'service-identity-attempt' && attempt.phase !== 'deleted' && attempt.original?.some(value => value.id === r.id))) throw new Blocked('Service identity attempt is unresolved; retain its original fixture for owner reconciliation');
-          if (r.kind === 'namespace' && state.resources.some(child => child !== r && child.phase !== 'deleted' && (child.collection?.startsWith('/cas/namespaces/' + r.name + '/') || child.creation?.actorIdentity?.namespace === r.name || child.actorIdentity?.namespace === r.name || child.name === r.name))) throw new Blocked('Original namespace has unresolved tracked children; retain their owner evidence before aggregate deletion');
+          if (r.kind === 'namespace' && state.resources.some(child => child !== r && child.phase !== 'deleted' && (child.collection?.startsWith('/cas/namespaces/' + r.name + '/') || child.creation?.actorIdentity?.namespace === r.name || child.actorIdentity?.namespace === r.name || child.name === r.name || child.storageAdmissionNamespace === r.name || ['deployment-review-request', 'native-provider-probe'].includes(child.kind) && child.commands?.some(c => c.actorIdentity?.namespace === r.name)))) throw new Blocked('Original namespace has unresolved tracked children; retain their owner evidence before aggregate deletion');
           const proof = await deleteResource(h, cleanupActor, r);
           let retirement;
           if (r.kind === 'namespace') {

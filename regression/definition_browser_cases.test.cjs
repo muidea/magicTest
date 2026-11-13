@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { observeAuthorSave, reconcileAuthorDeletion } = require('./definition_browser_cases.cjs');
 
 test('author UI records exact PUT/DELETE before dispatch and preserves unconfirmed owner outcomes', async () => {

@@ -57,7 +57,16 @@ async function deleteResource(h, actor, r) {
     h.check('Recovery confirms the original submitted identity', !key || current.data.value[key] === r.creation.intended[key], current);
     r.creation.ownershipConfirmed = true; h.persist();
   }
-  if (r.deletion) throw new h.Blocked('Original DELETE result remains open; no command replay without an owner receipt');
+  if (r.deletion) {
+    const key=r.creation.intended.key, refusal=r.deletion.response;
+    if(r.kind!=='role-template' || !/^\/cas\/namespaces\/[^/]+\/role-templates\/$/.test(r.collection) || !key || r.deletion.outcome!=='unconfirmed' || refusal?.status!==200 || refusal.data?.error?.code!==4 || refusal.data.error.message!=='role template '+key+' is bound by subjects; unbind it before deletion' || refusal.data.value!==null || current.data.value.key!==key) throw new h.Blocked('Original DELETE result remains open; no command replay without an owner receipt');
+    const query=new URLSearchParams({sourceType:'template|=',sourceKey:key+'|='});
+    const bindings=await h.directory(actor,r.collection.replace('/role-templates/','/subject-role-bindings/')+'?'+query);
+    originalActor(h,actor,r);
+    if(current.data.value.subjectCount!==0 || bindings.length!==0)throw new h.Blocked('Original template in-use refusal remains valid; retain bound subjects and deletion history');
+    (r.deletionAttempts ||= []).push({original:structuredClone(r.deletion),disposition:'Owner explicitly refused in-use deletion; complete current binding directory and template subjectCount independently confirm no remaining subjects.'});
+    delete r.deletion;h.persist();
+  }
   r.deletion = { journalId: crypto.randomBytes(16).toString('hex'), outcome: 'unknown' }; h.persist();
   const response = await ownerRequest(h, actor, 'DELETE', r.collection + r.id);
   r.deletion.response = response; r.deletion.outcome = h.good(response) ? 'acknowledged' : 'unconfirmed'; h.persist();
@@ -69,9 +78,16 @@ async function deleteResource(h, actor, r) {
 }
 function guardFixtureAccountCleanup(h, r) {
   if (r.kind !== 'account') return;
+  if (h.state.resources.some(child => child.kind === 'member-access-retirement' && child.accountId === r.id && child.phase !== 'deleted')) throw new h.Blocked('Original account still has an unresolved direct access operation; retain original subject');
+  if (r.authorityCommands?.some(c => c.outcome === 'unknown')) throw new h.Blocked('Original account scope assignment remains unresolved; retain identity for owner reconciliation');
   const namespace = /^\/cas\/namespaces\/([^/]+)\/accounts\/$/.exec(r.collection)?.[1];
   const account = r.creation?.intended?.account;
+  if (namespace && account && h.state.resources.some(child => child !== r && child.phase !== 'deleted' &&
+      (child.endpointScenarioAccountId != null && child.endpointScenarioAccountId === r.id || child.kind === 'service-graph-subscription' && child.actorIdentity?.namespace === namespace && child.actorIdentity.account === account)))
+    throw new h.Blocked('Original subscriber account still has an open Endpoint scenario or subscription; retain actual subject');
+  if (namespace && account && h.state.resources.some(child => child.kind === 'business-record' && child.phase !== 'deleted' && child.commands?.some(c => c.outcome === 'unknown' && [c.actingIdentity, c.negativeActor].some(actor => actor?.namespace === namespace && actor.account === account)))) throw new h.Blocked('Original account participates in an unresolved ordinary business command; retain actual caller for original receipt recovery');
+  if (namespace && account && h.state.resources.some(child => child !== r && child.phase !== 'deleted' && ['deployment-review-request', 'native-provider-probe'].includes(child.kind) && child.commands?.some(c => c.actorIdentity?.namespace === namespace && c.actorIdentity.account === account))) throw new h.Blocked('Original reviewer still participates in an unresolved delivery; retain account for exact owner confirmation and teardown');
   if (namespace && account && h.state.resources.some(child => child !== r && child.phase !== 'deleted' && child.creation?.actorIdentity?.namespace === namespace && child.creation.actorIdentity.account === account)) throw new h.Blocked('Original account still owns unresolved created resources; retain its identity for formal cleanup');
-  if (namespace && account && h.state.resources.some(child => child !== r && child.phase !== 'deleted' && ['ordinary-file', 'feedback-ticket'].includes(child.kind) && child.actorIdentity?.namespace === namespace && child.actorIdentity.account === account)) throw new h.Blocked('Original account owns an unresolved file or feedback; retain creator for formal recovery and cleanup');
+  if (namespace && account && h.state.resources.some(child => child !== r && child.phase !== 'deleted' && ['ordinary-file', 'feedback-ticket', 'business-record'].includes(child.kind) && child.actorIdentity?.namespace === namespace && child.actorIdentity.account === account)) throw new h.Blocked('Original account owns an unresolved file, feedback or business record; retain creator for formal recovery and cleanup');
 }
 module.exports = { createResource, deleteResource, guardFixtureAccountCleanup };

@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { observeNativeCreate } = require('./native_cases.cjs');
 
 test('native UI journals one original POST and retains mismatched or unreadable owner outcomes', async () => {

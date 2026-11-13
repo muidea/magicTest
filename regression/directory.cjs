@@ -1,8 +1,11 @@
 // Public owner directory reads retain the original actor, route filters and
 // complete pagination. A partial projection is never proof of absence.
-async function readDirectory(h, actor, route, { pageSize = 100, maxPages = 100 } = {}) {
+async function readDirectory(h, actor, route, { pageSize = 100, maxPages = 100, idFormat = 'number' } = {}) {
   if (!actor?.identity || !route.startsWith('/') || route.startsWith('//') || route.includes('#')) throw new h.Blocked('Owner directory requires an original actor and same-origin resource path');
   if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 100 || !Number.isSafeInteger(maxPages) || maxPages < 1 || maxPages > 100) throw new h.Blocked('Invalid directory read budget');
+  if (!['number', 'string'].includes(idFormat)) throw new h.Blocked('Explicit supported directory identity format required');
+  const validIdentity = idFormat === 'number' ? id => Number.isSafeInteger(id) && id > 0
+    : id => typeof id === 'string' && id.length > 0 && id.length <= 128 && !/[\s\x00-\x1f\x7f]/.test(id);
   const url = new URL(route, 'https://owner.invalid');
   if (url.origin !== 'https://owner.invalid') throw new h.Blocked('Owner directory path resolves outside its origin');
   const original = structuredClone(actor.identity);
@@ -23,7 +26,7 @@ async function readDirectory(h, actor, route, { pageSize = 100, maxPages = 100 }
     const values = page.values === null && total === 0 ? [] : page.values;
     if (!Array.isArray(values) || values.length > pageSize || rows.length + values.length > total) throw new h.Blocked('Owner directory response is incomplete or malformed');
     for (const value of values) {
-      if (!value || !Number.isSafeInteger(value.id) || value.id <= 0 || ids.has(value.id)) throw new h.Blocked('Owner directory has missing, unsafe or repeated resource identities');
+      if (!value || !validIdentity(value.id) || ids.has(value.id)) throw new h.Blocked('Owner directory has missing, unsafe or repeated resource identities');
       ids.add(value.id); rows.push(value);
     }
     if (rows.length === total) {

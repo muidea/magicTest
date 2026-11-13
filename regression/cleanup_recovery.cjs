@@ -1,17 +1,81 @@
 const { isDeepStrictEqual: same } = require('node:util');
 const crypto = require('node:crypto');
+const { sanitize } = require('./evidence_sanitizer.cjs');
+// Selection is not disposition. Each mode still performs its full original
+// actor/intent/receipt proof; unrelated unknown commands remain protected.
+function pendingBusinessReconciliation(resources, mode) {
+  if (!['matrix-write-refusal', 'business-create'].includes(mode)) throw Error('Unknown business reconciliation mode');
+  return resources.filter(r => r.kind === 'business-record' && r.phase !== 'deleted' && r.commands?.some(c =>
+    c.outcome === 'unknown' && (mode === 'business-create' ? c.body?.operation === 'create' || c.body?.cancel === true :
+      c.body?.operation === 'update' && c.response?.status === 200 && c.response.data?.error?.code === 5 &&
+      c.response.data.error.message === '读取安装页面需要应用实例运行权限')));
+}
+async function confirmRolledBackNamespace(h,r,proof) {
+  const c=r.creation,name=c?.intended?.name;
+  if(r.kind!=='namespace' || r.collection!=='/panel/namespace-onboardings/' || r.phase!=='intent' || r.id!=null || c?.outcome!=='unknown' || c.response || !same(c.actorIdentity,h.admin.identity) || c.origin!==h.admin.origin || !name || proof?.name!==name || proof.sourceContainer!=='magiccas' || !/^[a-f0-9]{32}$/.test(proof.creationId || '') || proof.sourceLogSha256!=='sha256:'+crypto.createHash('sha256').update(proof.sourceLine || '').digest('hex') || !proof.sourceLine.includes('namespace provisioning failed namespace='+name+' ') || !proof.sourceLine.includes('creationId='+proof.creationId+' '))throw new h.Blocked('Original failed namespace owner identity and immutable source proof required');
+  const receipt=(await h.ok(h.admin,'GET','/cas/namespace/creations/'+proof.creationId)).value;
+  h.check('Formal original creation owner proves terminal rollback with exact namespace identity',receipt.creationId===proof.creationId && receipt.name===name && receipt.phase==='rolled-back' && Number.isSafeInteger(receipt.namespaceId) && receipt.namespaceId>0 && receipt.version>0 && !!receipt.failure && !receipt.namespace,receipt);
+  const absent=await h.api(h.admin,'GET','/cas/namespaces/'+receipt.namespaceId);
+  h.check('Independent original namespace ID is absent after owner rollback', [200,404].includes(absent.status) && absent.data?.error?.code===2 && absent.data.value==null,absent);
+  const rows=await h.directory(h.admin,'/cas/namespaces/');
+  h.check('Complete current owner directory excludes original rolled-back namespace name and ID',!rows.some(v=>v.id===receipt.namespaceId || v.name===name));
+  if(!same(c.actorIdentity,h.admin.identity) || c.origin!==h.admin.origin)throw new h.Blocked('Original rollback actor changed');
+  r.id=receipt.namespaceId;r.reconciliation={kind:'owner-terminal-namespace-rollback',receipt,sourceLogSha256:proof.sourceLogSha256,creationId:proof.creationId,noCommandReplayed:true};r.phase='deleted';h.persist();return r.reconciliation;
+}
+async function confirmProxySessionRefusal(h, r) {
+  const c = r.creation, response = c?.response;
+  const directory = r.kind === 'definition' && r.collection === '/panel/application/definitions/' ? r.collection
+    : r.kind === 'namespace' && r.collection === '/panel/namespace-onboardings/' ? '/cas/namespaces/' : null;
+  // Web.currentSession returns this response before proxy target selection.
+  // A generic 503, timeout or missing response is never a disposition proof.
+  if (!directory || r.phase !== 'intent' || r.id != null || c?.outcome !== 'unconfirmed' || response?.status !== 503 ||
+      !same(response.data, { text: 'application session refresh is still in progress; retry shortly\n' }) ||
+      !same(c.actorIdentity, h.admin.identity) || c.origin !== h.admin.origin || !c.intended?.name ||
+      !same(c.identity, r.kind === 'definition' ? { uuid: c.intended.uuid } : { name: c.intended.name }) ||
+      r.kind === 'definition' && !/^[a-f0-9]{32}$/.test(c.intended.uuid || '')) throw new h.Blocked('Original exact pre-dispatch session refusal required; generic errors and unknown writes remain open');
+  const rows = await h.directory(h.admin, directory);
+  if (!same(c.actorIdentity, h.admin.identity) || c.origin !== h.admin.origin) throw new h.Blocked('Original actor changed during refusal reconciliation');
+  h.check('Complete independent owner directory excludes every original refused resource identity', !rows.some(v => v.name === c.intended.name || r.kind === 'definition' && v.uuid === c.intended.uuid));
+  r.reconciliation = { kind: 'bff-session-refusal-before-target', originalJournalId: c.journalId,
+    originalResponseDigest: 'sha256:' + crypto.createHash('sha256').update(JSON.stringify(response)).digest('hex'),
+    ownerDirectory: directory, originalName: c.intended.name, noCommandReplayed: true,
+    proof: 'Exact Web currentSession refusal before proxy target dispatch and complete owner absence; original failed response retained.' };
+  r.phase = 'deleted'; h.persist(); return r.reconciliation;
+}
 const credentialIdentity = value => value == null ? value : Object.fromEntries(['name', 'clientId', 'credentialId', 'endpointId', 'scope', 'audience', 'status', 'issuedAt', 'expiresAt'].filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
 function bindOriginalCleanup(state, original) {
   if (!Array.isArray(original?.resources) || !Array.isArray(original.trace)) throw Error('Original cleanup evidence is incomplete');
   const pending = state.resources.filter(r => r.phase !== 'deleted');
   if (!pending.length) throw Error('No original pending resource to recover');
   for (const r of pending) {
+    const sameAnonymousResource = row => {
+      if (!['business-record', 'member-access-retirement', 'source-effect-scenario'].includes(r.kind)) return true;
+      if (Object.hasOwn(r, 'confirmed') || Object.hasOwn(r, 'error')) return false;
+      // These resources have no synthetic common id. Bind their full original
+      // command/installation snapshot, not an ambiguous kind + undefined id.
+      const { confirmed, error, ...snapshot } = row;
+      return same(sanitize(snapshot), sanitize(r));
+    };
     const sameFileIdentity = row => r.kind !== 'ordinary-file' || ['base', 'relative', 'source', 'path', 'expectedDigest', 'expectedSize', 'origin', 'actorName', 'visibility', 'uploadRoute'].every(key => same(row[key], r[key]));
     const matches = original.resources.filter(row => row.confirmed === false && row.kind === r.kind && row.collection === r.collection && row.id === r.id && row.name === r.name &&
-      sameFileIdentity(row) && same(row.brandingCommands, r.brandingCommands) && same(row.pendingDatabaseCommands, r.pendingDatabaseCommands) && same(row.availability, r.availability) && same(row.authorityCommands, r.authorityCommands) && row.actor === r.actor &&
+      sameAnonymousResource(row) && sameFileIdentity(row) && same(row.brandingCommands, r.brandingCommands) && same(row.pendingDatabaseCommands, r.pendingDatabaseCommands) && same(row.availability, r.availability) && same(row.authorityCommands, r.authorityCommands) && same(row.nativePackageDraftCommands, r.nativePackageDraftCommands) && row.actor === r.actor &&
+      same(sanitize(row.scriptPublication), sanitize(r.scriptPublication)) &&
+      same(sanitize(row.pendingServiceCommands), sanitize(r.pendingServiceCommands)) &&
+      (r.kind !== 'definition' || same(sanitize(row.modelDelivery), sanitize(r.modelDelivery))) &&
+      (!r.scriptPublication || same(sanitize(row.pendingAuthoringSave), sanitize(r.pendingAuthoringSave))) &&
       (r.kind !== 'service-graph-subscription' || row.requestId === r.requestId && row.serviceId === r.serviceId && row.actorOrigin === r.actorOrigin && same(row.receipt, r.receipt)) &&
       (r.kind !== 'branding-profile-restore' || row.namespace === r.namespace && row.origin === r.origin && same(row.original, r.original) && same(row.last, r.last) && same(row.commands, r.commands)) &&
       (r.kind !== 'log-retention-restore' || row.origin === r.origin && same(row.original, r.original) && same(row.last, r.last) && same(row.commands, r.commands)) &&
+      (!['deployment-review-request', 'deployment-review-guard'].includes(r.kind) || ['commands', 'last', 'installation', 'operation', 'placement', 'failedModelDisposition'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (!['native-provider-probe', 'native-package-probe'].includes(r.kind) || ['commands', 'imports', 'package', 'preexistingIds', 'packageAcknowledged', 'applicationUuid'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'native-admission-probe' || ['route', 'definitionId', 'variant', 'intended', 'journalId', 'outcome', 'response', 'before', 'after'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'bound-reference-probe' || ['origin', 'namespace', 'subject', 'name', 'consumer', 'foreignConsumer', 'expectedSize', 'expectedDigest', 'fileRef', 'commands'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'runtime-policy-probe' || ['origin', 'policyId', 'before', 'last', 'inventory', 'installations', 'commands'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'native-runtime-request' || ['commands', 'last', 'input', 'marker', 'installation', 'operation', 'uninstallLifecycleId', 'currentInstallation', 'failureRetirement', 'failureObservation'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'native-lifecycle-probe' || ['origin', 'config', 'scripts', 'privateRoot', 'env', 'journal', 'network', 'packageId', 'nativeIds', 'before', 'resume', 'sentinelNonce', 'probeImageLabels', 'probes', 'commands', 'ownerReads', 'peers'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'deployment-material-probe' || ['origin', 'config', 'sources', 'privateRoot', 'root', 'commands', 'tracked', 'originalFiles', 'expectedFiles', 'originalPeers', 'displacedFiles', 'snapshot', 'lock'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'lifecycle-admission-probe' || ['origin', 'reads', 'route', 'intended', 'expected', 'journalId', 'outcome', 'response', 'before', 'after'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
+      (r.kind !== 'requester-preview-request' || ['commands', 'last', 'requester'].every(key => same(sanitize(row[key]), sanitize(r[key])))) &&
       same(row.actorIdentity, r.actorIdentity) && same(row.ownerIdentity, r.ownerIdentity) &&
       same(row.creation?.actorIdentity, r.creation?.actorIdentity) && row.creation?.origin === r.creation?.origin &&
       same(row.creation?.identity, r.creation?.identity) && row.parentSubscriptionId === r.parentSubscriptionId && same(credentialIdentity(row.value), credentialIdentity(r.value)));
@@ -105,4 +169,4 @@ async function cleanupRetiredCreator(h, r, original) {
   r.recovery.outcome = 'confirmed'; r.phase = 'deleted'; h.persist();
   return r.recovery;
 }
-module.exports = { cleanupRetiredCreator, bindOriginalCleanup, recoverNamespace, recoveredNamespace, confirmUnsentTemplate, confirmRetiredCredential };
+module.exports = { pendingBusinessReconciliation, cleanupRetiredCreator, bindOriginalCleanup, recoverNamespace, recoveredNamespace, confirmUnsentTemplate, confirmRetiredCredential, confirmProxySessionRefusal, confirmRolledBackNamespace };

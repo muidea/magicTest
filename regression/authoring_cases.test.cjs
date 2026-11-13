@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { handlers } = require('./authoring_cases.cjs');
 
 test('lost-response handler confirms one actual commit, rejects false owner evidence, and preserves unresolved intent', async () => {

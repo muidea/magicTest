@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { chromium } = require('playwright');
+const { chromium } = require('./playwright.cjs');
 const { brandingAsset } = require('./owner_transport.cjs');
 test('brand multipart preserves exact original Host, cookies and bytes; refuses foreign paths and never retries lost writes', async () => {
   const browser = await chromium.launch({ headless: true }), seen = [], records = [], bytes = Buffer.from('finite-PNG-fixture');

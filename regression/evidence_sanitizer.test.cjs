@@ -1,6 +1,10 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { sanitize } = require('./evidence_sanitizer.cjs');
+test('temporary bound-upload capability is redacted while byte size and package digests stay diagnostic', () => {
+  assert.deepEqual(sanitize({ uploadRef: 'sensitive', upload_ref: 'sensitive', digest: 'sha256:original', size: 12 }),
+    { uploadRef: '[REDACTED]', upload_ref: '[REDACTED]', digest: 'sha256:original', size: 12 });
+});
 test('OAuth form and response credentials are redacted while numeric owner errors remain diagnostic', () => {
   const result = sanitize({ form: { code: 'private-code', state: 'private-state', nonce: 'private-nonce', transaction: 'private-tx', code_verifier: 'private-verifier', refresh_token: 'private-refresh' }, response: { error: { code: 19, message: 'conflict' } }, route: '/callback?code=private-code&state=private-state' });
   assert.doesNotMatch(JSON.stringify(result), /private-/);

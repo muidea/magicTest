@@ -3,6 +3,23 @@
 const { isDeepStrictEqual: same } = require('node:util');
 const crypto = require('node:crypto');
 const serviceRoute = '/panel/hub/services/';
+const roleKeys = rows => rows.map(r => r.module + ':' + r.key + ':' + r.status).sort();
+async function confirmRoleChange(h, actor, resource, command) {
+ const route=resource.collection+resource.id, before=command.before;
+ if(command.route!==route || !same(command.actorIdentity,actor.identity) || command.origin!==actor.origin ||
+    before?.id!==resource.id || before.account!==resource.creation?.intended.account || !h.good(command.response))
+  throw new h.Blocked('Original role-source command acknowledgement and actor required; no replacement replay');
+ const after=(await h.ok(actor,'GET',route)).value;
+ const keys=command.body.roleTemplateKeys, acknowledged=command.response.data?.value;
+ const sameRoles=same(roleKeys(before.effectiveRoles||[]),roleKeys(after.effectiveRoles||[]));
+ h.check('CAS acknowledges exact current template sources and changes authority revision only when effective roles change',
+  after.id===before.id && after.account===before.account &&
+  (sameRoles ? after.authorityRevision===before.authorityRevision : after.authorityRevision>before.authorityRevision) &&
+  same(after.templateRefs.map(r=>r.key).sort(),[...keys].sort()) &&
+  same(acknowledged?.templates?.map(r=>r.key).sort(),[...keys].sort()) &&
+  same(roleKeys(acknowledged?.effectiveRoles||[]),roleKeys(after.effectiveRoles||[])));
+ command.after=after;command.outcome='confirmed';h.persist();return {before,after};
+}
 async function changeRoles(h, actor, resource, roleTemplateKeys) {
  if (resource.authorityCommands?.some(c => c.outcome === 'unknown')) throw new h.Blocked('Original authority command is unknown; no role assignment replay');
  const route=resource.collection+resource.id, before=(await h.ok(actor,'GET',route)).value;
@@ -10,9 +27,7 @@ async function changeRoles(h, actor, resource, roleTemplateKeys) {
  const command={actorIdentity:structuredClone(actor.identity),origin:actor.origin,route,body:{roleTemplateKeys},before,outcome:'unknown'};
  (resource.authorityCommands ||= []).push(command);h.persist();
  const response=await h.api(actor,'PUT',route+'/role-templates',command.body);command.response=response;h.persist();
- const after=(await h.ok(actor,'GET',route)).value;
- h.check('CAS acknowledges and independently confirms changed exact template sources',h.good(response)&&after.id===before.id&&after.authorityRevision>before.authorityRevision&&same(after.templateRefs.map(r=>r.key).sort(),[...roleTemplateKeys].sort()));
- command.after=after;command.outcome='confirmed';h.persist();return {before,after};
+ return confirmRoleChange(h,actor,resource,command);
 }
 async function awaitRows(read, predicate) {
  let rows;
@@ -69,4 +84,4 @@ const handlers={'F057-001':async h=>{
  await h.partial('Platform/home operation route verified; tenant operation-log read exposure remains unverified under its declared platform/home restriction. Real failed/successful login, logout, original-session protection, acknowledged service mutation and independent complete CAS/operation-log correlation verified without known credential leakage. Role assignment is independently persisted, but no formal authorization-change audit event contract is identified; retain this gap rather than infer it from token revocation.');
 }};
 handlers['F057-001'].actors=['tenantAdmin','user'];handlers['F057-001'].transport='owner-api';
-module.exports={handlers,changeRoles};
+module.exports={handlers,changeRoles,confirmRoleChange};

@@ -45,7 +45,7 @@ test('probe rejects foreign origin, ambiguous or missing state/nonce and wrong P
 });
 
 test('real redirect chain preserves original BFF cookies and observes the exact selected authorization variant', async () => {
-  const http = require('node:http'), { chromium } = require('playwright');
+  const http = require('node:http'), { chromium } = require('./playwright.cjs');
   const { withOriginalAuthorizationEntry } = require('./callback_cases.cjs');
   let origin, journal, seen = [], persisted;
   const server = http.createServer((req, res) => {

@@ -28,17 +28,33 @@ function postgresCleanup(h, journal, run = docker) {
     h.observe({ kind: 'disposable-postgres-disposition', id: journal.id, name: journal.name, imageID: journal.imageID, networkID: journal.networkID, removed: true, persistentVolumesUsed: false });
   };
 }
+function resourceControls(h, run = docker, hostname = require('node:os').hostname()) {
+  const mode = h.databaseFixtureMode || 'bounded';
+  if (mode === 'bounded') return ['--memory', '256m', '--cpus', '0.5'];
+  if (mode !== 'isolated-tmpfs-only' || !h.deliveryFixtureConfig) throw new h.Blocked('Unbounded database fixture requires explicitly verified dedicated nested daemon');
+  const config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig));
+  require('./delivery_fixture.cjs').validateIsolation(config, JSON.parse(run(['info', '--format', '{{json .}}'])), hostname);
+  h.observe({ kind: 'database-fixture-resource-policy', mode, daemonId: config.daemonId, persistentVolumesUsed: false,
+    actualScope: '128MiB tmpfs; CPU and memory cgroup controls not imposed in this dedicated nested daemon. No host resource-limit acceptance claim.' });
+  return [];
+}
+function readControls(h, journal, run = docker) {
+  const value = inspect(run, journal.id);
+  if (!owned(value, journal)) throw new h.Blocked('Original database fixture ownership changed while reading resource controls');
+  return { memoryLimitBytes: value.HostConfig.Memory, cpuNanoLimit: value.HostConfig.NanoCpus };
+}
 async function createPostgres(h, run = docker, pause = ms => new Promise(resolve => setTimeout(resolve, ms))) {
+  const controls = resourceControls(h, run);
   const panel = inspect(run, 'magicPanel'), networks = Object.entries(panel.NetworkSettings.Networks);
   if (networks.length !== 1) throw new h.Blocked('Disposable database requires one unambiguous Panel Docker network');
   const [network, info] = networks[0], imageID = run(['image', 'inspect', 'postgres:17.7-alpine3.22', '--format', '{{.Id}}']);
   if (!/^sha256:[a-f0-9]{64}$/.test(imageID) || !/^[a-f0-9]{64}$/.test(info.NetworkID)) throw new h.Blocked('Database fixture requires an existing immutable image and exact network');
   const journal = { name: 'magic-test-pg-' + crypto.randomBytes(8).toString('hex'), marker: crypto.randomBytes(16).toString('hex'), imageID, network, networkID: info.NetworkID,
-    password: crypto.randomBytes(24).toString('hex'), username: 'regression_probe', database: 'regression_fixture', phase: 'intent' };
+    password: crypto.randomBytes(24).toString('hex'), username: 'regression_probe', database: 'regression_fixture', phase: 'intent', resourceMode: h.databaseFixtureMode || 'bounded' };
   (h.state.externalDatabaseFixtures ||= []).push(journal); h.persist();
   // The password is passed via the child environment, never a command argument.
   journal.id = run(['create', '--name', journal.name, '--label', 'magic-test.fixture=' + journal.marker, '--network', network,
-    '--memory', '256m', '--cpus', '0.5', '--tmpfs', '/var/lib/postgresql/data:rw,size=128m',
+    ...controls, '--tmpfs', '/var/lib/postgresql/data:rw,size=128m',
     '-e', 'POSTGRES_PASSWORD', '-e', 'POSTGRES_USER=' + journal.username, '-e', 'POSTGRES_DB=' + journal.database, imageID], { POSTGRES_PASSWORD: journal.password });
   h.persist();
   if (!/^[a-f0-9]{64}$/.test(journal.id) || !owned(inspect(run, journal.id), journal)) throw new h.Blocked('New database container identity or volume proof is incomplete; preserve original intent');
@@ -50,6 +66,8 @@ async function createPostgres(h, run = docker, pause = ms => new Promise(resolve
   run(['start', journal.id]);
   const started = inspect(run, journal.id);
   if (!owned(started, journal) || !started.State.Running || started.NetworkSettings.Networks[network]?.NetworkID !== journal.networkID) throw new h.Blocked('Original disposable database did not start on the exact intended network');
+  const expected = controls.length ? { memoryLimitBytes: 256 * 1024 ** 2, cpuNanoLimit: 500000000 } : { memoryLimitBytes: 0, cpuNanoLimit: 0 };
+  if (started.HostConfig.Memory !== expected.memoryLimitBytes || started.HostConfig.NanoCpus !== expected.cpuNanoLimit) throw new h.Blocked('Original database fixture resource controls differ from explicit selected mode');
   let ready = false;
   for (let i = 0; i < 30; i++) {
     // pg_isready does not authenticate or write SQL. Polling reads are safe.
@@ -61,4 +79,4 @@ async function createPostgres(h, run = docker, pause = ms => new Promise(resolve
   h.observe({ kind: 'disposable-postgres-ready', id: journal.id, imageID, networkID: journal.networkID, address: journal.name + ':5432', memoryLimitBytes: started.HostConfig.Memory, cpuNanoLimit: started.HostConfig.NanoCpus, persistentVolumesUsed: false });
   return { ...journal, address: journal.name + ':5432', alternateAddress: started.NetworkSettings.Networks[network].IPAddress + ':5432', memoryLimitBytes: started.HostConfig.Memory, cleanup };
 }
-module.exports = { createPostgres, postgresCleanup, owned };
+module.exports = { createPostgres, postgresCleanup, owned, resourceControls, readControls };

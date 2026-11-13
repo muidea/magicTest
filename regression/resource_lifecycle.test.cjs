@@ -1,10 +1,22 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createResource, deleteResource } = require('./resource_lifecycle.cjs');
+test('business command actual and denied callers survive an unknown write independently of the row creator', () => {
+  const { guardFixtureAccountCleanup } = require('./resource_lifecycle.cjs');
+  const account = { kind: 'account', collection: '/cas/namespaces/panel/accounts/', creation: { intended: { account: 'ordinary' } } };
+  for (const key of ['actingIdentity', 'negativeActor']) {
+    const command = { outcome: 'unknown', [key]: { namespace: 'panel', account: 'ordinary' } };
+    const row = { kind: 'business-record', phase: 'created', actorIdentity: { namespace: 'panel', account: 'different-creator' }, commands: [command] };
+    const h = { Blocked: Error, state: { resources: [account, row] } };
+    assert.throws(() => guardFixtureAccountCleanup(h, account), /retain actual caller/);
+    command[key].namespace = 'other'; guardFixtureAccountCleanup(h, account);
+    command[key].namespace = 'panel'; command.outcome = 'confirmed'; guardFixtureAccountCleanup(h, account);
+  }
+});
 test('pending owned file or feedback protects its original fixture account until formal disposition', () => {
   const { guardFixtureAccountCleanup } = require('./resource_lifecycle.cjs');
   const account = { kind: 'account', collection: '/cas/namespaces/tenant-a/accounts/', creation: { intended: { account: 'member' } } };
-  for (const kind of ['ordinary-file', 'feedback-ticket']) {
+  for (const kind of ['ordinary-file', 'feedback-ticket', 'business-record']) {
     const child = { kind, phase: 'created', actorIdentity: { account: 'member', namespace: 'tenant-a' } };
     const h = { Blocked: Error, state: { resources: [account, child] } };
     assert.throws(() => guardFixtureAccountCleanup(h, account), /retain creator/);
@@ -160,4 +172,29 @@ test('original creator account remains while any created resource is unresolved'
   const h = { state: { resources: [account, child] }, Blocked: Error };
   assert.throws(() => guardFixtureAccountCleanup(h, account), /unresolved created resources/);
   child.phase = 'deleted'; assert.doesNotThrow(() => guardFixtureAccountCleanup(h, account));
+});
+
+test('a distinct reviewer account is retained until its original delivery is formally disposed', () => {
+  const { guardFixtureAccountCleanup } = require('./resource_lifecycle.cjs');
+  const account = { kind: 'account', collection: '/cas/namespaces/panel/accounts/', creation: { intended: { account: 'reviewer' } } };
+  const child = { kind: 'deployment-review-request', phase: 'created', commands: [{ outcome: 'confirmed', actorIdentity: { namespace: 'panel', account: 'reviewer' } }] };
+  const h = { Blocked: Error, state: { resources: [account, child] } };
+  assert.throws(() => guardFixtureAccountCleanup(h, account), /Original reviewer still participates/);
+  child.commands[0].actorIdentity.namespace = 'another';
+  assert.doesNotThrow(() => guardFixtureAccountCleanup(h, account));
+  child.commands[0].actorIdentity.namespace = 'panel'; child.phase = 'deleted';
+  assert.doesNotThrow(() => guardFixtureAccountCleanup(h, account));
+});
+
+test('a proven in-use refusal permits a later deletion only after the owner proves all bindings gone',async()=>{
+ for(const mode of ['unbound','still-bound','generic-error']){
+  const actor={identity:{account:'original',namespace:'one'},origin:'https://one.example.invalid'},value={id:7,key:'original',subjectCount:mode==='still-bound'?1:0};
+  const refusal={status:200,data:{error:{code:4,message:'role template original is bound by subjects; unbind it before deletion'},value:null}};
+  if(mode==='generic-error')refusal.status=503;
+  const r={id:7,kind:'role-template',collection:'/cas/namespaces/one/role-templates/',creation:{actorIdentity:actor.identity,origin:actor.origin,outcome:'accepted',intended:{key:'original'},response:{status:200,data:{value}}},deletion:{outcome:'unconfirmed',response:refusal}};
+  let deleted=false,writes=0;
+  const h={Blocked:Error,persist(){},good:r=>r.status===200 && !r.data.error,check(label,c){assert.ok(c,label);},async directory(){return mode==='still-bound'?[{id:99}]:[];},async api(a,method){if(method==='DELETE'){writes++;deleted=true;return {status:200,data:{value}};}return deleted?{status:200,data:{error:{code:2},value:null}}:{status:200,data:{value}};}};
+  if(mode==='unbound'){await deleteResource(h,actor,r);assert.equal(writes,1);assert.deepEqual(r.deletionAttempts[0].original.response,refusal);}
+  else {await assert.rejects(deleteResource(h,actor,r));assert.equal(writes,0);}
+ }
 });

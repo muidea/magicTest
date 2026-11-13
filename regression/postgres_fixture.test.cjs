@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createPostgres, owned } = require('./postgres_fixture.cjs');
+const { createPostgres, owned, resourceControls, readControls } = require('./postgres_fixture.cjs');
 function fixture() {
   const imageID = 'sha256:' + 'a'.repeat(64), networkID = 'b'.repeat(64), id = 'c'.repeat(64), calls = [];
   let container, removed = false, ready = true;
@@ -61,4 +61,22 @@ test('readiness failure retains original identity and registered safe teardown w
   assert.equal(f.h.teardowns.length, 1);
   assert.equal(f.calls.filter(c => c.args[0] === 'create').length, 1);
   await f.h.teardowns[0](); assert.ok(f.removed);
+});
+test('tmpfs-only database mode requires exact dedicated daemon/root/container and cannot relax host fixture limits',()=>{
+  const config={platformRoot:'/tmp/platform-executor-unit/platform',dockerDataRoot:'/tmp/platform-executor-unit/docker-data',daemonId:'original-daemon',containerId:'d'.repeat(64)};
+  const info={ID:config.daemonId,DockerRootDir:config.dockerDataRoot,Driver:'overlay2'};
+  const h={databaseFixtureMode:'isolated-tmpfs-only',deliveryFixtureConfig:'/private/config.json',Blocked:Error,observe(){},fs:{readFileSync(){return JSON.stringify(config);}}};
+  const run=args=>{assert.equal(args[0],'info');return JSON.stringify(info);};
+  assert.deepEqual(resourceControls(h,run,'d'.repeat(12)),[]);
+  for(const alter of [()=>{info.ID='other';},()=>{info.DockerRootDir='/var/lib/docker';},()=>{config.containerId='e'.repeat(64);},()=>{h.deliveryFixtureConfig=undefined;}]){
+    const originalInfo=structuredClone(info),originalConfig=structuredClone(config),originalPath=h.deliveryFixtureConfig;
+    alter();assert.throws(()=>resourceControls(h,run,'d'.repeat(12)),/nested daemon|Dedicated/);
+    Object.assign(info,originalInfo);Object.assign(config,originalConfig);h.deliveryFixtureConfig=originalPath;
+  }
+  assert.deepEqual(resourceControls({...h,databaseFixtureMode:undefined},()=>{throw Error('not needed');}),['--memory','256m','--cpus','0.5']);
+});
+test('database planning verification reads actual controls only from exact original physical ownership',async()=>{
+  const f=fixture(),db=await createPostgres(f.h,f.run);
+  assert.deepEqual(readControls(f.h,db,f.run),{memoryLimitBytes:268435456,cpuNanoLimit:500000000});
+  f.container.Config.Labels['magic-test.fixture']='other';assert.throws(()=>readControls(f.h,db,f.run),/ownership changed/);
 });

@@ -14,25 +14,35 @@ function originalOwner(h, identity) {
   return owner;
 }
 function track(h, r) { h.state.resources.push(r); h.persist(); return r; }
-async function upstream(h) {
-  if (h.serviceUpstream) return h.serviceUpstream;
-  const networks = JSON.parse(execFileSync('docker', ['inspect', 'magicGateway', '--format', '{{json .NetworkSettings.Networks}}'], { encoding: 'utf8' }));
-  const gateways = [...new Set(Object.values(networks).map(n => n.Gateway).filter(Boolean))];
-  if (gateways.length !== 1) throw new h.Blocked('Controlled upstream requires one actual Gateway Docker bridge address');
-  const held = new Map(), requests = [], server = http.createServer(async (req, res) => {
+function controlledUpstream() {
+  const held = new Map(), responses = new Map(), requests = [], server = http.createServer(async (req, res) => {
     const body = []; for await (const chunk of req) body.push(chunk);
     const url = new URL(req.url, 'http://fixture');
     const receipt = { method: req.method, path: url.pathname, marker: url.searchParams.get('marker'), body: Buffer.concat(body).toString(), authorizationPresent: !!req.headers.authorization,
-      namespace: req.headers['x-mp-namespace'] || '', extDataPresent: !!req.headers['x-mp-entity-ext-data'], contentType: req.headers['content-type'] || '', query: Object.fromEntries(url.searchParams) };
+      namespace: req.headers['x-mp-namespace'] || '', extDataPresent: !!req.headers['x-mp-entity-ext-data'], contentType: req.headers['content-type'] || '', query: Object.fromEntries(url.searchParams),
+      authorityChallengePresent: !!req.headers['x-magic-gateway-authority-challenge'], authorityRejectedPresent: !!req.headers['x-magic-gateway-authority-rejected'] };
     requests.push(receipt);
     const gate = held.get(receipt.marker);
     if (gate) { gate.started(); await gate.wait; held.delete(receipt.marker); }
     res.setHeader('Content-Type', 'application/json');
+    const response = responses.get(receipt.marker);
+    if (response) {
+      res.statusCode = response.status;
+      if (response.proof) {
+        res.setHeader('X-Magic-Gateway-Authority-Challenge', response.proof);
+        res.setHeader('X-Magic-Gateway-Authority-Rejected', response.proof);
+      }
+    }
     res.end(JSON.stringify({ fixture: 'controlled-external-upstream', marker: receipt.marker, method: req.method, body: receipt.body }));
   });
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, gateways[0], resolve); });
-  h.teardowns.push(async () => { for (const gate of held.values()) gate.release(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
-  return h.serviceUpstream = { address: 'http://' + gateways[0] + ':' + server.address().port, requests,
+  return { server, requests,
+    respond(marker, response) {
+      if (!/^[a-f0-9]{24}$/.test(marker) || responses.has(marker) || requests.some(r => r.marker === marker) ||
+          !response || ![200, 401, 409].includes(response.status) || Object.keys(response).some(k => !['status', 'proof'].includes(k)) ||
+          response.proof !== undefined && !/^[A-Za-z0-9_-]{43}$/.test(response.proof)) throw Error('Finite original upstream response plan required before dispatch');
+      responses.set(marker, structuredClone(response));
+    },
+    releaseAll() { for (const gate of held.values()) gate.release(); },
     hold(marker) {
       if (held.has(marker)) throw new h.Blocked('Original upstream marker already held');
       const gate = {};
@@ -40,6 +50,16 @@ async function upstream(h) {
       gate.wait = new Promise(resolve => { gate.release = resolve; });
       held.set(marker, gate); return gate;
     } };
+}
+async function upstream(h) {
+  if (h.serviceUpstream) return h.serviceUpstream;
+  const networks = JSON.parse(execFileSync('docker', ['inspect', 'magicGateway', '--format', '{{json .NetworkSettings.Networks}}'], { encoding: 'utf8' }));
+  const gateways = [...new Set(Object.values(networks).map(n => n.Gateway).filter(Boolean))];
+  if (gateways.length !== 1) throw new h.Blocked('Controlled upstream requires one actual Gateway Docker bridge address');
+  const up = controlledUpstream(), server = up.server;
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, gateways[0], resolve); });
+  h.teardowns.push(async () => { up.releaseAll(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  return h.serviceUpstream = { ...up, address: 'http://' + gateways[0] + ':' + server.address().port };
 }
 async function fixture(h, suffix, policy = {}, ownerName = 'tenantAdmin', contractSpec) {
   const owner = h[ownerName];
@@ -73,6 +93,8 @@ async function subscribe(h, f, actor = h.user) {
   return { value, resource: r, response: r.response };
 }
 async function cleanupSubscription(h, r) {
+  if (r.unsubscribe?.outcome === 'unknown') throw new h.Blocked('Original subscriber retirement remains unresolved; no subscription DELETE replay');
+  if ((h.state?.resources || []).some(child => child.parentSubscriptionId === r.id && child.phase !== 'deleted' && child.endpointAuthorityCommands?.some(c => c.outcome === 'unknown'))) throw new h.Blocked('Original subscription Endpoint authority remains unresolved; retain its exact subscription');
   const owner = originalOwner(h, r.ownerIdentity);
   if ( r.receipt?.data?.value?.phase !== 'complete' || r.receipt.data.value.errorCode !== 0 || r.id !== r.receipt.data.value.subscriptionId || r.outcome !== 'accepted') throw new h.Blocked('Original subscription requires exact owner and completed original receipt before cleanup');
   const before = await h.api(owner, 'GET', subscriptions + r.id);
@@ -120,6 +142,8 @@ async function credentialRows(h, collection, subscriptionId, owner = h.tenantAdm
   return rows;
 }
 async function cleanupCredential(h, r) {
+  if ((h.state?.resources || []).some(parent => parent.kind === 'service-graph-subscription' && parent.id === r.parentSubscriptionId && parent.unsubscribe?.outcome === 'unknown')) throw new h.Blocked('Original subscriber retirement remains unresolved; retain its original credential');
+  if (r.endpointAuthorityCommands?.some(c => c.outcome === 'unknown')) throw new h.Blocked('Original credential Endpoint authority remains unresolved; no retirement');
   const owner = originalOwner(h, r.ownerIdentity);
   if ( r.outcome !== 'accepted' || !r.value?.clientId) throw new h.Blocked('Credential cleanup needs exact acknowledged original identity');
   let rows = await credentialRows(h, r.collection, r.parentSubscriptionId, owner);
@@ -152,4 +176,4 @@ async function succeeds(h, actor, f, c) {
   const result = await call(h, actor, f, c.apiKey, c.scheme), received = f.up.requests.filter(x => x.marker === result.marker);
   h.check('Real Gateway invokes controlled upstream exactly once with the original request marker', result.status === 200 && result.data.marker === result.marker && received.length === 1 && received[0].method === 'GET' && received[0].path === '/probe' && !received[0].authorizationPresent, { response: result, upstream: received });
 }
-module.exports = { fixture, subscribe, credential, rotate, retireCredential, credentialRows, cleanupSubscription, cleanupCredential, retire, call, succeeds, services, publications, subscriptions };
+module.exports = { fixture, subscribe, credential, rotate, retireCredential, credentialRows, cleanupSubscription, cleanupCredential, retire, call, succeeds, services, publications, subscriptions, controlledUpstream };

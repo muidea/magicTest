@@ -1,5 +1,6 @@
 const { waitLoginForm, waitLoginError, observeLogin } = require('./login_readiness.cjs');
 const crypto = require('node:crypto');
+const { isDeepStrictEqual } = require('node:util');
 const { sameAuthority, sameAccounts } = require('./authority_snapshot.cjs');
 const { negativeBrandWrite, negativeCreate } = require('./negative_mutations.cjs');
 const handlers = {};
@@ -143,13 +144,28 @@ handlers['F010-002'] = async h => {
 };
 handlers['F011-002'] = async h => {
   const m = await model(h), body = JSON.parse(h.fs.readFileSync(h.path.join(fixturesDir(h), 'fixture-definition-create-request.json')));
-  for (const payload of [ { ...body, uuid: m.uuid, name: m.name }, { ...body, uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-bad', pkgPrefix: '../invalid' }, { ...body, uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-nostorage', storage: { required: true, engine: '', slots: [] } } ]) {
+  const snapshot = rows => [...rows].sort((a, b) => a.id - b.id);
+  const before = await h.directory(h.admin, definitionBase);
+  const parent = h.state.resources.find(r => r.kind === 'definition' && r.id === m.id && r.creation?.ownershipConfirmed);
+  if (!parent || parent.definitionRejections?.some(c => c.outcome === 'unknown')) throw new h.Blocked('Original definition rejection intent unresolved or owner not confirmed; no replay');
+  for (const [payload, code, message] of [
+    [{ ...body, uuid: m.uuid, name: m.name }, 7],
+    [{ ...body, uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-bad', pkgPrefix: '../invalid' }, 4, 'model application package prefix is invalid'],
+    [{ ...body, uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-nostorage', storage: { required: true, engine: '', slots: [] } }, 4, 'only PostgreSQL application storage is supported']
+  ]) {
+    const command = { route: definitionBase, body: payload, outcome: 'unknown' };
+    (parent.definitionRejections ||= []).push(command); h.persist();
     const r = await h.api(h.admin, 'POST', definitionBase, payload);
+    command.response = r; h.persist();
     if (h.good(r) && r.data.value?.id) h.owned(definitionBase, r.data.value, 'unexpected-definition');
-    h.invalid(r, 'Invalid prefix, duplicate identity or required storage rejected');
+    const unchanged = isDeepStrictEqual(snapshot(before), snapshot(await h.directory(h.admin, definitionBase))) && isDeepStrictEqual((await h.ok(h.admin, 'GET', definitionBase + m.id)).value, m);
+    const targetRejected = [200, 400].includes(r.status) && r.data?.error?.code === code && (!message || r.data.error.message === message) && r.data.value == null;
+    if (targetRejected && unchanged) { command.outcome = 'rejected-and-unchanged'; h.persist(); }
+    h.check('Invalid create reaches its exact duplicate/prefix/storage owner validation and preserves every original definition', command.outcome === 'rejected-and-unchanged', r);
   }
-  const rows = (await h.ok(h.admin, 'GET', definitionBase + '?_pageSize=100')).values;
-  h.check('Only one legal definition persisted', rows.filter(x => x.name.startsWith(h.state.prefix)).length === 1);
+  const after = await h.directory(h.admin, definitionBase);
+  h.check('Rejected definitions preserve the complete original directory, including other legitimate cases', isDeepStrictEqual(snapshot(before), snapshot(after)));
+  h.check('Independent original model remains exact after rejected creates', isDeepStrictEqual((await h.ok(h.admin, 'GET', definitionBase + m.id)).value, m));
 };
 handlers['F011-003'] = async h => {
   const m = await model(h), before = (await h.ok(h.admin, 'GET', definitionBase + m.id)).value;
@@ -405,4 +421,68 @@ Object.assign(handlers, require('./database_cases.cjs').handlers);
 Object.assign(handlers, require('./profile_cases.cjs').handlers);
 Object.assign(handlers, require('./page_validation_cases.cjs').handlers);
 Object.assign(handlers, require('./branding_cases.cjs').handlers);
+Object.assign(handlers, require('./deployment_cases.cjs').handlers);
+Object.assign(handlers, require('./delivery_cases.cjs').handlers);
+Object.assign(handlers, require('./artifact_integrity_cases.cjs').handlers);
+Object.assign(handlers, require('./deployment_review_cases.cjs').handlers);
+Object.assign(handlers, require('./native_provider_access_cases.cjs').handlers);
+Object.assign(handlers, require('./native_package_cases.cjs').handlers);
+Object.assign(handlers, require('./native_validation_cases.cjs').handlers);
+Object.assign(handlers, require('./native_runtime_cases.cjs').handlers);
+Object.assign(handlers, require('./script_library_cases.cjs').handlers);
+Object.assign(handlers, require('./installation_request_cases.cjs').handlers);
+Object.assign(handlers, require('./instance_cases.cjs').handlers);
+Object.assign(handlers, require('./business_cases.cjs').handlers);
+Object.assign(handlers, require('./business_collection_cases.cjs').handlers);
+Object.assign(handlers, require('./installed_icon_cases.cjs').handlers);
+Object.assign(handlers, require('./dependency_cases.cjs').handlers);
+Object.assign(handlers, require('./application_authority_cases.cjs').handlers);
+Object.assign(handlers, require('./definition_metadata_cases.cjs').handlers);
+Object.assign(handlers, require('./deployment_progress_cases.cjs').handlers);
+Object.assign(handlers, require('./member_directory_cases.cjs').handlers);
+Object.assign(handlers, require('./lifecycle_admission_cases.cjs').handlers);
+Object.assign(handlers, require('./portal_overview_cases.cjs').handlers);
+Object.assign(handlers, require('./approval_state_cases.cjs').handlers);
+Object.assign(handlers, require('./field_constraint_cases.cjs').handlers);
+Object.assign(handlers, require('./storage_admission_cases.cjs').handlers);
+Object.assign(handlers, require('./tls_delivery_cases.cjs').handlers);
+Object.assign(handlers, require('./entity_capability_cases.cjs').handlers);
+Object.assign(handlers, require('./capability_switch_cases.cjs').handlers);
+Object.assign(handlers, require('./generated_service_cases.cjs').handlers);
+Object.assign(handlers, require('./service_contract_cases.cjs').handlers);
+Object.assign(handlers, require('./page_runtime_cases.cjs').handlers);
+Object.assign(handlers, require('./page_appearance_cases.cjs').handlers);
+Object.assign(handlers, require('./page_image_cases.cjs').handlers);
+Object.assign(handlers, require('./page_aggregate_cases.cjs').handlers);
+Object.assign(handlers, require('./installation_summary_cases.cjs').handlers);
+Object.assign(handlers, require('./runtime_placement_cases.cjs').handlers);
+Object.assign(handlers, require('./page_source_cases.cjs').handlers);
+Object.assign(handlers, require('./page_refresh_cases.cjs').handlers);
+Object.assign(handlers, require('./business_action_cases.cjs').handlers);
+Object.assign(handlers, require('./model_input_cases.cjs').handlers);
+Object.assign(handlers, require('./delivery_completion_cases.cjs').handlers);
+Object.assign(handlers, require('./provider_completion_cases.cjs').handlers);
+Object.assign(handlers, require('./dependency_runtime_cases.cjs').handlers);
+Object.assign(handlers, require('./session_revision_cases.cjs').handlers);
+Object.assign(handlers, require('./namespace_retirement_cases.cjs').handlers);
+Object.assign(handlers, require('./service_publication_cases.cjs').handlers);
+Object.assign(handlers, require('./source_effect_cases.cjs').handlers);
+Object.assign(handlers, require('./portal_identity_cases.cjs').handlers);
+Object.assign(handlers, require('./builtin_execution_cases.cjs').handlers);
+Object.assign(handlers, require('./application_observation_cases.cjs').handlers);
+Object.assign(handlers, require('./runtime_identity_cases.cjs').handlers);
+Object.assign(handlers, require('./authorization_capacity_cases.cjs').handlers);
+Object.assign(handlers, require('./endpoint_authority_cases.cjs').handlers);
+Object.assign(handlers, require('./storage_recovery_cases.cjs').handlers);
+Object.assign(handlers, require('./deployment_task_state_cases.cjs').handlers);
+Object.assign(handlers, require('./todo_sync_cases.cjs').handlers);
+Object.assign(handlers, require('./model_upgrade_cases.cjs').handlers);
+Object.assign(handlers, require('./cost_observation_cases.cjs').handlers);
+Object.assign(handlers, require('./native_lifecycle_cases.cjs').handlers);
+Object.assign(handlers, require('./deployment_material_cases.cjs').handlers);
+Object.assign(handlers, require('./authority_retry_cases.cjs').handlers);
+Object.assign(handlers, require('./audit_source_cases.cjs').handlers);
+Object.assign(handlers, require('./runtime_control_cases.cjs').handlers);
+Object.assign(handlers, require('./bound_reference_cases.cjs').handlers);
+Object.assign(handlers, require('./audit_admission_cases.cjs').handlers);
 module.exports = { handlers };
