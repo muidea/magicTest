@@ -22,7 +22,8 @@ for (let i = 2; i < process.argv.length; i += 2) {
 const { sanitize } = require('./evidence_sanitizer.cjs');
 class Blocked extends Error {}
 class ProductFailure extends Error {}
-const selectCases = catalog => catalog.cases.filter(c => c.required && c.execution.some(p => p.suite === 'standard') && (!options.case || c.id === options.case) && (!options.cases || options.cases.split(',').includes(c.id)) && (!options.exclude || !options.exclude.split(',').includes(c.id)));
+const orderRank = id => (id === 'F035-006' ? -1 : id === 'F003-001' ? 1 : 0);
+const selectCases = catalog => catalog.cases.filter(c => c.required && c.execution.some(p => p.suite === 'standard') && (!options.case || c.id === options.case) && (!options.cases || options.cases.split(',').includes(c.id)) && (!options.exclude || !options.exclude.split(',').includes(c.id))).sort((a, b) => orderRank(a.id) - orderRank(b.id));
 async function main() {
   const recoveryFlags = ['reconcile-authoring-deletions', 'reconcile-rejected-definitions', 'reconcile-authoring-writes', 'reconcile-rejected-page-writes', 'reconcile-authoring-conflicts', 'reconcile-cas-identities', 'reconcile-business-creates', 'reconcile-member-scopes', 'reconcile-matrix-write-refusals', 'reconcile-endpoint-template-refusals', 'reconcile-source-lifecycles', 'reconcile-proxy-session-refusals'];
   for (const flag of recoveryFlags) if (options[flag] && options[flag] !== 'true') throw Error('Recovery operation requires literal true: ' + flag);
@@ -62,8 +63,6 @@ async function main() {
   const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, '../docs/acceptance/platform-catalog.json')));
   const baseline = JSON.parse(fs.readFileSync(options['baseline-health']));
   const selected = selectCases(catalog);
-  const orderRank = item => (item.id === 'F035-006' ? -1 : item.id === 'F003-001' ? 1 : 0);
-  selected.sort((a, b) => orderRank(a.id) - orderRank(b.id));
   if (!selected.length) throw Error('No selected standard cases');
   const stateFile = path.join(priv, 'state.json');
   const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile)) : { prefix: 'rg' + crypto.randomBytes(4).toString('hex'), password: 'Rg@' + crypto.randomBytes(16).toString('hex'), resources: [], fixtures: {} };
