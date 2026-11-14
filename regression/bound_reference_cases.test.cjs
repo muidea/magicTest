@@ -27,13 +27,15 @@ function fixture(mode) {
         return { status: mode === 'human-consume-allowed' ? 200 : 403, data: { error: { code: 403, message: 'forbidden' } } };
       }
       if (action === 'wrong-purpose-bind') {
-        return { status: 200, data: { value: null, error: { code: 4, message: '源码绑定未确认：upload reference cannot be consumed' } } };
+        return { status: 409, data: { value: null, error: { code: 21, message: '源码绑定未确认：upload reference cannot be consumed' } } };
       }
       if (action === 'mismatch-bind') {
-        return { status: 200, data: { value: null, error: { code: 19, message: '源码绑定未确认：upload reference does not match expected content' } } };
+        const status = mode === 'mismatch-500' ? 500 : 409;
+        const code = mode === 'mismatch-500' ? 18 : 19;
+        return { status, data: { value: null, error: { code, message: '源码绑定未确认：upload reference does not match expected content' } } };
       }
       if (action === 'foreign-bind') {
-        return { status: 200, data: { value: null, error: { code: 4, message: mode === 'wrong-refusal' ? 'unrelated' : '源码绑定未确认：upload reference cannot be consumed' } } };
+        return { status: 409, data: { value: null, error: { code: 21, message: mode === 'wrong-refusal' ? 'unrelated' : '源码绑定未确认：upload reference cannot be consumed' } } };
       }
       const ref = refs.get(r.fileRef);
       ref.bound = true;
@@ -44,7 +46,7 @@ function fixture(mode) {
   async function transfer(a, method, route, file) {
     assert.equal(a, actor);
     if (method === 'POST') {
-      const purpose = new URL(route, a.origin).searchParams.get('purpose') || 'application-function-block-source';
+      const purpose = new URL(route, a.origin).searchParams.get('purpose') || 'application-function-source';
       calls.push('upload');
       assert.equal(persisted.at(-1).resources.at(-1).commands.at(-1).confirmed, false);
       if (mode === 'lost-upload') throw Error('unknown upload');
@@ -124,11 +126,12 @@ test('false upload/bind acknowledgement or wrong refusal never passes and immuta
   await assert.rejects(create(a.h, 'account:7', a.targetApp, a.peerApp, {}, a.transfer));
   assert.equal(a.h.state.resources[0].commands[0].confirmed, false);
 
-  for (const mode of ['wrong-ack', 'wrong-refusal']) {
+  for (const mode of ['wrong-ack', 'wrong-refusal', 'mismatch-500']) {
     const f = fixture(mode);
     const r = await create(f.h, 'account:7', f.targetApp, f.peerApp, {}, f.transfer);
     f.select(r);
     if (mode === 'wrong-ack') await assert.rejects(command(f.h, r, 'bind', f.transfer));
+    else if (mode === 'mismatch-500') await assert.rejects(command(f.h, r, 'mismatch-bind', f.transfer));
     else { await command(f.h, r, 'bind', f.transfer); await assert.rejects(command(f.h, r, 'foreign-bind', f.transfer)); }
     assert.equal(r.commands.at(-1).confirmed, false);
   }
@@ -158,11 +161,11 @@ test('actual local socket transfers one private multipart upload and rejects ove
     identity: { account: 'original', namespace: 'panel' },
     context: { cookies: async () => [{ name: 'session', value: 'unit-original-cookie', domain: 'panel.local.vpc', path: '/', httpOnly: true, secure: false, expires: -1, sameSite: 'Lax' }] },
   };
-  await referenceTransfer(actor, 'POST', '/files/self/files/upload-references/?purpose=application-function-block-source', { name: 'proof-0123456789abcdef.go', bytes: payload });
+  await referenceTransfer(actor, 'POST', '/files/self/files/upload-references/?purpose=application-function-source', { name: 'proof-0123456789abcdef.go', bytes: payload });
   assert.equal(seen.length, 1);
   assert.ok(seen[0].body.includes(payload));
   assert.equal(seen[0].headers.cookie, 'session=unit-original-cookie');
-  await assert.rejects(referenceTransfer(actor, 'POST', '/files/self/files/upload-references/?purpose=application-function-block-source', { name: 'proof-0123456789abcdef.go', bytes: Buffer.alloc(65537) }));
+  await assert.rejects(referenceTransfer(actor, 'POST', '/files/self/files/upload-references/?purpose=application-function-source', { name: 'proof-0123456789abcdef.go', bytes: Buffer.alloc(65537) }));
   assert.equal(seen.length, 1);
   assert.ok(downloadRoute({ fileRef: 'bound_' + 'a'.repeat(43), namespace: 'panel' }, 'orig').includes('consumer=orig'));
 });

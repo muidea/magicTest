@@ -85,7 +85,7 @@ async function zipUpload(actor, file, observe, purpose) {
 async function referenceTransfer(actor, method, route, file, observe = () => {}) {
   const url = new URL(route, actor.origin), upload = method === 'POST';
   if (!route.startsWith('/') || route.startsWith('//') || url.origin !== actor.origin || url.hash ||
-      (upload ? (route !== '/files/self/files/upload-references/?purpose=application-function-block-source' &&
+      (upload ? (route !== '/files/self/files/upload-references/?purpose=application-function-source' &&
           route !== '/files/self/files/upload-references/?purpose=regression-reference-proof') ||
         !file || !/^proof-[a-f0-9]{16}\.(?:go|bin)$/.test(file.name) || !Buffer.isBuffer(file.bytes) || file.bytes.length < 1 || file.bytes.length > 65536 :
         method !== 'GET' || file !== undefined || !/^\/files\/bound-files\/bound_[A-Za-z0-9_-]{43}\/download$/.test(url.pathname) ||

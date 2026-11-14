@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
 const { authoring: a } = require('./authoring_cases.cjs');
 const { packageContent, packageUpload, referenceTransfer } = require('./owner_transport.cjs');
-const sourcePurpose = 'application-function-block-source';
+const sourcePurpose = 'application-function-source';
 const wrongPurposeTag = 'regression-reference-proof';
 const uploadRouteFor = (purpose = sourcePurpose) => '/files/self/files/upload-references/?' + new URLSearchParams({ purpose });
 const hash = bytes => 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex');
@@ -110,7 +110,7 @@ async function command(h, r, action, transfer = referenceTransfer) {
     const msg = c.response?.data?.error?.message || '';
     const expected = action === 'mismatch-bind' ? 'upload reference does not match expected content' : 'upload reference cannot be consumed';
     h.check('Panel/File owner refuses cross-consumer, mismatched or wrong-purpose upload reference without mutating binding',
-      c.response?.status === 200 && c.response.data?.value == null && c.response.data?.error?.code > 0 && msg.includes(expected), c.response);
+      [200, 400, 409].includes(c.response?.status) && c.response.data?.value == null && c.response.data?.error?.code > 0 && msg.includes(expected), c.response);
   }
   if (!same(h.admin.identity, r.actorIdentity) || h.admin.origin !== r.origin) throw new h.Blocked('Original File actor changed during command confirmation');
   c.confirmed = true; h.persist(); return c;
