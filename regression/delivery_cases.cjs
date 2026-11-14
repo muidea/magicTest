@@ -2,13 +2,13 @@ const { execFileSync } = require('node:child_process');
 const { isDeepStrictEqual: same } = require('node:util');
 const crypto = require('node:crypto');
 const { authoring: a } = require('./authoring_cases.cjs');
-const { validateIsolation } = require('./delivery_fixture.cjs');
+const { validateFixtureConfig } = require('./delivery_fixture.cjs');
 const { packageContent } = require('./owner_transport.cjs');
 const digest = bytes => 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex');
 async function fixture(h) {
   if (!h.deliveryFixtureConfig) throw new h.Blocked('DELIVERY-FIXTURE: dedicated isolated deployment and published public-owner fixture are required');
   const config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig));
-  validateIsolation(config, JSON.parse(execFileSync('docker', ['info', '--format', '{{json .}}'], { encoding: 'utf8' })));
+  validateFixtureConfig(config, JSON.parse(execFileSync('docker', ['info', '--format', '{{json .}}'], { encoding: 'utf8' })));
   const manifestPath = h.path.join(config.privateRoot, 'fixture-manifest.json'), bytes = h.fs.readFileSync(manifestPath), manifest = JSON.parse(bytes);
   if (manifest.daemonId !== config.daemonId || manifest.status !== 'published' || h.admin.origin !== 'https://panel.local.vpc' ||
       h.admin.identity.account !== 'platform-admin' || h.admin.identity.namespace !== 'panel') throw new h.Blocked('Exact isolated fixture daemon and original author are required');

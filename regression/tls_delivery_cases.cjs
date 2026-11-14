@@ -47,6 +47,7 @@ function prepare(h, platform, original, scratch) {
     originalUnchanged: () => names.every(name => fs.readFileSync(path.join(original, name)).equals(before[name])) };
 }
 async function delivery(h) {
+  require('./delivery_fixture.cjs').requireIsolatedDaemon(h, 'DELIVERY-FIXTURE: dedicated nested daemon isolation is required for TLS delivery mutation');
   await fixture(h);
   const config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig)), platform = config.platformRoot;
   const original = h.path.join(platform, 'services/secret/tls');

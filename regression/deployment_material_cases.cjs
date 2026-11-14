@@ -71,6 +71,7 @@ function dispatch(h, r, key, binary, args, { mode = 'development', expected = 0,
   return c;
 }
 async function prepare(h, run = execFileSync) {
+  require('./delivery_fixture.cjs').requireIsolatedDaemon(h, 'DELIVERY-FIXTURE: dedicated nested daemon isolation is required for deployment material backup/restore tests');
   await require('./delivery_cases.cjs').fixture(h);
   const config = JSON.parse(fs.readFileSync(h.deliveryFixtureConfig));
   const privateRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'magictest-deployment-material-')), root = path.join(privateRoot, 'deployment');

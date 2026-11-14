@@ -493,6 +493,7 @@ function coreLayout(h, config, run = execFileSync) {
   return { id: c.Id, imageId: c.Image, mounts: projected };
 }
 async function directories(h) {
+  require('./delivery_fixture.cjs').requireIsolatedDaemon(h, 'DELIVERY-FIXTURE: dedicated nested daemon isolation is required for core directory layout inspection');
   await require('./delivery_cases.cjs').fixture(h);
   const config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig)), core = coreLayout(h, config), layouts = [];
   await run(h, true, (r, view) => layouts.push(directoryLayout(h, config, r, view)));

@@ -183,6 +183,7 @@ function guard(h, resource) {
     throw new h.Blocked('Original native lifecycle/probe remains unresolved; preserve exact instances and package');
 }
 async function prepare(h, run = execFileSync) {
+  require('./delivery_fixture.cjs').requireIsolatedDaemon(h, 'DELIVERY-FIXTURE: dedicated nested daemon isolation is required for native runtime lifecycle disruption tests');
   const fixture = await require('./delivery_cases.cjs').fixture(h), config = JSON.parse(fs.readFileSync(h.deliveryFixtureConfig));
   const value = native.input(h, false), sentinelNonce = crypto.randomBytes(16).toString('hex');
   const component = value.contract.components.api;

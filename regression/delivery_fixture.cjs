@@ -12,6 +12,9 @@ const { withOriginalCasForms } = require('./cas_form_transport.cjs');
 const { createResource } = require('./resource_lifecycle.cjs');
 const { sanitize } = require('./evidence_sanitizer.cjs');
 
+function isIsolatedNestedDaemon(config) {
+  return config?.mode !== 'local-panel';
+}
 function validateIsolation(config, info, hostname = os.hostname()) {
   const root = config.platformRoot, data = config.dockerDataRoot;
   if (!root?.startsWith('/tmp/platform-executor-') || path.resolve(root) !== root ||
@@ -20,6 +23,42 @@ function validateIsolation(config, info, hostname = os.hostname()) {
       !config.containerId?.match(/^[a-f0-9]{64}$/) || hostname !== config.containerId.slice(0, 12)) {
     throw Error('Dedicated nested daemon and original owned root are required');
   }
+}
+function validateLocalPlatform(config, info) {
+  if (config?.mode !== 'local-panel') throw Error('Expected explicit local-panel fixture mode');
+  let parsedOrigin;
+  try { parsedOrigin = new URL(config.origin); } catch {}
+  if (!parsedOrigin || parsedOrigin.protocol !== 'https:' || config.origin !== parsedOrigin.origin) {
+    throw Error('Local platform fixture requires canonical HTTPS origin');
+  }
+  const root = config.platformRoot;
+  if (!root || path.resolve(root) !== root || !fs.existsSync(path.join(root, 'services/.env'))) {
+    throw Error('Local platform fixture requires existing platformRoot');
+  }
+  if (!info?.ID || config.daemonId !== info.ID) {
+    throw Error('Local platform fixture daemonId must match current Docker daemon');
+  }
+  if (!config.credentialsFile || path.resolve(config.credentialsFile) !== config.credentialsFile || !fs.existsSync(config.credentialsFile)) {
+    throw Error('Local platform fixture requires existing credentialsFile');
+  }
+  const privateRoot = config.privateRoot;
+  const home = os.homedir();
+  const forbidden = [root, path.join(home, 'codespace'), path.join(home, 'dataspace')];
+  if (!privateRoot || path.resolve(privateRoot) !== privateRoot ||
+      forbidden.some(dir => privateRoot === dir || privateRoot.startsWith(dir + '/'))) {
+    throw Error('Local platform fixture requires independent privateRoot outside platformRoot, codespace and dataspace');
+  }
+}
+function validateFixtureConfig(config, info, hostname = os.hostname()) {
+  if (!isIsolatedNestedDaemon(config)) return validateLocalPlatform(config, info);
+  return validateIsolation(config, info, hostname);
+}
+function requireIsolatedDaemon(h, reason = 'DELIVERY-FIXTURE: dedicated nested daemon isolation is required', run = execFileSync) {
+  if (!h.deliveryFixtureConfig) throw new h.Blocked(reason);
+  const config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig));
+  if (!isIsolatedNestedDaemon(config)) throw new h.Blocked(reason);
+  validateIsolation(config, JSON.parse(run('docker', ['info', '--format', '{{json .}}'], { encoding: 'utf8' })));
+  return config;
 }
 function dedicatedDeliveryOnly(selected, handlers, config, state) {
   return typeof config === 'string' && !!config.trim() && Array.isArray(selected) && selected.length > 0 &&
@@ -39,7 +78,8 @@ function persistFile(file, value) {
   try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
 }
 function fixtureManifest(state, config) {
-  return { status: 'published', fixtureScope: 'dedicated isolated daemon', daemonId: config.daemonId,
+  return { status: 'published', fixtureScope: isIsolatedNestedDaemon(config) ? 'dedicated isolated daemon' : 'local host platform',
+    ...(isIsolatedNestedDaemon(config) ? {} : { mode: config.mode }), daemonId: config.daemonId,
     application: state.application, revision: state.revision, package: state.package,
     installations: state.installations || [], deploymentRequests: state.deploymentRequests || [],
     members: Object.fromEntries(Object.entries(state.members || {}).map(([key, value]) => [key, { account: value.account, id: value.id, namespace: 'panel', access: value.access }])),
@@ -47,13 +87,14 @@ function fixtureManifest(state, config) {
 }
 async function main() {
   const [configFile, action] = process.argv.slice(2);
-  if (!configFile || !['bootstrap', 'resume-bootstrap', 'publish', 'install', 'resume-install', 'members'].includes(action)) throw Error('Expected private config and bootstrap, resume-bootstrap, publish, install, resume-install or members');
+  if (!configFile || !['bootstrap', 'resume-bootstrap', 'publish', 'install', 'resume-install', 'members', 'cleanup-local'].includes(action)) throw Error('Expected private config and bootstrap, resume-bootstrap, publish, install, resume-install, members or cleanup-local');
   const bootstrap = ['bootstrap', 'resume-bootstrap'].includes(action);
   const config = JSON.parse(fs.readFileSync(configFile));
-  validateIsolation(config, JSON.parse(execFileSync('docker', ['info', '--format', '{{json .}}'], { encoding: 'utf8' })));
+  const isolated = isIsolatedNestedDaemon(config);
+  validateFixtureConfig(config, JSON.parse(execFileSync('docker', ['info', '--format', '{{json .}}'], { encoding: 'utf8' })));
   const root = path.resolve(__dirname, '..'), privateRoot = config.privateRoot;
-  if (!privateRoot?.startsWith(path.dirname(config.platformRoot) + '/') ||
-      privateRoot === config.platformRoot || privateRoot.startsWith(config.platformRoot + '/')) throw Error('Independent owned private fixture directory required');
+  if (isolated && (!privateRoot?.startsWith(path.dirname(config.platformRoot) + '/') ||
+      privateRoot === config.platformRoot || privateRoot.startsWith(config.platformRoot + '/'))) throw Error('Independent owned private fixture directory required');
   fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 });
   const file = path.join(privateRoot, 'fixture-state.json');
   const state = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : {
@@ -68,45 +109,95 @@ async function main() {
     if (!condition) throw Error(message);
   };
   const { chromium } = require('./playwright.cjs');
-  const browser = await chromium.launch({ executablePath: config.chrome || '/usr/bin/chromium-browser', headless: true,
+  const browser = await chromium.launch({ executablePath: config.chrome || (fs.existsSync('/usr/bin/chromium-browser') ? '/usr/bin/chromium-browser' : chromium.executablePath()), headless: true,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--no-proxy-server', '--host-resolver-rules=MAP *.local.vpc 127.0.0.1'] });
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    const actor = { page: await context.newPage(), context, origin: 'https://panel.local.vpc', identity: { account: 'platform-admin', namespace: 'panel' } };
+    const origin = config.origin || 'https://panel.local.vpc';
+    const localCreds = isolated ? null : JSON.parse(fs.readFileSync(config.credentialsFile));
+    if (localCreds && (localCreds.origin !== origin || !localCreds.account || !localCreds.password)) {
+      throw Error('Local platform credentialsFile must match fixture origin and include account and password');
+    }
+    const adminIdentity = { account: localCreds?.account || 'platform-admin', namespace: localCreds?.namespace || 'panel' };
+    const actor = { page: await context.newPage(), context, origin, identity: adminIdentity };
     const observe = event => { state.observations.push(sanitize(event)); persist(); };
     const api = (principal, method, route, body) => ownerRequest(principal, method, route, body, observe);
     const good = r => r.status === 200 && !r.data.error && !('text' in r.data);
     const ok = async (...args) => { const r = await api(...args); check(args[1] + ' ' + args[2], good(r), r); return r.data; };
     const credentialsFile = path.join(privateRoot, 'credentials.json');
-    if (state.stage !== { bootstrap: 'new', 'resume-bootstrap': 'bootstrap-in-progress', publish: 'bootstrapped', install: 'published', 'resume-install': 'install-in-progress', members: 'installed' }[action]) throw Error('Action requires the exact original predecessor stage; read original state without replay');
-    state.stage = (bootstrap ? 'bootstrap' : action === 'resume-install' ? 'install' : action) + '-in-progress'; persist();
-    const credentials = bootstrap ? { origin: actor.origin, namespace: 'panel', account: 'platform-admin',
-      password: fs.readFileSync(path.join(config.platformRoot, 'services/secret/cas/bootstrap-admin-password'), 'utf8').trim() } : JSON.parse(fs.readFileSync(credentialsFile));
+    if (action === 'cleanup-local') {
+      if (isolated) throw Error('cleanup-local is only allowed for local-panel fixtures');
+      if (!fs.existsSync(credentialsFile)) throw Error('Local fixture cleanup requires original private credentialsFile');
+    } else if (state.stage !== { bootstrap: 'new', 'resume-bootstrap': 'bootstrap-in-progress', publish: 'bootstrapped', install: 'published', 'resume-install': 'install-in-progress', members: 'installed' }[action]) {
+      throw Error('Action requires the exact original predecessor stage; read original state without replay');
+    }
+    if (action !== 'cleanup-local') {
+      state.stage = (bootstrap ? 'bootstrap' : action === 'resume-install' ? 'install' : action) + '-in-progress'; persist();
+    }
+    const credentials = bootstrap ? (isolated ? { origin: actor.origin, namespace: 'panel', account: 'platform-admin',
+      password: fs.readFileSync(path.join(config.platformRoot, 'services/secret/cas/bootstrap-admin-password'), 'utf8').trim() } : {
+      origin: actor.origin, namespace: adminIdentity.namespace, account: adminIdentity.account, password: localCreds.password
+    }) : JSON.parse(fs.readFileSync(credentialsFile));
     await withOriginalCasForms(actor, { journal: state.originalCasForms, persist, record: observe }, async () => {
       await actor.page.goto(actor.origin + '/api/v1/web/auth/login?return_to=%2Fportal%2F', { waitUntil: 'networkidle' });
       await actor.page.locator('input[name=account]').fill(credentials.account);
       await actor.page.locator('input[name=password]').fill(credentials.password);
       await actor.page.locator('form[action="/oauth/login"] button[type=submit]').click();
       await actor.page.waitForFunction(() => document.querySelector('form[action="/oauth/password/change"]') || ['/portal', '/panel'].some(p => location.pathname.startsWith(p)) || new URL(location.href).searchParams.has('error'), {}, { timeout: 60000 });
-      if (bootstrap) {
+      if (bootstrap && isolated) {
         check('Fresh isolated account requires initial password change', await actor.page.locator('form[action="/oauth/password/change"]').count() === 1);
         state.passwordChange = { password: 'Fixture@' + crypto.randomBytes(20).toString('hex'), outcome: 'unknown' }; persist();
         await actor.page.locator('#cas-new-password').fill(state.passwordChange.password);
         await actor.page.locator('#cas-new-password-confirm').fill(state.passwordChange.password);
         await actor.page.locator('form[action="/oauth/password/change"] button[type=submit]').click();
+      } else if (bootstrap && await actor.page.locator('form[action="/oauth/password/change"]').count() === 1) {
+        throw Error('Local platform fixture refuses unexpected initial password change on shared administrator');
       }
       await actor.page.waitForURL(u => ['/portal', '/panel'].some(p => u.pathname.startsWith(p)), { timeout: 45000 });
       const session = (await ok(actor, 'GET', '/api/v1/web/session/')).value;
-      check('Independent session confirms original isolated account and tenant', session.account?.account === 'platform-admin' && session.homeNamespace === 'panel');
+      check('Independent session confirms original isolated account and tenant', session.account?.account === credentials.account && session.homeNamespace === (credentials.namespace || 'panel'));
     });
     if (bootstrap) {
-      credentials.password = state.passwordChange.password;
-      persistFile(credentialsFile, credentials); state.passwordChange.outcome = 'confirmed'; state.stage = 'bootstrapped'; persist();
-      console.log(JSON.stringify({ status: 'bootstrapped', fixtureScope: 'dedicated isolated daemon; no shared platform changes' })); return;
+      if (state.passwordChange?.password) {
+        credentials.password = state.passwordChange.password;
+        state.passwordChange.outcome = 'confirmed';
+      }
+      persistFile(credentialsFile, credentials); state.stage = 'bootstrapped'; persist();
+      console.log(JSON.stringify({ status: 'bootstrapped', fixtureScope: isolated ? 'dedicated isolated daemon; no shared platform changes' : 'local host platform' })); return;
     }
     const h = { fs, path, root, state, persist, admin: actor, api, ownerApi: api, ok, good, check, observe, Blocked: Error };
     h.create = (collection, body, kind) => createResource(h, actor, 'admin', collection, body, kind);
     h.directory = route => require('./directory.cjs').readDirectory(h, actor, route);
+    if (action === 'cleanup-local') {
+      const cleaned = { installations: [], members: [] };
+      for (const saved of state.installations || []) {
+        const curResp = await api(actor, 'GET', '/panel/application/installations/' + saved.id);
+        if (curResp.status === 404 || curResp.data?.error?.code === 2) continue;
+        check('Read local installation before cleanup', good(curResp), curResp);
+        let cur = curResp.data.value;
+        if (cur.status !== 'uninstalled') {
+          const u = await api(actor, 'POST', '/panel/application/installations/' + cur.id + '/uninstall', {
+            expectedUpdateTime: cur.updateTime, expectedDigest: cur.sourceDigest, dataDisposition: 'destroy',
+            confirmation: cur.applicationKey, reason: 'Cleanup local-panel regression fixture'
+          });
+          check('Uninstall local regression fixture installation', good(u), u);
+          for (let n = 0; n < 120; n++) {
+            cur = (await ok(actor, 'GET', '/panel/application/installations/' + cur.id)).value;
+            if (cur.status === 'uninstalled' && cur.packagedReceipt?.lifecycle?.completionPending !== true) break;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          check('Local fixture installation reaches uninstalled state', cur.status === 'uninstalled', cur);
+        }
+        cleaned.installations.push(cur.id);
+      }
+      for (const [role, member] of Object.entries(state.members || {})) {
+        if (!member?.id) continue;
+        const del = await api(actor, 'DELETE', '/cas/namespaces/panel/accounts/' + member.id);
+        if (good(del) || del.status === 404 || del.data?.error?.code === 2) cleaned.members.push(role);
+      }
+      state.cleanup = cleaned; state.stage = 'cleaned'; persist();
+      console.log(JSON.stringify({ status: 'cleaned', ...cleaned })); return;
+    }
     async function command(route, body, independentRead, confirm = same) {
       const c = { method: 'POST', route, body, outcome: 'unknown' }; state.commands.push(c); persist();
       const r = await api(actor, 'POST', route, body); c.response = r; persist();
@@ -166,7 +257,9 @@ async function main() {
       let storage = (await ok(actor, 'GET', '/panel/application/installations/storage-options/')).value;
       if (!storage.allocation?.available) {
         const instances = await h.directory('/panel/operations/database-instances/');
-        check('Fresh isolated foundation endpoint is not already registered', !instances.some(v => v.address === 'postgres:5432'));
+        const existingFoundation = instances.some(v => v.address === 'postgres:5432');
+        if (isolated) check('Fresh isolated foundation endpoint is not already registered', !existingFoundation);
+        else if (existingFoundation) check('Local host foundation endpoint exposes available automatic storage', false, instances);
         const env = Object.fromEntries(fs.readFileSync(path.join(config.platformRoot, 'services/.env'), 'utf8').split('\n').filter(line => /^[A-Z_]+=/.test(line)).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
         check('Dedicated foundation credentials are materialized', !!env.POSTGRES_ROOT && !!env.POSTGRES_ROOT_PASSWORD && env.POSTGRES_ROOT_PASSWORD !== 'CHANGE_ME');
         state.databaseInstance = await h.create('/panel/operations/database-instances/', {
@@ -251,4 +344,4 @@ async function main() {
   } finally { await browser.close(); }
 }
 if (require.main === module) main().catch(error => { console.error(JSON.stringify({ status: 'blocked', error: error.name, detail: 'Private exact fixture journal retained; no automatic mutation replay' })); process.exitCode = 2; });
-module.exports = { validateIsolation, fixtureManifest, dedicatedDeliveryOnly, resumeBootstrapAllowed };
+module.exports = { isIsolatedNestedDaemon, validateIsolation, validateLocalPlatform, validateFixtureConfig, requireIsolatedDaemon, fixtureManifest, dedicatedDeliveryOnly, resumeBootstrapAllowed };

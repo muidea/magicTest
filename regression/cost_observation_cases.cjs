@@ -82,6 +82,9 @@ function validatePhase(result, phase, request, secrets = []) {
 }
 async function runPhase(h, phase, callback, { start = spawn, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   const token = randomBytes(16).toString('hex'), config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig));
+  if (!require('./delivery_fixture.cjs').isIsolatedNestedDaemon(config)) {
+    throw new h.Blocked('DELIVERY-FIXTURE: dedicated nested daemon isolation is required for cost observation');
+  }
   const seconds = config.costObservation?.seconds;
   if (!Number.isSafeInteger(seconds) || seconds < 8 || seconds > 40) throw new h.Blocked('Explicit bounded costObservation.seconds8-40 and actual enabled containers required');
   let ready, result, callbackTask, protocolError, closed = false, outputBytes = 0;
@@ -124,6 +127,7 @@ async function runPhase(h, phase, callback, { start = spawn, pause = ms => new P
   return { result, request: outcome?.value };
 }
 async function costs(h) {
+  require('./delivery_fixture.cjs').requireIsolatedDaemon(h, 'DELIVERY-FIXTURE: dedicated nested daemon isolation is required for cost observation');
   const f = await fixture(h);
   const config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig));
   if (!config.costObservation) throw new h.Blocked('Dedicated actual cost observation declarations are required; no production profile changes');

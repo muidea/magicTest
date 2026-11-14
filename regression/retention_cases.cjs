@@ -82,7 +82,8 @@ async function uiReadFailure(h, r) {
 async function boundaries(h) {
   // Positive retention can make old records eligible for deletion. Admit it
   // only after proving this is the dedicated isolated fixture daemon.
-  const isolated = !!h.deliveryFixtureConfig;
+  const { isIsolatedNestedDaemon } = require('./delivery_fixture.cjs');
+  const isolated = !!h.deliveryFixtureConfig && isIsolatedNestedDaemon(JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig)));
   if (isolated) await require('./delivery_cases.cjs').fixture(h);
   const original = await read(h);
   h.check('Complete policy owner read has both declared policies and safe conditional revision', Number.isSafeInteger(original.resourceVersion) && original.resourceVersion >= 0 && same(Object.keys(original.policies).sort(), ['operationLog', 'securityAudit']));
