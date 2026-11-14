@@ -326,7 +326,7 @@ async function actions(h, tag) {
     if (open.length) {
       h.observe({ kind: 'business-action-original-cleanup-open', count: open.length, reason: 'Keep exact original row/actor/template/installation; primary failure retained' });
       if (!primary) throw new h.Blocked('Original business action disposition unresolved; retain installation');
-    } else { await retireCaseTemplates(h); await pages.disposeExplicitFixture(h, f, primary); }
+    } else { await retireCaseTemplates(h, tag); await pages.disposeExplicitFixture(h, f, primary); }
   }
   await h.partial('Frozen action API, data-level and only-action separation, original-session retirement, three-width real action form/single-click receipt/terminal UI, dual-instance refusal and exact receipt/replay/input conflict/stale-version/state guard supported subset completed. Endpoint/cross-tenant/other-action/expired-installation and full lifecycle matrix remain unverified.');
 }
@@ -337,9 +337,11 @@ module.exports = { handlers: { 'F070-001': normal, 'F070-002': authorization }, 
 // The installation destroy fence refuses while a user-owned template still
 // references application roles. This case owns those templates, so it must
 // retire them (after its assignments are revoked) before the destroy step.
-async function retireCaseTemplates(h) {
+async function retireCaseTemplates(h, tag) {
   const rows = await h.directory(h.admin, '/cas/namespaces/panel/role-templates/');
-  for (const template of rows.filter(t => t && !t.systemManaged && typeof t.key === 'string' && t.key.startsWith(h.state.prefix + '-'))) {
+  const exactPrefix = h.state.prefix + '-' + tag;
+  for (const template of rows.filter(t => t && !t.systemManaged && typeof t.key === 'string' &&
+    (t.key === exactPrefix || t.key.startsWith(exactPrefix + '-')))) {
     const response = await h.api(h.admin, 'DELETE', '/cas/namespaces/panel/role-templates/' + template.id);
     if (!h.good(response)) throw new h.Blocked('Original user-owned template retirement failed before installation destroy: ' + template.key);
   }

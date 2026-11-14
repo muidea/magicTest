@@ -72,13 +72,19 @@ async function observations(h) {
       member.resource.scenarioDefinitionId = f.application.id;
       member.resource.scenarioInstallationIds = f.installations.map(i => String(i.id)); h.persist();
       await authority.assign(h, member, group, []);
-      await read(h, member.actor, context, reader.kind, true);
-      h.check('One observation role does not imply the other observation reader', denied(await read(h, member.actor, context, readers[1 - index].kind)));
-      h.check('Exact observer role does not cross to the second installed instance', denied(await read(h, member.actor, peer, reader.kind)));
-      const data = await business.record(h, member.actor, { ...context, recordId: '1' });
-      h.check('Observer-only account cannot read ordinary instance business data, even by guessed ID', denied(data), data);
-      await require('./business_action_cases.cjs').revoke(h, member, group, ordinary);
-      h.check('Original logged-in observer loses the exact observation after current CAS role revocation', denied(await read(h, member.actor, context, reader.kind)));
+      let revoked = false;
+      try {
+        await read(h, member.actor, context, reader.kind, true);
+        h.check('One observation role does not imply the other observation reader', denied(await read(h, member.actor, context, readers[1 - index].kind)));
+        h.check('Exact observer role does not cross to the second installed instance', denied(await read(h, member.actor, peer, reader.kind)));
+        const data = await business.record(h, member.actor, { ...context, recordId: '1' });
+        h.check('Observer-only account cannot read ordinary instance business data, even by guessed ID', denied(data), data);
+        await require('./business_action_cases.cjs').revoke(h, member, group, ordinary);
+        revoked = true;
+        h.check('Original logged-in observer loses the exact observation after current CAS role revocation', denied(await read(h, member.actor, context, reader.kind)));
+      } finally {
+        if (!revoked) await require('./business_action_cases.cjs').revoke(h, member, group, ordinary).catch(() => {});
+      }
     }
   } catch (error) { primary = error; throw error; }
   finally { await pages.disposeExplicitFixture(h, f, primary); }
