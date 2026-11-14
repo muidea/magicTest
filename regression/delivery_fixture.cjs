@@ -209,9 +209,10 @@ async function main() {
         }
         let current, operation;
         for (let n = 0; n < 180; n++) {
-          current = (await ok(actor, 'GET', ops)).value;
           operation = (await ok(actor, 'GET', '/panel/operations/namespaces/panel/application-deployment-operations/' + approved.operationId)).value;
-          if (['succeeded', 'failed', 'cancelled'].includes(operation.status)) break;
+          current = (await ok(actor, 'GET', ops)).value;
+          if (['succeeded', 'failed', 'cancelled'].includes(operation.status) &&
+              ['succeeded', 'failed', 'cancelled'].includes(current.status)) break;
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
         state.deploymentRequests[state.deploymentRequests.findIndex(v => v.id === request.id)] = current;
