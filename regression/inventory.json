@@ -3845,7 +3845,7 @@
         "platform-bound-reference",
         "platform-bound-reference-tests"
       ],
-      "finding": "仅现有File单一合法consumer的绑定、外consumer消费/下载/释放拒绝、原字节保持、完整deletionConfirmed及精确NotFound、旧引用拒绝和独立peer保持；无公开多合法引用增减合同，共享最后引用、并发增减及丢响应恢复未覆盖。源码与离线工具检查，整例partial，Live留后。"
+      "finding": "仅现有单一合法consumer经Panel受权服务端消费/绑定(/panel/application/definitions/:id/function-blocks/sources 与 /panel/application/model-packages/imports/)、直调Service-only File消费/下载/删除路由对人类会话返回403隔离、错purpose/错摘要/外consumer拒绝及独立peer保持；无公开多合法引用增减合同，共享最后引用、并发增减及丢响应恢复未覆盖。源码与离线工具检查，整例partial，Live留后。"
     },
     {
       "caseId": "F057-005",

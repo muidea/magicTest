@@ -62,7 +62,8 @@ async function main() {
   const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, '../docs/acceptance/platform-catalog.json')));
   const baseline = JSON.parse(fs.readFileSync(options['baseline-health']));
   const selected = selectCases(catalog);
-  selected.sort((a, b) => Number(a.id === 'F003-001') - Number(b.id === 'F003-001'));
+  const orderRank = item => (item.id === 'F035-006' ? -1 : item.id === 'F003-001' ? 1 : 0);
+  selected.sort((a, b) => orderRank(a.id) - orderRank(b.id));
   if (!selected.length) throw Error('No selected standard cases');
   const stateFile = path.join(priv, 'state.json');
   const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile)) : { prefix: 'rg' + crypto.randomBytes(4).toString('hex'), password: 'Rg@' + crypto.randomBytes(16).toString('hex'), resources: [], fixtures: {} };

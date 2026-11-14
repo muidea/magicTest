@@ -660,7 +660,7 @@ F035-006使用[机器只读传输](~/codespace/magicTest/regression/runtime_mach
 机器只执行 `/api/v1/panel/runtime-execution/snapshot/` GET及三种有限query拒绝探针，无Cookie、无跳转、无重试，15秒整个请求预算。完整JSON响应信封body按16MiB流式限额计数；8192字节配置和65536字节token文件上限是工具输入预算，不是产品合同。快照核对原机器／有效租约、完整标记、独立双安装已知行及真实普通主体业务集合读取，运行双方时钟应同步。已知行与完整标记不能证明所有assignment；实际Gateway Apply／持久history／route-receipt及完整容量、字节与重启边界仍开放。测试本机socket通过仅证明工具门禁，不代表平台通过。
 
 
-[文件受管引用执行器](~/codespace/magicTest/regression/bound_reference_cases.cjs)补充 F049-004 的现有单消费者合同：正式私有上传和consume绑定原consumer，外consumer的消费／下载／删除必须命中精确生命周期拒绝；原字节及独立peer保持。原consumer正式释放需完整deletionConfirmed、精确view和独立bound-download NotFound，旧引用不得复活。先持久记录原命令，未知不重发；pending上传无公开取消路径时保留开放，不猜测绑定或删除。当前不存在多合法引用增减公开合同，独立文件或被拒consumer不能替代共享最后引用；整例保持partial。
+[文件受管引用执行器](~/codespace/magicTest/regression/bound_reference_cases.cjs)补充 F049-004 的现有单消费者合同：人类会话经 `/files/self/files/upload-references/` 完成私有上传，核对直调 Service-only `/files/upload-references/:uploadRef/consume` 与 `/files/bound-files/` 路由返回 403 边界隔离；由认证后的 Panel 所有者接口（功能块源码绑定与模型包导入）执行实际服务端消费、原摘要/purpose 校验、单一合法 consumer 绑定、外 consumer/错摘要/错 purpose 拒绝、不可变包字节读取与独立 peer 保持。先持久记录原命令，未知不重发；当前不存在多合法引用增减公开合同，共享最后引用与并发释放仍开放，整例保持partial。
 
 [审计接纳执行器](~/codespace/magicTest/regression/audit_admission_cases.cjs)补充 F057-005 的锁冲突子集，仅在已确认的独立交付部署中运行。绑定原daemon、Panel容器／image／startedAt／restartCount及原持久bind mount和数字UID，[只读锁工具](~/codespace/magicTest/regression/audit_admission_lock.py)仅用只读fd占用已经存在的.operation-audit/admission.lock，不创建、改写、删除或更换队列文件。ready后、派发前再核对持有状态与部署身份；原条件更新须命中接纳锁拒绝，并独立保持完整服务和精确审计基线。原inode释放且原部署保持后，发送不同正文的新命令，以完整业务owner和唯一新持久审计event证明真实提交。任何命令未知不重发，holder退出只释放自身锁。此子集不构造真实满队列，不验证10000条／16KiB信封或CAS pending+reserved边界；容量、故障、提交后恢复及留存仍需另验，整例保持partial。
 
