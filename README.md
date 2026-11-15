@@ -607,7 +607,7 @@ F027-001 由 `~/codespace/magicTest/regression/installation_request_cases.cjs` �
 [页面刷新执行器](~/codespace/magicTest/regression/page_refresh_cases.cjs)补充 F069-005：冻结5秒不重叠读取配置，普通成员三宽度真实自动读取；仅延迟精确原应用/安装/源的只读POST响应，跨刷新间隔检查不重叠，再通过真实导航离页、释放原响应并返回。单次真实只读失败后核对可见错误、声明退避和真实owner恢复；真实后台页检查仅在浏览器实际报告hidden后才计证据。原业务行由独立owner核对，可靠删除后再正式卸载；隐藏转换不可用、时间窗口、切账号或持久写面板未覆盖时仍按部分验证记录。
 
 
-剩余45项的源码补充以[执行器清单](~/codespace/magicTest/regression/inventory.json)和[当前补充范围](~/codespace/docs/acceptance/runs/2026-11-05-platform-standard-regression/executor-completion-20261108T114109Z/implementation-scope.json)为准：原45项均已补实质验证子集，均保持partial；统一入口222项，另有独立健康检查1项，常规分项均有执行入口。注册入口不代表整例覆盖或Live通过；本阶段按用户要求只补源码，平台实际验证留后。
+执行器源码范围与缺口状态以[执行器清单](~/codespace/magicTest/regression/inventory.json)及[唯一用例目录](~/codespace/docs/acceptance/platform-catalog.json)为准：统一入口与专项健康检查均有对应注册入口，具体覆盖范围、能力边界与待验条件随当次运行另行记录。注册入口不代表整例覆盖或Live通过；真实验证以清理后新建的当前轮次目录结果为准。
 
 [模型输入执行器](~/codespace/magicTest/regression/model_input_cases.cjs)补充类型、关系、引用删除与表单协议子集；[交付补充](~/codespace/magicTest/regression/delivery_completion_cases.cjs)补充完整ZIP/checksum/程序文件、冻结授权和同版本升级拒绝。[提供方补充](~/codespace/magicTest/regression/provider_completion_cases.cjs)与[依赖运行](~/codespace/magicTest/regression/dependency_runtime_cases.cjs)分别覆盖真实包中的启动身份、范围申请，以及组件实际消费依赖就绪与参数。租户删除、权限修订、服务停发/重发和同浏览器账号切换另由各自执行器覆盖；尚缺的完整矩阵逐例记录，不用空handler填充。
 
