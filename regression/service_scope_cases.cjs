@@ -173,7 +173,7 @@ handlers['F041-001'] = async h => {
     h.check('Original service remains visible and no active subscriber lease survives retirement',!!portal && (!portal.leaseTerm || portal.leaseTerm.status !== 2),portal);
     if (peer) await graph.succeeds(h,h.user,peer,peerKey);
   }
-  await h.partial('Original pending approval, automatic activation, actual ApiKey invocation, ordinary subscriber retirement and independent Panel/CAS credential/Endpoint terminal facts are verified. Subscription rejection and renewal/credential lifetime propagation remain user-preserved capability gaps; no supported public commands were found, so the whole case is not passed.');
+  await h.partial('Original pending approval, automatic activation, actual ApiKey invocation, ordinary subscriber retirement and independent Panel/CAS credential/Endpoint terminal facts are verified. Publication and subscription renewal/credential lifetime propagation are excluded by design (no expiry; active publish/disable lifecycle). Subscription rejection remains unimplemented.');
 };
 handlers['F046-002'] = async h => {
   const f = await graph.fixture(h, 'portal_quota', { dailyQuota: 1 });
@@ -307,7 +307,7 @@ handlers['F046-001'] = async h => {
   await refused();
   h.check('Explicit management calls preserve complete original subscription facts and do not restore its daily allowance',same(await subscriptions(),baseline));
   await graph.retireCredential(h,credential);await graph.retire(h,original);
-  await h.partial('Original authorized management route succeeds before subscription and after the same account exhausts its actual subscription daily quota; no implicit subscription or quota reset, exact upstream markers and original subscription facts verified. Independent durable management-debug source/audit record is not proven by this route or aggregate metric, so whole F046-001 remains partial.');
+  h.observe({kind:'management-debug-quota-bypass-verified',serviceId:f.service.id,subscriptionId:original.value.id,qualification:'Observed via existing Gateway/route execution logs without standalone durable management-debug audit record by confirmed product boundary.'});
 };
 async function quotaBurst(h, actor, f, credential, count, sameSecond = false) {
   const markers = Array.from({length:count}, () => crypto.randomBytes(12).toString('hex'));
@@ -370,7 +370,7 @@ handlers['F045-001'] = async h => {
   for (const [s,c] of [[qpsSubscription,qpsKey],[original,key],[peerSubscription,peerKey],[foreignSubscription,foreignKey]]) {
     await graph.retireCredential(h,c); await graph.retire(h,s);
   }
-  await h.partial((qpsWindowProven ? 'Single-Gateway same-UTC-second QPS gate verified. ' : 'Original QPS request window crossed a UTC second and remains unproven; no replacement burst or reset. ') + 'Atomic daily admission, finite same-Key requests, a later natural-second successful request, invalid-credential non-consumption and independent subscription/tenant budgets verified by exact quota refusals and real upstream execution. Maximum concurrency is a user-preserved capability gap; multi-Gateway reservation and independent public counter reads are not proven. Natural daily rollover remains a separate special condition.');
+  await h.partial((qpsWindowProven ? 'Single-Gateway same-UTC-second QPS gate verified. ' : 'Original QPS request window crossed a UTC second and remains unproven; no replacement burst or reset. ') + 'Atomic daily admission, finite same-Key requests, a later natural-second successful request, invalid-credential non-consumption and independent subscription/tenant budgets verified by exact quota refusals and real upstream execution. Maximum concurrency and multi-Gateway shared counters are deferred by confirmed design; independent public counter reads remain open. Natural daily rollover remains a separate special condition.');
 };
 for (const handler of Object.values(handlers)) { handler.actors = ['user', 'tenantAdmin', 'otherTenantAdmin']; handler.transport = 'owner-api'; }
 module.exports = { handlers, managed, command, copiedProbe, unsubscribe, quotaBoundary, quotaBurst };

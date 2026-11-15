@@ -102,3 +102,15 @@ test('Docker mount and container ordering never changes TLS ownership but actual
   assert.notDeepEqual(canonicalContainers(rows), canonicalContainers(reordered));
   assert.equal(rows[0].mounts[0].target, '/a');
 });
+
+test('F062-003 TLS rotation blocks on local-panel config before reading or mutating host TLS files', async () => {
+  const { handlers } = require('./tls_delivery_cases.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-rotation-local-guard-'));
+  const cfgFile = path.join(root, 'local-fixture.json');
+  try {
+    fs.writeFileSync(cfgFile, JSON.stringify({ mode: 'local-panel', platformRoot: root }));
+    class BlockedError extends Error {}
+    const h = { fs, path, Blocked: BlockedError, deliveryFixtureConfig: cfgFile };
+    await assert.rejects(() => handlers['F062-003'](h), error => error instanceof BlockedError && /dedicated nested daemon isolation is required/i.test(error.message));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

@@ -185,6 +185,7 @@ async function restoreMaterial(h, r) {
   return { proof: 'Exact original material restored through formal delivery/reload; strict served original leaf/CA and all current tenant routes, unrelated core identities unchanged. Original command history retained, private key backup removed only after confirmation.' };
 }
 async function rotation(h) {
+  require('./delivery_fixture.cjs').requireIsolatedDaemon(h, 'DELIVERY-FIXTURE: dedicated nested daemon isolation is required for TLS rotation mutation');
   await fixture(h);
   const config = JSON.parse(h.fs.readFileSync(h.deliveryFixtureConfig)), platformRoot = config.platformRoot;
   const originalRoot = h.path.join(platformRoot, 'services/secret/tls');

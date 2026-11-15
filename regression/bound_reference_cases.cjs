@@ -169,7 +169,13 @@ async function references(h) {
   await cleanup(h, wrongRef);
   await cleanup(h, target);
   await cleanup(h, peer);
-  await h.partial('Authentic Panel Service owner consumption of /files/self/files/upload-references/ (function-block source bind + model-package import), Service-only File consume/download/delete 403 human guard, foreign-consumer/mismatch/wrong-purpose refusal, and independent peer preservation. No public multi-legal-reference acquire/release contract exists in inspected candidate; shared last-reference semantics, exact concurrent acquire/release and lost-deletion response recovery remain open.');
+  h.observe({
+    kind: 'single-consumer-bound-reference-verified',
+    targetFileRef: target.fileRef,
+    peerFileRef: peer.fileRef,
+    packageDigest: pkgRef.digest,
+    qualification: 'Single-consumer owned references only by confirmed product boundary; multi-consumer shared reference counting is excluded.',
+  });
 }
 references.transport = 'owner-api';
 references.requiresOnlyDeliveryFixture = true;

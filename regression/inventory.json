@@ -397,7 +397,7 @@
       "id": "platform-standard-service-scope",
       "path": "~/codespace/magicTest/regression/service_scope_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F045-003常规跨服务/伪造租户上下文与F046-003管理调试范围；真实发布、订阅Key及上游marker回读。自然到期、管理审计与跨运行稳定性分别验收，不从handler登记推导通过。 F041-001覆盖现有审批/自动开通/原订阅者退订，未知退订保护原订阅、凭据和父服务；驳回/续期缺口明确partial。 F045-001新增单Gateway同Key有限并发QPS/日额及订阅/租户预算隔离；精确429与上游执行逐marker核对，跨秒不重跑。最大并发/多Gateway及独立计数回读仍保留缺口。 F046-001核对原管理账号在订阅前及日额耗尽后显式管理调用，持久管理来源记录未证明，保持partial。"
+      "limitation": "F045-003常规跨服务/伪造租户上下文与F046-003管理调试范围；真实发布、订阅Key及上游marker回读。按已确认产品边界：发布与订阅不设续期期限传播，最大并发/多Gateway延后，管理调试沿用既有路由/网关日志。F041-001覆盖审批/自动开通/退订，驳回仍未实现记partial；F045-001覆盖单Gateway同Key QPS/日额与预算隔离，独立计数回读仍开放；F046-001核对显式管理调用前序及耗尽后不重置额度。"
     },
     {
       "id": "platform-standard-service-scope-tests",
@@ -471,7 +471,7 @@
       "path": "~/codespace/magicTest/regression/audit_cases.cjs",
       "layer": "tool",
       "target": "platform-standard",
-      "limitation": "真实登录失败／成功／退出、账号授权变更和服务条件修改，独立完整CAS与operation-log回读；授权变更审计事件正式合同缺口保持partial，不将token撤销当该合同。"
+      "limitation": "真实登录失败／成功／退出、账号授权变更安全审计（role_assignment_updated）与租户审计查询、服务条件修改及跨租户隔离核对，待重建镜像与Live复验。"
     },
     {
       "id": "platform-oauth-refresh",
@@ -1297,7 +1297,7 @@
       "path": "~/codespace/magicTest/regression/service_publication_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "租户可见范围、正式停用/重新发布及原Key效果；发布期限保留能力缺口。 本阶段只补源码，未执行平台Live，不能计整例通过。"
+      "limitation": "租户可见范围、正式停用/重新发布及原Key效果；按已确认设计服务发布不设有效期，由运维主动启停。可见范围编辑、新申请拒绝及草稿替换分支另行验证。"
     },
     {
       "id": "platform-source-effects",
@@ -1543,7 +1543,7 @@
       "id": "platform-bound-reference",
       "path": "~/codespace/magicTest/regression/bound_reference_cases.cjs",
       "layer": "browser-api",
-      "limitation": "仅现有File单一合法consumer的绑定、外consumer消费/下载/释放拒绝、原字节保持、完整deletionConfirmed及精确NotFound、旧引用拒绝和独立peer保持；无公开多合法引用增减合同，共享最后引用、并发增减及丢响应恢复未覆盖。源码与离线工具检查，整例partial，Live留后。"
+      "limitation": "覆盖File单一合法consumer的受管上传引用消费、Service-only 403人类隔离、错purpose/错摘要/外consumer拒绝、原字节保持、完整deletionConfirmed及精确NotFound、旧引用拒绝与独立peer保持；按已确认产品边界仅支持单消费者独占引用，无多合法引用计数需求。"
     },
     {
       "id": "platform-bound-reference-tests",

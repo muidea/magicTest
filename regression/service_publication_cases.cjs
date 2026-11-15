@@ -31,7 +31,7 @@ async function publication(h) {
   await graph.succeeds(h, h.user, f, key);
   h.check('Original subscription identity, lease and subject remain unchanged after restart', same((await h.ok(owner, 'GET', graph.subscriptions + s.value.id)).value, subscription));
   await graph.retireCredential(h, key); await graph.retire(h, s);
-  await h.partial('Tenant-scoped portal visibility, formal disable/re-publish, existing original Key upstream refusal/recovery, frozen interface and complete original subscription preservation implemented. Visibility edits, new-request refusal and draft replacement remain separate branches. Publication expiry remains the user-preserved capability gap; no invented expiry field.');
+  await h.partial('Tenant-scoped portal visibility, formal disable/re-publish, existing original Key upstream refusal/recovery, frozen interface and complete original subscription preservation implemented. Service publication has no expiry lifetime by design and is actively managed via publish/disable. Visibility edits, new-request refusal and draft replacement remain separate branches.');
 }
 publication.actors = ['user', 'tenantAdmin', 'otherTenantAdmin']; publication.transport = 'owner-api';
 module.exports = { handlers: { 'F040-001': publication } };
