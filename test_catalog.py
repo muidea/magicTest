@@ -59,8 +59,8 @@ def _pythonpath_for(*relative_dirs: str) -> str:
 GOALS: Dict[str, TestGoal] = {
     "platform-regression": TestGoal(
         key="platform-regression",
-        title="平台常规全量回归",
-        description="按唯一目录逐项验证常规分支，独立报告未实现、受阻及资源清理。",
+        title="平台功能常规与异常回归",
+        description="默认按正向功能（standard）全量回归，异常测试（abnormal）独立分组并按需执行。",
     ),
     "foundation": TestGoal(
         key="foundation",
@@ -134,10 +134,18 @@ TARGETS: Tuple[TestTarget, ...] = (
     TestTarget(
         key="platform-standard",
         goal="platform-regression",
-        title="平台常规全量回归",
-        description="自动预检、浏览器/API验证、owner清理和报告；配置由MAGICTEST_REGRESSION_CONFIG指定。",
+        title="平台正向与非破坏性常规回归",
+        description="默认仅执行正向功能、页面交互及非破坏性验证（standard）；自动预检、浏览器/API验证、owner清理和报告；配置由MAGICTEST_REGRESSION_CONFIG指定。",
         workdir=ROOT_DIR,
         command=(sys.executable, "-B", "regression/run_standard.py"),
+    ),
+    TestTarget(
+        key="platform-abnormal",
+        goal="platform-regression",
+        title="平台破坏性与故障异常验证",
+        description="独立执行故障注入、中断恢复、损坏制品与并发冲突等破坏性异常测试（abnormal）；配置由MAGICTEST_REGRESSION_CONFIG指定。",
+        workdir=ROOT_DIR,
+        command=(sys.executable, "-B", "regression/run_standard.py", "--suite", "abnormal"),
     ),
     TestTarget(
         key="session-foundation",

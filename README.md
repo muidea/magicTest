@@ -4,7 +4,7 @@ Node.js浏览器工具统一使用用户级Playwright `1.65.0`（入口为`~/.lo
 
 平台基本功能以交付可重复执行的完整场景、逐条用例及配套脚本为目标，统一要求见[平台全量功能回归说明](~/dataspace/magicPlatform/docs/technical/platform-functional-regression.md)，两个模拟应用单列。正式回归材料只描述当前功能、环境准备、操作断言、清理和执行方式，不包含过去的临时阶段记录。
 
-[资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找71类功能、245条必需用例的候选脚本和缺口；清单存在不代表完整脚本套件已经交付。默认常规全量目标为212个分项自动执行，53个条件专项单独预检与验证；20条混合用例分别记账，完整目录仍为245条。需独立嵌套 Docker 守护进程的11项非正常业务/部署运维与故障注入用例（`F057-005`、`F059-002`、`F060-001/002`、`F061-001/002/003`、`F062-001/003`、`F063-001/002`）已归入条件专项待办项（`isolated-daemon`），后续使用单独环境执行，不作为正常功能验收。异常类型不直接决定是否专项，可稳定构造的权限／输入／并发／浏览器反例保留在常规。
+[资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找71类功能、245条必需用例的候选脚本和缺口；清单存在不代表完整脚本套件已经交付。默认常规回归（`standard`）执行正向功能、交互与非破坏性验证（184个分项，覆盖66类功能；包含不产生破坏性的权限隔离、分页聚合及合法输入/引用保护拒绝），破坏性与故障异常测试（`abnormal`，28个分项，覆盖24类功能）与条件专项（`special`，53个分项，覆盖31类功能）各自单列并单独触发；全量共179条仅`standard`、13条仅`abnormal`、33条仅`special`、5条`standard+special`混合、15条`abnormal+special`混合，完整目录仍为245条／265个分项。需独立嵌套 Docker 守护进程的11项非正常业务/部署运维与故障注入用例（`F057-005`、`F059-002`、`F060-001/002`、`F061-001/002/003`、`F062-001/003`、`F063-001/002`）归入条件专项待办项（`isolated-daemon`），后续使用单独环境执行，不作为正常功能验收；其余故障注入、中断、损坏制品、并发冲突与全局策略破坏等测试归入`abnormal`，通过 `platform-abnormal` 独立回归。
 
 ```sh
 cd ~/codespace/magicTest
@@ -12,17 +12,18 @@ python3 regression_inventory.py --check
 python3 regression_inventory.py --case F033-001
 python3 regression_inventory.py --scenario R10
 python3 regression_inventory.py --suite standard --json
+python3 regression_inventory.py --suite abnormal --json
 python3 regression_inventory.py --suite special --json
 python3 regression_inventory.py --json
 ```
 
-[盘点工具](~/codespace/magicTest/regression_inventory.py)只读原用例目录并复用目录owner的分组校验，不运行测试；默认展示整个目录，`--suite`只筛选导航，不执行所选组。分组详情和条件见[专项清单](~/codespace/docs/acceptance/platform-special-cases.md)。缺协作仓库或引用失效会明确失败；可用`--workspace`与`--platform-root`指定checkout。执行仍使用下文统一入口；现有部分套件可能跳过，退出码为0不等于对应功能用例已通过。
+[盘点工具](~/codespace/magicTest/regression_inventory.py)只读原用例目录并复用目录owner的分组校验，不运行测试；默认展示整个目录，`--suite`只筛选导航，不执行所选组。分组详情和条件见[异常清单](~/codespace/docs/acceptance/platform-abnormal-cases.md)和[专项清单](~/codespace/docs/acceptance/platform-special-cases.md)。缺协作仓库或引用失效会明确失败；可用`--workspace`与`--platform-root`指定checkout。执行仍使用下文统一入口；现有部分套件可能跳过，退出码为0不等于对应功能用例已通过。
 
-### 平台常规统一执行
+### 平台常规与异常统一执行
 
 业务动作 F070-001/002 使用[动作执行器](~/codespace/magicTest/regression/business_action_cases.cjs)：正式冻结模型、页面动作绑定和精确实例动作角色，配对查看／编辑／管理数据与独立动作权限、仅动作账号、原会话撤权、双实例拒绝、安装身份失配、状态／旧版本、原回执及已确认重放／输入冲突。真实动作表单包含390／1366／1920三宽度、单次点击、原请求与回执、独立完整业务行回读及终态禁用断言，源码尚待实际浏览器验证。动作与数据写入均先记原意图；响应丢失只查询原回执，主体漂移或结果未知保留原业务行、账号、模板和安装，不自动重发。Endpoint、真实另一租户、真实过期安装与完整生命周期仍缺，不计整例完成。当前按用户约定先补执行器及工具检查，平台Live后续单独执行。
 
-正式入口为`platform-standard`，由[编排工具](~/codespace/magicTest/regression/run_standard.py)自动采集部署与健康基线、调用逐例执行器、正式清理夹具、再次核对候选并生成报告。使用仓库外的私密配置文件；配置仅引用凭据文件，不把密码写在命令行。示例配置：
+正式正向回归入口为`platform-standard`（默认执行184个正向与非破坏性分项），破坏性异常测试入口为`platform-abnormal`（独立执行28个故障注入／中断／冲突恢复分项），均由[编排工具](~/codespace/magicTest/regression/run_standard.py)自动采集部署与健康基线、调用逐例执行器、正式清理夹具、再次核对候选并生成报告。使用仓库外的私密配置文件；配置仅引用凭据文件，不把密码写在命令行。示例配置：
 
 初次浏览器启动有120秒预算；启动完成后不再用该预算中断业务命令。启动超时会保留原私密状态并继续采集健康／失败报告，不重试写入、不推定已清理，也不保证内核不可中断线程已经退出。原身份恢复入口可继续使用原私密目录。
 
@@ -39,11 +40,14 @@ python3 regression_inventory.py --json
 cd ~/codespace/magicTest
 python3 -B run_tests.py --target platform-standard --dry-run
 MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json python3 -B run_tests.py --target platform-standard
+# 异常测试验证单独触发：
+python3 -B run_tests.py --target platform-abnormal --dry-run
+MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json python3 -B run_tests.py --target platform-abnormal
 ```
 
-配置可选`catalog`（唯一用例目录）、`cases`（常规用例ID数组，省略即全量）、`chrome`（已安装浏览器）和`fileUploadMaxBytes`（实际部署的文件上传上限字节，F049-003必填）。直接执行`python3 -B regression/run_standard.py --config <private-config> --dry-run`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的常规分项，运行入口存在不代表完整套件交付。
+配置可选`catalog`（唯一用例目录）、`cases`（所选分组的用例ID数组，省略即全量）、`chrome`（已安装浏览器）和`fileUploadMaxBytes`（实际部署的文件上传上限字节，F049-003必填）。直接执行`python3 -B regression/run_standard.py --suite standard --config <private-config> --dry-run`或`--suite abnormal`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的分项，运行入口存在不代表完整套件交付。
 
-每次在已登记运行目录下生成唯一子目录，保留`inputs.json`、`health-before`、`browser`、`health-after`、`results.json`和`report.json`。报告校验逐例证据摘要；只有常规分项全部通过、部署身份不变、前后健康、本次资源已独立确认清理且执行器成功，才返回成功。定向执行也报告完整常规目录覆盖率，其余项显示未执行；非零退出需根据逐例状态区分受阻、工具错误和产品失败。私密恢复状态自动留在仓库外，位置打印到终端，不归档其内容。当前浏览器夹具清理不代表历史基础设施登记器已全局核销。
+每次在已登记运行目录下生成唯一子目录，保留`inputs.json`、`health-before`、`browser`、`health-after`、`results.json`和`report.json`。报告校验逐例证据摘要；只有所选分组全部分项通过、部署身份不变、前后健康、本次资源已独立确认清理且执行器成功，才返回成功。定向执行也报告所选分组完整覆盖率，其余项显示未执行；非零退出需根据逐例状态区分受阻、工具错误和产品失败。私密恢复状态自动留在仓库外，位置打印到终端，不归档其内容。当前浏览器夹具清理不代表历史基础设施登记器已全局核销。
 
 同一HTTPS origin的常规执行串行进行。编排工具从预检到清理／报告持有本机排他锁，重复启动在业务操作前明确拒绝；不同用例的独立租户仍可能共享平台OAuth客户端，不能据此并发启动整组夹具。直接调用子执行器须由调用方保障同环境互斥；锁不协调其他机器或平台管理操作。
 

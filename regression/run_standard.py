@@ -96,7 +96,7 @@ def relocate(entry, prefix):
     return entry
 
 
-def finish(owner, catalog, before, after, browser, directory, browser_exit):
+def finish(owner, catalog, before, after, browser, directory, browser_exit, suite='standard'):
     same_candidate = before['environment'] == after['environment']
     cleanup_files = sorted((directory / 'browser/attempts').glob('*/cleanup.json'))
     cleanup = [{'path': str(p.relative_to(directory)),
@@ -113,7 +113,7 @@ def finish(owner, catalog, before, after, browser, directory, browser_exit):
         result['results'].append(relocate(after['results'][0], 'health-after'))
     save(directory / 'results.json', result)
     entries = owner.validate_results(catalog, result, directory)
-    report = owner.summarize(catalog, entries, 'standard')
+    report = owner.summarize(catalog, entries, suite)
     report['environment'] = before['environment']
     report['executionGates'] = {
         'sameDeploymentBeforeAfter': same_candidate,
@@ -135,6 +135,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', default=os.getenv('MAGICTEST_REGRESSION_CONFIG'),
                         help='private JSON: credentials, output; optional catalog, cases, chrome')
+    parser.add_argument('--suite', choices=['standard', 'abnormal'], default='standard',
+                        help='execution suite to run: standard (positive default) or abnormal')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     config = json.loads(Path(args.config).expanduser().read_text()) if args.config else {}
@@ -152,10 +154,10 @@ def main():
     catalog = json.loads(catalog_path.read_text())
     owner.validate_catalog(catalog)
     cases = config.get('cases')
-    standard_ids = {c['id'] for c in catalog['cases'] if c['required'] and any(p['suite'] == 'standard' for p in c['execution'])}
-    if cases is not None and (not isinstance(cases, list) or not cases or any(not isinstance(c, str) or c not in standard_ids for c in cases) or len(cases) != len(set(cases))):
-        raise ValueError('cases must be distinct required standard case IDs')
-    command = ['node', str(ROOT / 'regression/standard.cjs'), '--catalog', str(catalog_path)]
+    suite_ids = {c['id'] for c in catalog['cases'] if c['required'] and any(p['suite'] == args.suite for p in c['execution'])}
+    if cases is not None and (not isinstance(cases, list) or not cases or any(not isinstance(c, str) or c not in suite_ids for c in cases) or len(cases) != len(set(cases))):
+        raise ValueError(f'cases must be distinct required {args.suite} case IDs')
+    command = ['node', str(ROOT / 'regression/standard.cjs'), '--catalog', str(catalog_path), '--suite', args.suite]
     if cases:
         command += ['--cases', ','.join(cases)]
     if 'fileUploadMaxBytes' in config:
@@ -175,18 +177,18 @@ def main():
     if not credentials.is_file():
         raise ValueError('Credentials file does not exist')
     with environment_lock(credentials):
-        return execute_live(config, catalog_path, owner, catalog, command, credentials, cases)
+        return execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite=args.suite)
 
 
-def execute_live(config, catalog_path, owner, catalog, command, credentials, cases):
+def execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite='standard'):
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
     directory = Path(config['output']).expanduser().resolve() / stamp
     directory.mkdir(parents=True, exist_ok=False)
-    private = Path(tempfile.mkdtemp(prefix='platform-standard-' + stamp + '-'))
+    private = Path(tempfile.mkdtemp(prefix=f'platform-{suite}-{stamp}-'))
     print('Evidence: ' + str(directory), flush=True)
     print('Private recovery state (retained outside repositories): ' + str(private), flush=True)
     inputs = tool_hashes()
-    save(directory / 'inputs.json', {'suite': 'standard', 'selectedCases': cases or 'all required standard branches',
+    save(directory / 'inputs.json', {'suite': suite, 'selectedCases': cases or f'all required {suite} branches',
                                     'catalogDigest': owner.digest(catalog), 'toolHashes': inputs,
                                     'fileUploadMaxBytes': config.get('fileUploadMaxBytes'),
                                     'runtimeSnapshotConfigDigest': 'sha256:' + hashlib.sha256(Path(config['runtimeSnapshotConfig']).expanduser().read_bytes()).hexdigest() if config.get('runtimeSnapshotConfig') else None,
@@ -208,7 +210,7 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     after = json.loads(after_path.read_text())
     browser_path = directory / 'browser/results.json'
     browser = json.loads(browser_path.read_text()) if browser_path.exists() else {}
-    report = finish(owner, catalog, before, after, browser, directory, browser_exit)
+    report = finish(owner, catalog, before, after, browser, directory, browser_exit, suite=suite)
     print(json.dumps({'counts': report['counts'], 'complete': report['complete'],
                       'executionGates': report['executionGates']}, ensure_ascii=False))
     return 0 if report['complete'] else 2

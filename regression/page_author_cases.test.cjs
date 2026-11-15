@@ -123,8 +123,14 @@ test('recovery flags reject invalid values and conflicting modes before starting
   const dryRun = spawnSync(process.execPath, [script, '--dry-run', 'true'], { encoding: 'utf8' });
   assert.equal(dryRun.status, 0, dryRun.stderr);
   const summary = JSON.parse(dryRun.stdout);
-  assert.equal(summary.registeredHandlers[0], 'F035-006');
+  assert.equal(summary.suite, 'standard');
+  assert.equal(summary.registeredHandlers[0], 'F001-001');
   assert.equal(summary.registeredHandlers.at(-1), 'F003-001');
+  const abnormalDryRun = spawnSync(process.execPath, [script, '--suite', 'abnormal', '--dry-run', 'true'], { encoding: 'utf8' });
+  assert.equal(abnormalDryRun.status, 0, abnormalDryRun.stderr);
+  const abnormalSummary = JSON.parse(abnormalDryRun.stdout);
+  assert.equal(abnormalSummary.suite, 'abnormal');
+  assert.equal(abnormalSummary.registeredHandlers[0], 'F035-006');
 });
 
 test('accepted page recovery permits only owner omission of null pagination on detail sources', async () => {

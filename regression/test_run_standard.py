@@ -58,13 +58,17 @@ class ReportGatesTest(unittest.TestCase):
             config = Path(folder) / 'config.json'
             target = str(Path(folder) / 'not-read-machine-config.json')
             config.write_text(json.dumps({'runtimeSnapshotConfig': target, 'cases': ['F035-006']}))
-            with mock.patch.object(sys, 'argv', ['run_standard.py', '--config', str(config), '--dry-run']), \
+            with mock.patch.object(sys, 'argv', ['run_standard.py', '--config', str(config), '--suite', 'abnormal', '--dry-run']), \
                     mock.patch.object(run_standard.subprocess, 'run', return_value=mock.Mock(returncode=0)) as driver:
                 self.assertEqual(run_standard.main(), 0)
             command = driver.call_args.args[0]
+            self.assertEqual(command[command.index('--suite') + 1], 'abnormal')
             self.assertEqual(command[command.index('--runtime-snapshot-config') + 1], target)
             self.assertEqual(command[-2:], ['--dry-run', 'true'])
             self.assertFalse(Path(target).exists())
+            with mock.patch.object(sys, 'argv', ['run_standard.py', '--config', str(config), '--dry-run']):
+                with self.assertRaisesRegex(ValueError, 'required standard case IDs'):
+                    run_standard.main()
 
     def test_runtime_snapshot_config_rejects_empty_or_non_path_before_launch(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -109,7 +113,7 @@ class ReportGatesTest(unittest.TestCase):
         cls.catalog = json.loads(catalog_path.read_text())
         cls.owner.validate_catalog(cls.catalog)
 
-    def run_report(self, *, cleaned=True, drift=False, browser_exit=0, healthy=True):
+    def run_report(self, *, cleaned=True, drift=False, browser_exit=0, healthy=True, suite='standard'):
         with tempfile.TemporaryDirectory() as private:
             directory = Path(private)
             for folder in ['browser', 'health-after']:
@@ -122,7 +126,7 @@ class ReportGatesTest(unittest.TestCase):
             versions = {name: 'sha256:' + '0' * 64 for name in self.owner.CORE}
             environment = {'name': 'unit-only', 'versions': versions, 'configurationDigest': 'sha256:' + '1' * 64}
             environment['fingerprint'] = self.owner.digest({'versions': versions, 'configurationDigest': environment['configurationDigest']})
-            entry = {'caseId': 'F059-001', 'suite': 'standard', 'status': 'passed', 'method': 'live',
+            entry = {'caseId': 'F059-001', 'suite': suite, 'status': 'passed', 'method': 'live',
                      'role': 'unit-fixture', 'namespace': 'unit', 'resource': 'unit',
                      'observedAt': '2026-11-05T00:00:00+00:00', 'actual': 'Unit-only report input',
                      'environmentFingerprint': environment['fingerprint'],
@@ -130,12 +134,12 @@ class ReportGatesTest(unittest.TestCase):
                                    'sha256': 'sha256:' + hashlib.sha256((directory / 'browser/core-health.json').read_bytes()).hexdigest()}]}
             before = {'schema': 'magic.acceptance.results/v1', 'baseline': self.catalog['baseline'],
                       'catalogDigest': self.owner.digest(self.catalog), 'runId': 'unit',
-                      'environment': environment, 'results': [entry]}
+                      'environment': environment, 'results': [{**entry, 'suite': 'standard'}]}
             after = copy.deepcopy(before)
             browser = copy.deepcopy(before)
             browser['results'] = []
             for case in self.catalog['cases']:
-                if not case['required'] or not any(part['suite'] == 'standard' for part in case['execution']):
+                if not case['required'] or not any(part['suite'] == suite for part in case['execution']):
                     continue
                 proof = copy.deepcopy(entry)
                 proof['caseId'] = case['id']
@@ -146,10 +150,17 @@ class ReportGatesTest(unittest.TestCase):
                 after['environment']['configurationDigest'] = 'sha256:' + '2' * 64
             if not healthy:
                 after['results'][0].update(status='failed', reason='Unit unhealthy fixture', defectId='UNIT')
-            return finish(self.owner, self.catalog, before, after, browser, directory, browser_exit)
+            return finish(self.owner, self.catalog, before, after, browser, directory, browser_exit, suite=suite)
 
     def test_complete_requires_all_gates(self):
-        self.assertTrue(self.run_report()['complete'])
+        report = self.run_report()
+        self.assertTrue(report['complete'])
+        self.assertEqual(report['suite'], 'standard')
+        self.assertEqual(report['requiredChecks'], 184)
+        abnormal = self.run_report(suite='abnormal')
+        self.assertTrue(abnormal['complete'])
+        self.assertEqual(abnormal['suite'], 'abnormal')
+        self.assertEqual(abnormal['requiredChecks'], 28)
 
     def test_case_pass_does_not_hide_cleanup_failure_or_missing_receipt(self):
         for cleaned in [False, None]:

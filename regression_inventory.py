@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="检查功能完整分组、用例引用、target及文件存在性")
     parser.add_argument("--case", help="查看单条固定编号用例，例如 F033-001")
     parser.add_argument("--scenario", help="按主场景筛选，例如 R07")
-    parser.add_argument("--suite", choices=["standard", "special", "all"], default="all",
+    parser.add_argument("--suite", choices=["standard", "abnormal", "special", "all"], default="all",
                         help="只读筛选执行分组；默认展示完整目录，不运行测试")
     parser.add_argument("--json", action="store_true", help="输出全部或筛选后的逐用例映射")
     args = parser.parse_args(argv)

@@ -23,7 +23,7 @@ class RegressionInventoryTest(unittest.TestCase):
         for name in ("cases.json", "app.md", "test.py"):
             (self.workspace / name).write_text("{}")
         self.catalog = {
-            "executionSuites": {"standard": "automatic", "special": "conditional"},
+            "executionSuites": {"standard": "automatic positive", "abnormal": "automatic abnormal", "special": "conditional"},
             "specialPrerequisites": {"fault": {"name": "fault", "preparation": "prepare", "exitCriteria": "recover"}},
             "fixtures": {"business": "controlled fixture"},
             "features": [{"id": "F001"}, {"id": "F002"}],

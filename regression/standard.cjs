@@ -22,8 +22,10 @@ for (let i = 2; i < process.argv.length; i += 2) {
 const { sanitize } = require('./evidence_sanitizer.cjs');
 class Blocked extends Error {}
 class ProductFailure extends Error {}
+const targetSuite = options.suite || 'standard';
+if (!['standard', 'abnormal'].includes(targetSuite)) throw Error('Unsupported suite: ' + targetSuite);
 const orderRank = id => (id === 'F035-006' ? -1 : id === 'F003-001' ? 1 : 0);
-const selectCases = catalog => catalog.cases.filter(c => c.required && c.execution.some(p => p.suite === 'standard') && (!options.case || c.id === options.case) && (!options.cases || options.cases.split(',').includes(c.id)) && (!options.exclude || !options.exclude.split(',').includes(c.id))).sort((a, b) => orderRank(a.id) - orderRank(b.id));
+const selectCases = catalog => catalog.cases.filter(c => c.required && c.execution.some(p => p.suite === targetSuite) && (!options.case || c.id === options.case) && (!options.cases || options.cases.split(',').includes(c.id)) && (!options.exclude || !options.exclude.split(',').includes(c.id))).sort((a, b) => orderRank(a.id) - orderRank(b.id));
 async function main() {
   const recoveryFlags = ['reconcile-authoring-deletions', 'reconcile-rejected-definitions', 'reconcile-authoring-writes', 'reconcile-rejected-page-writes', 'reconcile-authoring-conflicts', 'reconcile-cas-identities', 'reconcile-business-creates', 'reconcile-member-scopes', 'reconcile-matrix-write-refusals', 'reconcile-endpoint-template-refusals', 'reconcile-source-lifecycles', 'reconcile-proxy-session-refusals'];
   for (const flag of recoveryFlags) if (options[flag] && options[flag] !== 'true') throw Error('Recovery operation requires literal true: ' + flag);
@@ -44,7 +46,7 @@ async function main() {
   if (options['dry-run'] === 'true') {
     const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, '../docs/acceptance/platform-catalog.json')));
     const selected = selectCases(catalog);
-    console.log(JSON.stringify({ suite: 'standard', selected: selected.length, registeredHandlers: selected.filter(c => handlers[c.id]).map(c => c.id), missing: selected.filter(c => !handlers[c.id]).map(c => c.id), note: 'Registered handlers can still report partial verification; registration is not complete coverage.' }, null, 2));
+    console.log(JSON.stringify({ suite: targetSuite, selected: selected.length, registeredHandlers: selected.filter(c => handlers[c.id]).map(c => c.id), missing: selected.filter(c => !handlers[c.id]).map(c => c.id), note: 'Registered handlers can still report partial verification; registration is not complete coverage.' }, null, 2));
     return;
   }
   for (const key of ['credentials', 'output', 'private-state', 'baseline-health']) if (!options[key]) throw Error('Missing --' + key);
@@ -63,7 +65,7 @@ async function main() {
   const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, '../docs/acceptance/platform-catalog.json')));
   const baseline = JSON.parse(fs.readFileSync(options['baseline-health']));
   const selected = selectCases(catalog);
-  if (!selected.length) throw Error('No selected standard cases');
+  if (!selected.length) throw Error('No selected ' + targetSuite + ' cases');
   const stateFile = path.join(priv, 'state.json');
   const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile)) : { prefix: 'rg' + crypto.randomBytes(4).toString('hex'), password: 'Rg@' + crypto.randomBytes(16).toString('hex'), resources: [], fixtures: {} };
   if (state.resources.length && state.resources.every(r => r.phase === 'deleted')) throw Error('This fixture execution has already been cleaned. Preserve its state and use a separate private-state directory for a new execution.');
@@ -595,10 +597,10 @@ async function main() {
           if (status === 'failed') defectId = 'STD-' + entry.id + '-' + state.prefix;
         }
       }
-      const proofPath = write(entry.id + '.json', { caseId: entry.id, suite: 'standard', scope: entry.execution.find(p => p.suite === 'standard'), status, reason, trace, preparationEvidence });
+      const proofPath = write(entry.id + '.json', { caseId: entry.id, suite: targetSuite, scope: entry.execution.find(p => p.suite === targetSuite), status, reason, trace, preparationEvidence });
       const method = entry.methods.includes('browser') ? 'browser' : 'live';
       const evidence = [{ kind: method, path: proofPath, sha256: 'sha256:' + crypto.createHash('sha256').update(fs.readFileSync(path.join(out, proofPath))).digest('hex') }];
-      results.push({ caseId: entry.id, suite: 'standard', status, method, role: 'original-admin-and-dedicated-test-subjects', namespace: state.fixtures.tenantA?.name || credentials.namespace, resource: state.prefix, observedAt: new Date().toISOString(), environmentFingerprint: baseline.environment.fingerprint, actual: status === 'passed' ? '本次执行全部已声明常规断言，操作及独立回读见逐例证据。' : reason, ...(reason ? { reason } : {}), ...(defectId ? { defectId } : {}), evidence });
+      results.push({ caseId: entry.id, suite: targetSuite, status, method, role: 'original-admin-and-dedicated-test-subjects', namespace: state.fixtures.tenantA?.name || credentials.namespace, resource: state.prefix, observedAt: new Date().toISOString(), environmentFingerprint: baseline.environment.fingerprint, actual: status === 'passed' ? '本次执行全部已声明断言，操作及独立回读见逐例证据。' : reason, ...(reason ? { reason } : {}), ...(defectId ? { defectId } : {}), evidence });
       if (handler) console.log(JSON.stringify({ caseId: entry.id, status, reason }));
       fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ ...baseline, runId: state.prefix, results }, null, 2) + '\n');
       if (handler) {
