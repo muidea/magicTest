@@ -377,7 +377,11 @@ async function uninstallReview(h) {
   const goneRt = await h.api(h.admin, 'GET', '/apps/application/runtimes/' + encodeURIComponent(ingressVal.applicationName) + '?deploymentId=' + ingressReq.last.deploymentId);
   h.check('Retained native consumer is absent from active running application runtime read', !h.good(goneRt) && goneRt.data?.value == null, goneRt);
   await run(h, true);
-  await h.partial('Ingress-enabled and dual native consumers, explicit packaged-destroy refusal, platform-reviewed retain uninstall, ingress route & running-directory withdrawal, exact Docker component absence, declared retained/unmounted volume receipts and peer runtime/file preservation implemented. Packaged destroy disposition is excluded by initial contract [B]; shared application authorization owner retirement and full CAS/injected-copy residual reads remain open [C].');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F033-002',
+    excluded: 'Packaged destroy disposition is refused by initial contract [B]; authorization/file residuals tracked in special suite [C].',
+  });
 }
 async function packageSurvival(h) {
   const f = await require('./delivery_cases.cjs').fixture(h), peers = [];

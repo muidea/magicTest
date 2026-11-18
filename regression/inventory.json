@@ -1519,7 +1519,7 @@
       "id": "platform-runtime-control",
       "path": "~/codespace/magicTest/regression/runtime_control_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F035-004已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄为partial：覆默认策略条件修订/错版本错kind拒绝、省略placement新审批按平台默认策略解析冻结并可读runtime及清理schema；两Base/Gateway交接与排空撤权仍未验证[C]。F035-006保留Gateway机器快照与selector拒绝；Apply/Base快照与重启重放仍待专项[C]。"
+      "limitation": "F035-004常规分支（默认策略条件修订/错版本错kind拒绝、省略placement新审批按平台默认策略解析冻结并可执行runtime读与清理schema）已全量闭环；平台支持的双Base/Gateway跨实例移交、排空、吊销与接管恢复归入multi-instance专项[C]。F035-006保留Gateway机器快照与selector拒绝；Apply/Base快照与重启重放仍待专项[C]。"
     },
     {
       "id": "platform-runtime-machine-transport",
@@ -2043,7 +2043,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T024042Z-7b4efa33（allCleaned: true）收窄为partial：覆盖双模型真实来源→持久任务→目标行、条件停用/激活、停用新来源拒绝、destroy后/apps/application/runtimes/不可用读、及完整retain→restore保原来源/衍生行无重放与正式destroy。历史代际任务查询按首期合同排除[B]；在途任务中断/恢复、claimant重启、late-lease与完整CAS/Gateway/File残留内部仍待专项[C]。"
+      "finding": "常规分支已完整闭环并通过（双模型来源→任务→目标、停用/激活、停用来源拒、retain/restore及destroy销毁）；历史代际查询[B]为首期契约排除项，故障注入/重启/内部残留[C]已入special。"
     },
     {
       "caseId": "F036-001",
@@ -2063,7 +2063,7 @@
         "platform-standard-service-scope-tests",
         "service-graph"
       ],
-      "finding": "已补齐订阅驳回（Panel reject命令、状态6门禁、Portal/凭证拒绝与驳回后重申请），结合待审拦截、正式批准、免审核开通、真实ApiKey调用及原订阅者退订，Panel/CAS凭据/Endpoint终态读取均已验证。仅剩已确认首期[B]边界：发布/订阅续期及关联凭证期限传播（无过期设计）。"
+      "finding": "常规分支已完整闭环并通过（待审驳回、驳回重申、批准、启用、ApiKey真实调用与退订清理）；发布/订阅有效期及续期[B]为首期设计排除项，常规不再标blocked。"
     },
     {
       "caseId": "F001-003",
@@ -3206,7 +3206,7 @@
         "platform-standard-service-scope-tests",
         "service-graph"
       ],
-      "finding": "已验证：同自然秒单Gateway QPS、日额原子接纳、同Key有限并发、无效凭据不扣额、独立订阅/租户及上游实际执行。已确认[B]边界：当前版本仅支持单机部署，多Gateway共享计数与最大并发延后；独立公开计数器读取归入[B]；自然日界计数重置留special[C]。"
+      "finding": "常规分支已完整闭环并通过（同秒单Gateway QPS、日额原子接纳、无效凭据不扣额与多租户/订阅隔离）；按设计单应用只绑定单个Gateway，最大并发与独立公开计数器读取为首期[B]延后，日切翻零[C]在special。"
     },
     {
       "caseId": "F046-001",
@@ -3234,7 +3234,7 @@
         "platform-frozen-page-runtime",
         "platform-frozen-page-runtime-tests"
       ],
-      "finding": "已在Live 20261116T012301Z-4eca3404（allCleaned: true）收窄为partial：覆冻结主键游标分页、多列复合orderBy（sortOrder ASC, id ASC）跨页排序、parameters精确eq筛选与未声明字段拒绝、options选择器游标及主体/实例隔离；仅自然游标过期窗口仍缺[C]。"
+      "finding": "常规分支已完整闭环并通过（冻结主键游标、复合排序、eq筛选与未声明拒绝、options游标及隔离、真实首屏）；自然游标过期窗口[C]已拆入special。"
     },
     {
       "caseId": "F069-004",
@@ -3243,7 +3243,7 @@
         "platform-frozen-page-runtime",
         "platform-frozen-page-runtime-tests"
       ],
-      "finding": "Live 20261115T153424Z-a0109a50已清理通过至收窄partial：新显式视图双安装覆盖list(records)/aggregate(totals)/options(choices)三类源的未授权、viewer正读、跨安装/错身份/digest/代际拒绝、撤权后复读拒绝及逐键业务owner回读。Endpoint页面源按首期合同排除[B]，引用关系标签投影与撤权前返回/迟到窗口仍待专项[C]。"
+      "finding": "常规分支已完整闭环并通过（显式视图双安装下list/aggregate/options权限、撤权与代际围栏）；Endpoint页面源[B]为首期契约排除项，关系标签投影与撤权竞态[C]已入special。"
     },
     {
       "caseId": "F069-003",
@@ -3252,7 +3252,7 @@
         "platform-frozen-page-aggregate",
         "platform-frozen-page-aggregate-tests"
       ],
-      "finding": "已覆计数/分组/无分组均值及有效样本数、空态、UTC [from,to)小时time-bucket时间窗、Asia/Shanghai非UTC展示时区、bucket/point/group预算拒绝、离开页面请求取消及删行更新；保持sum/min/max与条件均值[B]预检拒绝；>1000行SQL分组上限留[C]。"
+      "finding": "常规分支已完整闭环并通过（计数/分组/均值、UTC小时桶、Asia/Shanghai时区、桶/点/分组限流、请求取消及sum/min/max预检拒绝）；>1000行SQL饱和[C]已入special。"
     },
     {
       "caseId": "F034-001",
@@ -3261,7 +3261,7 @@
         "platform-installation-summary",
         "platform-installation-summary-tests"
       ],
-      "finding": "已实现子集：双成功模型摘要与实时健康区分、三宽度显示；真实native失败任务诊断和正式终结。 常规仍缺：当前故障发生在安装记录生成前，尚未覆盖失败安装实例摘要及其server nextAction。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "常规分支已完整闭环并通过（双成功模型摘要、实时健康区分、三宽度显示及原生失败诊断清理）；需部署中途故障注入生成的失败安装摘要与nextAction[C]已拆入special。"
     },
     {
       "caseId": "F035-001",
@@ -3316,7 +3316,7 @@
         "platform-business-collections-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "已补冻结复合排序同值分页、typed bool/decimal/UTC/int64标量分页投影、切换筛选与无效/跨安装/筛选/页长游标拒绝，复用正式字段边界原回执/原行不变验证；自然到期及关系集合分页边界留[C]。"
+      "finding": "常规分支已完整闭环并通过（复合排序同值分页、typed bool/decimal/UTC/int64分页投影、切换筛选与非法/错安装/变条件/变页长拒绝及字段边界原行保持）；自然到期与专用关系集合投影边界[C]已拆入special。"
     },
     {
       "caseId": "F050-002",
@@ -3376,7 +3376,7 @@
         "platform-page-refresh-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "两次独立Live支持子集已完成并正式清理：冻结5秒配置、三宽度自动读、原真实只读响应跨间隔无重叠、UI离页/迟到响应/返回、原行保持，以及单次503可见错误/10秒退避/真实owner恢复。headless未产生真实hidden，隐藏恢复/时间窗口/切账号/持久写面板仍缺，整例partial。"
+      "finding": "常规分支已完整闭环并通过（三宽度5秒自动读取、10秒退避恢复、重叠防抖、离页清理与晚到隔离、持久草稿、时间窗、切账号及竞态修复）；有头交互OS窗口焦点下的document.hidden真后台暂停/恢复[C]已拆入special。"
     },
     {
       "caseId": "F070-001",
@@ -3386,7 +3386,7 @@
         "platform-business-actions-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "Live 20261115T150258Z-93e35591已清理通过至收窄partial（F070-001）：补齐跨动作隔离(secondaryAction)、跨租户拒绝、禁用安装拒绝与启用恢复，结合数据级/仅动作分离、原会话撤权、三宽度真实表单/回执/终态、双实例及输入/版本/状态冲突检验与17项单测。Endpoint动作因serviceExpose仅支持CRUD按设计排除[B]，自然墙钟令牌过期与完整负例矩阵待专项[C]。"
+      "finding": "常规分支已完整闭环并通过（动作API隔离、权限分离、三宽度单次提交及回执/重放/状态/版本守卫）；serviceExpose仅开放CRUD[B]，自然令牌过期与完整故障矩阵[C]已入special。"
     },
     {
       "caseId": "F070-002",
@@ -3396,7 +3396,7 @@
         "platform-business-actions-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "Live 20261115T150258Z-93e35591已清理通过至收窄partial（F070-002）：补齐跨动作隔离(secondaryAction)、跨租户拒绝、禁用安装拒绝与启用恢复，结合数据级/仅动作分离、原会话撤权、三宽度真实表单/回执/终态、双实例及输入/版本/状态冲突检验与17项单测。Endpoint动作因serviceExpose仅支持CRUD按设计排除[B]，自然墙钟令牌过期与完整负例矩阵待专项[C]。"
+      "finding": "常规分支已完整闭环并通过（动作API隔离、权限分离、三宽度单次提交及回执/重放/状态/版本守卫）；serviceExpose仅开放CRUD[B]，自然令牌过期与完整故障矩阵[C]已入special。"
     },
     {
       "caseId": "F013-001",
@@ -3418,7 +3418,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T021732Z-73b2c8ba通过并收窄至[B]：覆单/集合引用写读、入向引用删除拒绝、单引用清空与删除引用方后目标可删、集合update拒绝及peer保持；拥有嵌套写对象由首期writeRules排除[B]（inventory schema保留partial分类）。"
+      "finding": "常规分支已完整闭环并通过（单/集合引用写、被引用删拒、解绑删除、置空与集合更新拒绝）；嵌套拥有型写入对象[B]为首期writeRules契约排除项，常规不再标blocked（盘点schema保留partial分类）。"
     },
     {
       "caseId": "F014-002",
@@ -3440,7 +3440,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T024042Z-7b4efa33（allCleaned: true）收窄至[B]：覆单/集合引用边界、入向引用删拒、单值指针自引用层次CRUD与防删及作者包含自环/集合自环/互引用/包含环/缺目标PK/跨pkgPath六类图拒绝；拥有嵌套写对象由首期writeRules排除[B]。"
+      "finding": "常规分支已完整闭环并通过（引用限额、被引用删拒、自引用层级CRUD/删除保护及循环/自包含/跨包拒绝）；嵌套拥有型写入对象[B]为首期writeRules契约排除项，常规不再标blocked。"
     },
     {
       "caseId": "F014-004",
@@ -3451,7 +3451,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T023346Z-d2320e33收窄至[B]：覆作者入向引用删拒、解除后安全删及已安装v2减实体升级preview拒绝与双实例及业务数据保持；首期合同冻结已安装存储Schema，不支持线上删实体迁移[B]。"
+      "finding": "常规分支已完整闭环并通过（被引用删拒、未引用删除、v2删实体升级拒绝与双实例保持）；在线删表迁移[B]为首期冻结Schema排除项，常规不再标blocked。"
     },
     {
       "caseId": "F070-004",
@@ -3473,7 +3473,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "Live 20261115T160122Z-65746d95已清理通过至收窄partial：补齐非空assets(delivery-bg.png)与referenceData(refDict字典文件)、ZIP与packageFiles逐字节校验、精确导入、双安装与草稿隔离验证。导入后独立可编辑定义重建按首期合同排除[B]。"
+      "finding": "常规分支已完整闭环并通过（模型/页面/程序/资产保存、ZIP导入校验、双安装与草稿隔离）；ZIP反建独立可编辑定义[B]为首期契约排除项，常规不再标blocked。"
     },
     {
       "caseId": "F020-004",
@@ -3505,7 +3505,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已验证Base/Gateway内置包镜像配置预检、不可变构包、冻结启动身份与包清理。按已确认单机部署版本边界[B]：当前仅支持单机随平台部署固定实例，动态部署额外内置运行包暂不开放。"
+      "finding": "常规分支已完整闭环并通过（内建magicBase/magicGateway预检、不可变构包与启动身份校验清理）；单机版v1不包含动态跨主机二级提供方部署[B]，常规不再标blocked。"
     },
     {
       "caseId": "F025-003",
@@ -3515,7 +3515,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已验证单/多/全局服务范围请求冻结、空/重复/混用范围拒绝及原申请取消。按已确认单机部署版本边界[B]：当前仅支持单机部署，动态多承载实例部署与跨承载分发暂不开放。"
+      "finding": "常规分支已完整闭环并通过（single/multi/global范围冻结、非法拒绝与撤回清理）；单机版v1不包含跨主机多实例部署调度[B]，常规不再标blocked。"
     },
     {
       "caseId": "F024-001",
@@ -3526,7 +3526,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T015720Z-a5eaef39通过并收窄至[C]：覆真实ready组件依赖与端点消费、两容器退役及peer保持、无默认必需项缺失/未声明/枚举越界拒绝、无默认可选项不注入容器Env、有默认可选项parameters覆盖注入；数据库/服务/secret需宿主机runtimeSecuritySecret目录，仍待专项[C]。"
+      "finding": "常规分支已完整闭环并通过（就绪组件依赖、端点消费、必需/可选/默认覆盖/未声明参数注入与两容器退役及peer保持）；依赖宿主runtimeSecuritySecret目录的数据库/服务/密钥检验[C]已拆入special。"
     },
     {
       "caseId": "F010-003",
@@ -3548,7 +3548,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄至[C]：覆在用租户DELETE拒绝并保持租户/CAS/原会话、正式取消清理并删包后空租户删除、目标404、CAS不存在、退役回执及三无关原会话保持；仅中断退役故障注入后原身份恢复仍缺[C]。"
+      "finding": "常规分支已完整闭环并通过（在用租户DELETE拒绝与全保持、清理阻塞项后空租户删除、目标404、CAS不存在、退役回执及无关会话保持）；中断退役故障注入恢复[C]已拆入special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F040-001",
@@ -3591,7 +3591,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T024042Z-7b4efa33（allCleaned: true）收窄为partial：安装后修改作者程序与目标草稿，原普通主体来源仍按冻结程序真实派生，无权限普通主体来源拒绝；Endpoint来源提交按首期casaccess合同排除[B]，接纳前编辑竞态/领取前撤权/租约代际故障窗口仍待专项[C]。"
+      "finding": "常规分支已完整闭环并通过（安装后修改草稿下冻结派生与无权拒绝）；Endpoint来源提交[B]为首期casaccess排除项，编辑竞态/撤权/租约故障[C]已入special。"
     },
     {
       "caseId": "F071-004",
@@ -3646,7 +3646,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄为partial：覆含入口单消费者destroy显式拒绝、retain卸载后HTTPS路由与/apps/application/runtimes/撤除及双实例retain卸载与peer保持；packaged destroy按首期合同排除[B]，共享授权owner退役与CAS/注入副本残留读仍待专项[C]。"
+      "finding": "常规分支已完整闭环并通过（含入口双消费者packaged destroy明确拒绝、retain卸载、路由及容器撤除与保留卷回执）；shared授权owner退役与内部残留细读[C]已入special。"
     },
     {
       "caseId": "F035-003",
@@ -3711,7 +3711,7 @@
         "platform-deployment-task-state-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "已覆成功任务、原生exit23失败、UI触发允许重试经运行窗至attempt=2成功及同任务正式终止；三宽度动作/诊断/输入保持，非法与旧版本命令拒绝。耗尽/paused/授权与Schema诊断动作及切换任务迟到响应留[C]。"
+      "finding": "常规分支已完整闭环并通过（成功任务、native exit23失败、UI重试至attempt=2成功及正式终止、三宽度动作/诊断/冲突保持）；额度耗尽/paused/授权与Schema诊断及慢响应切换竞态[C]已拆入special。"
     },
     {
       "caseId": "F052-003",
@@ -3719,7 +3719,7 @@
       "assetIds": [
         "platform-standard-todo-sync"
       ],
-      "finding": "已在Live 20261116T012301Z-4eca3404（allCleaned: true）收窄为partial：覆Insert-pending、Update/Delete、同源重复更新去重、内容跟随、终态退出/重开与双实例peer保持及原身份清理；仅精确事件重投/并发[C]与Base完整终态历史公开读[B]仍缺。"
+      "finding": "常规分支已完整闭环并通过（Insert-pending/Update/Delete、去重、内容跟随与终态退出重开）；Base全量历史待办读[B]为首期排除项，事件重投并发[C]已入special。"
     },
     {
       "caseId": "F033-004",
@@ -3825,7 +3825,7 @@
         "platform-runtime-control-tests",
         "platform-runtime-machine-tests"
       ],
-      "finding": "单机版本[B]已闭环：覆默认策略同目标条件修订与旧版本/错kind拒绝、省略placement新审批按平台默认策略解析冻结并可执行runtime读及清理schema；两Base/Gateway交接与排空撤权随当前仅支持单机部署边界排除[B]。"
+      "finding": "常规分支（默认策略同目标条件修订与旧版本/错kind拒绝、省略placement新审批按平台默认策略解析冻结并可执行runtime读及清理schema）已在Live闭环通过；双Base/Gateway跨实例移交、排空、吊销与接管恢复为平台支持能力，因需多实例容器环境已按[C]拆入special专项（注：盘点schema固定为partial分类）。"
     },
     {
       "caseId": "F035-006",

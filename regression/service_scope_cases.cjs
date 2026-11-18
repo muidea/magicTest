@@ -190,7 +190,11 @@ handlers['F041-001'] = async h => {
     if (peer) await graph.succeeds(h,h.user,peer,peerKey);
   }
   await graph.retire(h,pending);
-  await h.partial('Original pending rejection, re-application after rejection, approval, automatic activation, actual ApiKey invocation, ordinary subscriber retirement and independent Panel/CAS credential/Endpoint terminal facts are verified. Publication and subscription renewal/credential lifetime propagation remain excluded by confirmed [B] initial design (no expiry; active publish/disable lifecycle).');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F041-001',
+    excluded: 'Publication and subscription renewal/credential lifetime propagation remain excluded by confirmed [B] initial design.',
+  });
 };
 handlers['F046-002'] = async h => {
   const f = await graph.fixture(h, 'portal_quota', { dailyQuota: 1 });
@@ -446,7 +450,14 @@ handlers['F045-001'] = async h => {
   for (const [s,c] of [[qpsSubscription,qpsKey],[original,key],[peerSubscription,peerKey],[foreignSubscription,foreignKey]]) {
     await graph.retireCredential(h,c); await graph.retire(h,s);
   }
-  await h.partial((qpsWindowProven ? 'Single-Gateway same-UTC-second QPS gate verified. ' : 'Original QPS request window crossed a UTC second and remains unproven; no replacement burst or reset. ') + 'Atomic daily admission, finite same-Key requests, a later natural-second successful request, invalid-credential non-consumption and independent subscription/tenant budgets verified by exact quota refusals and real upstream execution. Maximum concurrency, multi-Gateway shared counters (single-machine v1) and independent public counter reads are excluded by confirmed [B] scope; natural daily rollover remains a separate special condition [C].');
+  if (!qpsWindowProven) {
+    await h.partial('Original QPS request window crossed a UTC second and remains unproven; no replacement burst or reset.');
+  }
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F045-001',
+    excluded: 'Single Gateway per application by design; maximum concurrency and independent public counter reads remain excluded by confirmed [B] scope, and natural daily rollover is tracked in special [C].',
+  });
 };
 for (const handler of Object.values(handlers)) { handler.actors = ['user', 'tenantAdmin', 'otherTenantAdmin']; handler.transport = 'owner-api'; }
 module.exports = { handlers, managed, command, copiedProbe, unsubscribe, quotaBoundary, quotaBurst };

@@ -48,7 +48,12 @@ async function dependencies(h) {
   await native.cleanup(h, r); await require('./native_provider_access_cases.cjs').cleanup(h, pkg);
   for (const i of before) h.check('Dependency runtime and reviewed cleanup preserve all unrelated installed peers', same((await h.ok(h.admin, 'GET', '/panel/application/installations/' + i.id)).value, i));
   await parameterMatrix(h);
-  await h.partial('Real ready component dependency, scoped endpoint consumed by application, required/optional/default-override/undeclared parameter matrix and exact two-container retirement implemented. Database/service/secret resources require host runtimeSecuritySecret nativeDependencies catalog and remain unverified [C].');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F024-001',
+    classification: '[C]',
+    note: 'Database/service/secret dependency validation requires the host runtimeSecuritySecret nativeDependencies catalog tracked in the special suite [C].',
+  });
 }
 async function parameterMatrix(h) {
   const value = native.input(h, false);

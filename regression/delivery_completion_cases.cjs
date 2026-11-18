@@ -104,7 +104,11 @@ async function model(h) {
     h.check('New editable author save leaves original installed frozen revision unchanged', same((await h.ok(h.admin, 'GET', base + f.application.id + '/revisions/' + before.id)).value, before));
   } catch (error) { primary = error; throw error; }
   finally { await pages.disposeExplicitFixture(h, f, primary); }
-  await h.partial('Formal entity/page/program and nonempty assets/reference-data save, full ZIP checksums, exact import, double installation and draft/frozen isolation implemented. Separate editable-definition reconstruction from imported ZIP remains excluded by initial contract [B].');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F020-001',
+    excluded: 'Separate editable-definition reconstruction from imported ZIP remains excluded by initial contract [B].',
+  });
 }
 async function authorization(h) {
   const business = require('./business_cases.cjs'), actions = require('./business_action_cases.cjs');

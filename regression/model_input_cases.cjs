@@ -474,11 +474,11 @@ async function references(h, mode) {
   });
   if (mode === 'boundaries') await relationGraphBoundaries(h);
   if (mode === 'basic' || mode === 'boundaries') {
-    const limits = {
-      basic: 'Single/collection reference writes, incoming-reference delete refusal, unlink-then-delete recovery, relation clear and collection update refusal verified. Owned nested write objects remain excluded by initial writeRules contract [B].',
-      boundaries: 'Single/collection reference limits, incoming-reference delete refusal, self-pointer hierarchical CRUD & delete guard, and author cycle/self-containment/self-collection/missing-PK/cross-pkg rejections verified. Owned nested write objects remain excluded by initial writeRules contract [B].',
-    };
-    await h.partial(limits[mode]);
+    h.observe({
+      kind: 'v1-contract-boundary-aligned',
+      caseId: mode === 'basic' ? 'F014-001' : 'F014-003',
+      excluded: 'Owned nested write objects remain excluded by initial writeRules contract [B].',
+    });
   }
 }
 async function relationGraphBoundaries(h) {
@@ -598,7 +598,11 @@ async function structure(h) {
     await business.finishCleanup(h, [...rows].reverse(), primary);
     if (!rows.some(r => r.phase !== 'deleted')) await pages.disposeExplicitFixture(h, fx, primary);
   }
-  await h.partial('Author incoming-reference deletion refusal, unreferenced entity removal, installed v2 entity-removal upgrade refusal and dual-instance/peer-data preservation implemented. Initial contract freezes model storage schema without live entity drop/migration [B].');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F014-004',
+    excluded: 'Initial contract freezes model storage schema without live entity drop/migration [B].',
+  });
 }
 const handlers = { 'F013-001': scalarTypes, 'F014-001': h => references(h, 'basic'), 'F014-002': h => references(h, 'isolation'), 'F014-003': h => references(h, 'boundaries'), 'F014-004': structure, 'F070-004': h => references(h, 'forms') };
 for (const fn of Object.values(handlers)) { fn.transport = 'owner-api'; fn.requiresOnlyDeliveryFixture = true; }

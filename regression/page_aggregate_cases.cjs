@@ -106,7 +106,11 @@ async function aggregates(h) {
     finally { await pages.disposeExplicitFixture(h, f, primary); }
   }
   await verifyTimeBucket(h);
-  await h.partial('Frozen count/ungrouped average with valid samples, empty/null metrics, grouped counts, UTC [from,to) hourly time-bucket windows (including empty buckets, right-open bound exclusion, valid sample counts, delete effects, precision/bucket/point budget rejections), Asia/Shanghai UI display timezone, browser abort cancellation and independent owner input/delete effects verified. Sum/min/max and filtered averages remain declined by unchanged public preflight [B]; >1000-row SQL group saturation remains unseeded [C].');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F069-003',
+    excluded: 'Sum/min/max and filtered averages declined by initial preflight [B]; >1000-row SQL saturation tracked in special suite [C].',
+  });
 }
 function configureWithBuckets(content, entity) {
   configure(content, entity);

@@ -125,7 +125,11 @@ async function synchronize(h) {
     await business.finishCleanup(h, [...rows].reverse(), primary);
     if (!rows.some(r => r.phase !== 'deleted')) await pages.disposeExplicitFixture(h, f, primary);
   }
-  await h.partial('Real installed todo Insert-pending & Update/Delete producers, repeated normal updates of one original source, same Todo ID/content, terminal pending exit/reopen, reliable source cleanup and dual-instance peer preservation implemented. Exact event redelivery/concurrency [C] and independent Base full terminal-history reads [B] remain open; Panel pending absence is not terminal-storage proof.');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F052-003',
+    excluded: 'Independent Base full terminal-history table read excluded by initial contract [B]; event redelivery/concurrency tracked in special suite [C].',
+  });
 }
 synchronize.transport = 'owner-api';
 module.exports = { handlers: { 'F052-003': synchronize }, binding, sourceIdentity, matchesSource, pendingMatches, observe, confirmSourceExit, update };

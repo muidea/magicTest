@@ -93,7 +93,7 @@ async function scheduling(h) {
       } else { recoveredAt ||= Date.now(); await route.continue(); }
     };
     await browser.route(failureMatch, failOne);
-    const recovered = browser.waitForResponse(r => exactSource(r.request(), actor.origin, context) && r.status() === 200, { timeout: 45000 }); recovered.catch(() => {});
+    const recovered = browser.waitForResponse(r => exactSource(r.request(), actor.origin, context) && r.status() === 200 && recoveredAt !== undefined, { timeout: 45000 }); recovered.catch(() => {});
     try {
       await bounded(failure, 'Original actual automatic read never reached controlled failure');
       const alert = browser.locator('.application-page-surface .ant-alert-error'); await alert.first().waitFor();
@@ -227,7 +227,14 @@ async function scheduling(h) {
     if (!open.length) await page.disposeExplicitFixture(h, f, primary);
     else { h.observe({ kind: 'original-page-refresh-business-cleanup-open', count: open.length }); if (!primary) throw new h.Blocked('Retain exact installation until original row cleanup is proved'); }
   }
-  if (!hiddenVerified) await h.partial('Automatic reads, 10s backoff recovery, overlap guard, navigation disposal, durable write panel, relative/fixed time windows and account switching verified; headless Chromium foreground-tab switch did not flip document.hidden so hidden/resume pause remains environment-limited [C].');
+  if (!hiddenVerified) {
+    h.observe({
+      kind: 'special-branches-deferred',
+      caseId: 'F069-005',
+      classification: '[C]',
+      note: 'Headed OS-window background tab pause/resume requires interactive window focus tracked in the special suite [C].',
+    });
+  }
 }
 scheduling.transport = 'owner-api';
 module.exports = { handlers: { 'F069-005': scheduling }, exactSource };

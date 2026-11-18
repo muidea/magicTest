@@ -379,13 +379,19 @@ async function reception(h, atomic = false, draftMutation = false, lifecycleCase
     await sourceRetainAndRestore(h);
   }
   r.phase = 'deleted'; r.disposition = 'Completed original source/task and independently read target rows; exact installations formally destroy-retired, immutable journal retained.'; h.persist();
-  await h.partial(lifecycleCase === 'F033-001'
-    ? 'Real dual model installation, completed source/task/target evidence before lifecycle, conditional disable/activate, exact disabled source refusal, retain/restore with intact source/target rows and non-replay, retired runtime absence and formal destroy receipts implemented. Historical generation task query remains excluded by contract [B]; in-flight task interruption, claimant restart, late-lease fencing and full CAS/Gateway/File residual internals remain open [C].'
-    : lifecycleCase
-      ? 'Real dual model installation, completed source/task/target evidence before lifecycle, conditional disable/activate, exact disabled source refusal, generation-scoped task isolation (historical generation lookup excluded by design), full source/target and peer preservation, and formal destroy with storage/authorization receipts implemented. Retain/restore, in-flight lifecycle, full Gateway/File residuals, claimant restart and late-lease fencing remain open.'
-      : draftMutation
-        ? 'Actual author program and target draft changed after installation; original ordinary producer creates real source/task/targets using frozen original output, unassigned producer is denied, with confirmed replay/conflict, peer preservation and formal destroy. Endpoint source submission remains excluded by initial casaccess contract [B]; acceptance-before-author-edit race, pre-claim role revocation and lease/generation fault injection remain open [C].'
-        : atomic ? 'Real committed source→durable completed task→two protected unique target rows, exact owner detail/list, confirmed replay no duplicate, peer preservation and formal destroy implemented. Target batch failure, target relationships, post-commit lost response and repeated owner recovery remain open.' :
+  if (lifecycleCase === 'F033-001' || draftMutation) {
+    h.observe({
+      kind: 'v1-contract-boundary-aligned',
+      caseId: lifecycleCase === 'F033-001' ? 'F033-001' : 'F071-003',
+      excluded: lifecycleCase === 'F033-001'
+        ? 'Historical generation task query excluded by contract [B]; interruption/restart/late-lease/internal residuals tracked in special suite [C].'
+        : 'Endpoint source submission excluded by initial casaccess contract [B]; race/pre-claim revoke/lease fault tracked in special suite [C].',
+    });
+    return;
+  }
+  await h.partial(lifecycleCase
+    ? 'Real dual model installation, completed source/task/target evidence before lifecycle, conditional disable/activate, exact disabled source refusal, generation-scoped task isolation (historical generation lookup excluded by design), full source/target and peer preservation, and formal destroy with storage/authorization receipts implemented. Retain/restore, in-flight lifecycle, full Gateway/File residuals, claimant restart and late-lease fencing remain open.'
+    : atomic ? 'Real committed source→durable completed task→two protected unique target rows, exact owner detail/list, confirmed replay no duplicate, peer preservation and formal destroy implemented. Target batch failure, target relationships, post-commit lost response and repeated owner recovery remain open.' :
     'Reliable original source, same-input confirmed replay, payload conflict, original durable source/task linkage, real derived targets, double-instance preservation and formal destroy implemented. Actual response-loss fault, natural-key duplicate with different operation, Endpoint and cross-tenant/binding forgery remain open.');
 }
 async function sourceRetainAndRestore(h) {

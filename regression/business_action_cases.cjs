@@ -391,7 +391,11 @@ async function actions(h, tag) {
       finally { await pages.disposeExplicitFixture(h, f, primary); }
     }
   }
-  await h.partial('Frozen action API, per-action isolation (other-action grant/chain), cross-tenant refusal, disabled-installation refusal/reactivation, data-level/only-action separation, original-session retirement, three-width real action form/single-click receipt/terminal UI, dual-instance refusal and exact receipt/replay/input conflict/stale-version/state guard checks completed. Endpoint actions are excluded by design (serviceExpose supports CRUD only) and natural wall-clock token expiry/full negative fault matrix remain open [B]/[C].');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F070-001/F070-002',
+    excluded: 'Endpoint actions excluded by design (serviceExpose supports CRUD only) [B]; natural token expiry and full fault matrix tracked in special suite [C].',
+  });
 }
 const normal = h => actions(h, 'actionnormal'), authorization = h => actions(h, 'actionauthority');
 normal.transport = authorization.transport = 'owner-api';

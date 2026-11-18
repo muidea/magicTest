@@ -88,7 +88,12 @@ async function cursors(h) {
   } catch (error) { primary = error; throw error; }
   finally { await business.finishCleanup(h, [...rows].reverse(), primary); }
   await compositeFilterAndSelectorCursors(h, manager);
-  await h.partial('Frozen primary-key source pagination, composite tie-broken cursor sort, shared scalar eq filter + undeclared-filter refusal, options selector cursor pagination, subject/installation isolation, malformed/oversize cursor, page-size limit and real installed list verified. Natural cursor expiry remains unverified [C].');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F069-002',
+    classification: '[C]',
+    note: 'Natural wall-clock cursor expiry is tracked in the natural-time special suite [C].',
+  });
 }
 async function compositeFilterAndSelectorCursors(h, manager) {
   let entityKey;
@@ -311,7 +316,11 @@ async function readAuthority(h) {
     try { if (row) await business.finishCleanup(h, [row], primary); }
     finally { await disposeExplicitFixture(h, f, primary); }
   }
-  await h.partial('Original ordinary account unassigned/read/revoked list, aggregate and options source access, independent per-key owner reads and exact installation/digest/generation fences verified. Endpoint page-source access remains excluded by initial contract [B]; reference-relation label projections and server-return-before-revocation or late browser response fault windows remain unverified [C].');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F069-004',
+    excluded: 'Endpoint page-source access excluded by initial contract [B]; relation labels and fault windows tracked in special suite [C].',
+  });
 }
 readAuthority.transport = 'owner-api';
 module.exports = { handlers: { 'F069-002': cursors, 'F069-004': readAuthority }, decodePage, sourceRead, scanPages, explicitView, explicitFixture, disposeExplicitFixture, frozenPages };

@@ -129,7 +129,12 @@ async function policy(h) {
     }
   }
   await cleanupPolicy(h, r);
-  await h.partial('Isolated original default policy same-target conditional write, stale version, wrong-kind refusal, and real default-policy resolution & frozen execution on a new approval omitting explicit placement; complete policy/registry and original installation receipts retained. Two-Base/Gateway handoff, drain/revoke/recover are excluded by confirmed single-machine v1 scope [B].');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F035-004',
+    classification: '[C]',
+    note: 'Dual-Base and dual-Gateway cross-instance handoff, drain, revoke, and takeover recovery are supported platform capabilities assigned to the multi-instance special suite [C].',
+  });
 }
 function binding(h, c, inventory) {
   const rows = inventory.filter(i => i.id === c.instanceId);

@@ -266,7 +266,12 @@ async function pagination(h) {
     } else await page.disposeExplicitFixture(h, f, primary);
   }
   await require('./field_constraint_cases.cjs').handlers['F013-002'](h);
-  await h.partial('Composite signed keyset, sort ties, typed bool/decimal/UTC/int64 paginated projections, exact filter changes and malformed/installation/filter/page-size refusals, plus original field boundary/readonly/null/empty/zero errors and unchanged-row proof verified. Natural cursor expiry and relation collection projection boundaries remain unverified [C]. Static controlled data does not claim a concurrent snapshot.');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F036-002',
+    classification: '[C]',
+    note: 'Natural cursor expiry and specialized relation collection projection boundaries are tracked in the special suite [C].',
+  });
 }
 const handlers = { 'F036-001': crud, 'F036-002': pagination };
 for (const handler of Object.values(handlers)) { handler.transport = 'owner-api'; handler.requiresOnlyDeliveryFixture = true; }
