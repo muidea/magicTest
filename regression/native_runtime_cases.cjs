@@ -301,13 +301,13 @@ function input(h, ingress) {
   if (ingress) value.contract.ingresses = { web: { componentRef: 'api', portRef: 'http', hostnamePolicy: 'targetNamespaceDefault', pathPrefix: '/' + h.state.prefix + '-native-probe', pathHandling: 'stripPrefix', tlsPolicy: 'required', authPolicy: 'none' } };
   return value;
 }
-async function approveRequest(h, pkg, value, suffix) {
+async function approveRequest(h, pkg, value, suffix, parameters) {
   if (pkg.applicationUuid !== value.applicationUuid) throw new h.Blocked('Native fixture package differs from its exact frozen application UUID');
   const key = instanceKey(h, value, suffix);
   const session = (await h.ok(h.admin, 'GET', '/api/v1/web/session/')).value;
   h.admin.id = session.account.id;
   const v = await h.create(requests, { sourceKind: 'deployment-package', packageId: pkg.id, expectedDigest: pkg.packageDigest,
-    instanceKey: key, instanceName: '原生运行验证 ' + suffix, reason: 'Check exact native configuration and isolation' }, 'native-runtime-request');
+    instanceKey: key, instanceName: '原生运行验证 ' + suffix, ...(parameters ? { parameters } : {}), reason: 'Check exact native configuration and isolation' }, 'native-runtime-request');
   const r = h.state.resources.find(vv => vv.kind === 'native-runtime-request' && vv.id === v.id);
   Object.assign(r, { input: structuredClone(value), marker: value.contract.components.api.environment.REGRESSION_MARKER.literal, commands: [], last: v }); h.persist();
   r.last = await read(h, requests + r.id); h.persist();
@@ -315,8 +315,8 @@ async function approveRequest(h, pkg, value, suffix) {
   await command(h, r, 'approve', reviews + r.id + '/approve', { expectedVersion: r.last.version, reason: 'Approve exact current-run native configuration' });
   return r;
 }
-async function install(h, pkg, value, suffix, observeOperation) {
-  const r = await approveRequest(h, pkg, value, suffix);
+async function install(h, pkg, value, suffix, observeOperation, parameters) {
+  const r = await approveRequest(h, pkg, value, suffix, parameters);
   await settle(h, r, observeOperation); return r;
 }
 async function run(h, dual, observeLayout = () => {}) {
@@ -347,8 +347,37 @@ async function run(h, dual, observeLayout = () => {}) {
 }
 const single = h => run(h, false), dual = h => run(h, true);
 async function uninstallReview(h) {
+  // Verify packaged destroy refusal and ingress route withdrawal on an ingress-enabled native consumer,
+  // in addition to the dual-instance retain uninstall and peer survival matrix.
+  const f = await require('./delivery_cases.cjs').fixture(h);
+  const ingressVal = input(h, true), ingressPkg = await build(h, ingressVal);
+  const ingressReq = await install(h, ingressPkg.package, ingressVal, 'guard');
+  const before = inspect(h, ingressReq);
+  const actor = await h.anonymous(h.admin.identity.namespace), route = ingressVal.contract.ingresses.web.pathPrefix + '/probe.json';
+  let probeRes;
+  for (let n = 0; n < 20; n++) { probeRes = await h.publicGet(actor, route); if (probeRes.status === 200 && same(probeRes.data, before.probeFile)) break; await pause(); }
+  h.check('Native ingress probe serves exact startup file before uninstall refusal check', probeRes?.status === 200 && same(probeRes.data, before.probeFile), probeRes);
+  const inst = await read(h, installations + ingressReq.installation.id);
+  const deny = await h.api(h.admin, 'POST', installations + inst.id + '/uninstall', {
+    expectedUpdateTime: inst.updateTime, expectedDigest: inst.sourceDigest,
+    reason: 'Probe unsupported packaged destroy refusal', dataDisposition: 'destroy', confirmation: inst.applicationKey,
+  });
+  h.check('Packaged native uninstall explicitly refuses unsupported destroy disposition without altering ready state',
+    [200, 400, 409].includes(deny.status) && deny.data?.error?.code === 21 &&
+    deny.data.error.message === 'packaged uninstall only supports retaining data' && deny.data.value == null &&
+    same(await read(h, installations + inst.id), inst) && same(inspect(h, ingressReq), before), deny);
+  await cleanup(h, ingressReq); await removePackage(h, ingressPkg);
+  let withdrawn = false;
+  for (let n = 0; n < 20; n++) {
+    const afterProbe = await h.publicGet(actor, route);
+    if (afterProbe.status !== 200) { withdrawn = true; break; }
+    await pause();
+  }
+  h.check('Retired native ingress route stops serving after formal retain uninstall', withdrawn);
+  const goneRt = await h.api(h.admin, 'GET', '/apps/application/runtimes/' + encodeURIComponent(ingressVal.applicationName) + '?deploymentId=' + ingressReq.last.deploymentId);
+  h.check('Retained native consumer is absent from active running application runtime read', !h.good(goneRt) && goneRt.data?.value == null, goneRt);
   await run(h, true);
-  await h.partial('Two actual native consumers, original platform-reviewed retain uninstall, exact Docker component absence, declared retained/unmounted volume receipts and peer runtime/file preservation implemented. Destroy disposition, shared application authorization owner retirement and full CAS/route/injected-copy residual reads remain open.');
+  await h.partial('Ingress-enabled and dual native consumers, explicit packaged-destroy refusal, platform-reviewed retain uninstall, ingress route & running-directory withdrawal, exact Docker component absence, declared retained/unmounted volume receipts and peer runtime/file preservation implemented. Packaged destroy disposition is excluded by initial contract [B]; shared application authorization owner retirement and full CAS/injected-copy residual reads remain open [C].');
 }
 async function packageSurvival(h) {
   const f = await require('./delivery_cases.cjs').fixture(h), peers = [];
@@ -502,4 +531,4 @@ async function directories(h) {
   h.observe({ kind: 'platform-core-category-layout', value: core, qualification: 'Exact core identity and public Docker mount metadata only; no credential content read.' });
 }
 uninstallReview.transport = single.transport = dual.transport = packageSurvival.transport = failedCleanup.transport = directories.transport = 'owner-api';
-module.exports = { handlers: { 'F023-001': single, 'F023-003': dual, 'F033-002': uninstallReview, 'F031-001': packageSurvival, 'F030-001': failedCleanup, 'F061-001': directories }, original, commandBinding, confirm, inspect, cleanup, settledUninstall, input, install, approveRequest, retireFailed, failedBinding, terminationMatches, survivingRequest, confirmPackageDisposition, expectedExitFailure, failedComponent, failedCleanup, layoutIdentity, directoryLayout, instanceKey, reconcileIdentityRefusal };
+module.exports = { handlers: { 'F023-001': single, 'F023-003': dual, 'F033-002': uninstallReview, 'F031-001': packageSurvival, 'F030-001': failedCleanup, 'F061-001': directories }, original, commandBinding, confirm, inspect, cleanup, settle, settledUninstall, input, install, approveRequest, retireFailed, failedBinding, terminationMatches, survivingRequest, confirmPackageDisposition, expectedExitFailure, failedComponent, failedCleanup, layoutIdentity, directoryLayout, instanceKey, reconcileIdentityRefusal };

@@ -53,7 +53,8 @@ function structures(original) {
     change('Unsupported component type', /intro.*(?:类型尚不支持|arbitrary-html)/, c => { c.pages[0].components[0].type = 'arbitrary-html'; }),
     change('Unsupported component property', /(?:intro.*properties|html)/, c => { c.pages[0].components[0].properties.html = '<script>invalid</script>'; }),
     change('Missing navigation page', /(?:导航页面不存在.*absentPage|absentPage)/, c => { c.navigation = ['absentPage']; }),
-    change('Duplicate component identity', /home.*组件.*重复/, c => { c.pages[0].components.push(structuredClone(c.pages[0].components[0])); })
+    change('Duplicate component identity', /home.*组件.*重复/, c => { c.pages[0].components.push(structuredClone(c.pages[0].components[0])); }),
+    change('Excessive navigation group nesting', /导航集合缺失或分组过深/, c => { let nav = ['home']; for (let i = 0; i < 10; i++) nav = [{ group: 'L' + i, children: nav }]; c.navigation = nav; })
   ];
 }
 function appearances(original) {
@@ -70,11 +71,53 @@ function appearances(original) {
 async function baseline(h, app) { return { pages: await author.read(h, app, 'pages'), members: await author.read(h, app, 'package-members'), model: await a.draft(h, app) }; }
 async function structure(h) {
   h = transport(h);
-  const { app } = await author.fixture(h, 'pagereject'), before = await baseline(h, app);
+  const pages = require('./page_runtime_cases.cjs'), delivery = require('./delivery_completion_cases.cjs'), business = require('./business_cases.cjs');
+  const { app } = await author.fixture(h, 'pagereject'); let before = await baseline(h, app);
   const positive = await h.ok(h.admin, 'POST', route(app, 'pages/check'), { expectedDefinitionVersion: before.pages.definitionVersion, content: before.pages.content });
   h.check('Unchanged legitimate page reaches the deployed capability report', typeof positive.value?.ready === 'boolean', positive);
   for (const candidate of structures(before.pages.content)) await rejectPage(h, app, before, candidate.content, candidate.diagnostic, candidate.label);
-  await h.partial('页面结构check/save的7组拒绝与原内容保持已验证；非法循环及正式发布、包导入、安装、运行门禁仍缺配套夹具，未计整例通过');
+  // Circular entity relation rejection on model-draft check/save.
+  const e1 = structuredClone(before.model.entities[0]);
+  e1.id = 0; e1.name = 'cyclepeer'; e1.showName = '循环探测实体';
+  e1.uniqueConstraints = [{ name: 'uq_reg_cycle_code', fields: ['code'] }];
+  delete e1.updateTime; delete e1.createTime; delete e1.application; delete e1.uiMeta;
+  await a.save(h, app, before.model, [...before.model.entities, e1]);
+  before = await baseline(h, app);
+  const pair = structuredClone(before.model.entities), [left, right] = pair;
+  left.fields.push({
+    name: 'peerRef', showName: 'Peer', description: '',
+    type: { name: right.name, pkgPath: right.pkgPath, isPtr: true, elemType: null },
+    spec: { fieldName: 'peerRef', primaryKey: false, valueDeclare: '', viewDeclare: ['detail', 'lite'], constraint: '', defaultValue: null },
+  });
+  right.fields.push({
+    name: 'backRef', showName: 'Back', description: '',
+    type: { name: left.name, pkgPath: left.pkgPath, isPtr: true, elemType: null },
+    spec: { fieldName: 'backRef', primaryKey: false, valueDeclare: '', viewDeclare: ['detail', 'lite'], constraint: '', defaultValue: null },
+  });
+  const cyclePayload = {
+    expectedDefinitionVersion: before.model.definitionVersion,
+    baseline: before.model.entities.map(e => ({ id: e.id, entity: e.pkgPath + '/' + e.name, version: e.updateTime })),
+    entities: pair.map(e => {
+      const cmd = structuredClone(e);
+      delete cmd.createTime; delete cmd.updateTime; delete cmd.application;
+      if (e.updateTime) cmd.expectedEntityVersion = e.updateTime;
+      return cmd;
+    }),
+  };
+  const cycleCheck = await h.api(h.admin, 'POST', route(app, 'model-draft/check'), cyclePayload);
+  h.check('Circular entity relation check rejects with cycle diagnostic', rejected(cycleCheck) && /循环/.test(cycleCheck.data.error.message), cycleCheck);
+  // Valid published structure -> ZIP roundtrip -> exact import -> dual install -> runtime gate.
+  const f = await pages.explicitFixture(h, undefined, undefined, { suffix: 'validstruct', requestPrefix: 'valid-struct-', prepareDelivery: delivery.roundtrip });
+  let primary;
+  try {
+    const actor = await business.member(h, 'manager');
+    for (const inst of f.installations) {
+      const runtimeVal = (await h.ok(actor, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + inst.deploymentId)).value;
+      h.check('Valid published structure ZIP import & installed runtime matches frozen pages',
+        same(runtimeVal.pages, f.revision.content.pages) && runtimeVal.readIdentity.deploymentId === inst.deploymentId);
+    }
+  } catch (error) { primary = error; throw error; }
+  finally { await pages.disposeExplicitFixture(h, f, primary); }
 }
 // PNG metadata padding is a valid tEXt chunk, not a corrupt or truncated image.
 function crc32(bytes) { let crc = 0xffffffff; for (const b of bytes) { crc ^= b; for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); } return (crc ^ 0xffffffff) >>> 0; }
@@ -132,7 +175,40 @@ async function appearance(h) {
       before = await baseline(h, app);
     }
   }
-  await h.partial('外观check/save的8组拒绝、0/12合法边框、SVG/GIF/WebP及伪PNG拒绝、公开JSON 8MiB边界−1/边界/边界+1已验证；发布/导入/安装与原包字节保持仍待配套夹具，未计整例通过');
+  // Formal publish, exact ZIP byte preservation, import, dual install & runtime verification for valid appearance/image package.
+  const pages = require('./page_runtime_cases.cjs'), delivery = require('./delivery_completion_cases.cjs');
+  const business = require('./business_cases.cjs'), images = require('./page_image_cases.cjs');
+  const f = await pages.explicitFixture(h, undefined, undefined, {
+    suffix: 'validappear', requestPrefix: 'valid-appear-',
+    prepareAuthor: async (h2, authored) => {
+      const mBefore = await author.read(h2, authored.app, 'package-members');
+      const mContent = imageContent(mBefore.content, png, 'appear-valid', 'image/png', 'png');
+      await author.save(h2, authored.app, 'package-members', mBefore, mContent);
+      const pBefore = await author.read(h2, authored.app, 'pages'), pContent = structuredClone(pBefore.content);
+      pContent.pages[0].appearance = { background: { color: '#eeeeee', image: { mode: 'asset', assetKey: 'appear-valid', size: 'contain', position: 'center', repeat: 'no-repeat' } } };
+      pContent.pages[0].presentationDefaults = { borderWidth: 12 };
+      authored.pages = await author.save(h2, authored.app, 'pages', pBefore, pContent);
+      authored.model = await a.draft(h2, authored.app);
+      authored.validPngAsset = mContent.assets.files.find(x => x.key === 'appear-valid');
+    },
+    prepareDelivery: delivery.roundtrip,
+  });
+  let primary;
+  try {
+    const actor = await business.member(h, 'manager');
+    for (let i = 0; i < f.installations.length; i++) {
+      const ctx = await business.runtime(h, f, i, actor);
+      const runtimeVal = (await h.ok(actor, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + f.installations[i].deploymentId)).value;
+      const assetRes = await images.assetRead(h, actor, ctx, 'appear-valid');
+      const expectedAsset = f.revision.content.assets.files.find(x => x.key === 'appear-valid');
+      h.check('Valid appearance/image publish + ZIP import preserves exact PNG asset bytes in dual installation runtime',
+        images.assetMatches(assetRes, expectedAsset) &&
+        runtimeVal.pages?.pages?.[0]?.presentationDefaults?.borderWidth === 12 &&
+        same(runtimeVal.pages?.pages?.[0]?.appearance, f.revision.content.pages.pages[0].appearance),
+        { expectedAsset, assetRes, runtimePages: runtimeVal.pages });
+    }
+  } catch (error) { primary = error; throw error; }
+  finally { await pages.disposeExplicitFixture(h, f, primary); }
 }
 structure.transport = appearance.transport = 'owner-api';
 module.exports = { handlers: { 'F067-003': structure, 'F068-002': appearance }, compact, rejected, rejectSave, sizedPNG, budgetContent };

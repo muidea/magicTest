@@ -157,15 +157,31 @@ handlers['F041-001'] = async h => {
   h.check('Approval service creates original pending subscription without active lease',pending.value.status === 5,pending.value);
   const refused = await portalCall(h,h.user,approval);
   h.check('Pending original subscriber is refused at subscription admission without reaching upstream',refused.result.status === 403 && /subscription.*unavailable/.test(refused.result.data?.error?.message || '') && refused.received.length === 0,refused);
-  await command(h,pending.resource,'PUT',graph.subscriptions + 'approve/' + pending.value.id,{},async response => {
+  await command(h,pending.resource,'PUT','/panel/hub/subscriptions/reject/' + pending.value.id,{},async response => {
     const after = (await h.ok(h.tenantAdmin,'GET',graph.subscriptions + pending.value.id)).value;
-    h.check('Owner approval activates only exact original pending service/subscriber and future expiry',h.good(response) && after.id === pending.value.id && after.service.id === approval.service.id && same(after.subscriberRef,pending.value.subscriberRef) && after.status === 2 && after.expireTime > Date.now(),after);
+    h.check('Owner rejection transitions pending subscription to terminal rejected state without active lease',h.good(response) && after.id === pending.value.id && after.service.id === approval.service.id && same(after.subscriberRef,pending.value.subscriberRef) && after.status === 6 && after.startTime === 0 && after.expireTime === 0,after);
   });
-  const approvedKey = await graph.credential(h,pending,'approved-lifecycle-key'); await graph.succeeds(h,h.user,approval,approvedKey);
+  const portalRejected = (await h.directory(h.user,'/portal/services/')).find(v => v.id === approval.service.id);
+  h.check('Portal service projection exposes exact rejected lease status 6',portalRejected?.leaseTerm?.status === 6,portalRejected);
+  const rejectedGateway = await portalCall(h,h.user,approval);
+  h.check('Rejected original subscriber cannot invoke upstream via Portal proxy',rejectedGateway.result.status === 403 && rejectedGateway.received.length === 0,rejectedGateway);
+  const deniedCred = await h.api(h.tenantAdmin,'POST','/panel/hub/subscription/credentials/',{subscription:pending.value.id,name:h.state.prefix + '-rejected-key'});
+  h.check('Rejected subscription cannot issue API Key credentials',[200,400,409].includes(deniedCred.status) && deniedCred.data?.error?.code === 21 && deniedCred.data.value == null,deniedCred);
+  for (const op of ['enable','approve','reject']) {
+    const denied = await h.api(h.tenantAdmin,'PUT','/panel/hub/subscriptions/' + op + '/' + pending.value.id,{});
+    h.check('Rejected subscription cannot transition via ' + op,[200,400,409].includes(denied.status) && denied.data?.error?.code === 21 && denied.data.value == null,denied);
+  }
+  const reapplied = await graph.subscribe(h,approval);
+  h.check('Rejected subscriber can cleanly re-apply into auditing pending state',reapplied.value.id === pending.value.id && reapplied.value.status === 5,reapplied.value);
+  await command(h,reapplied.resource,'PUT',graph.subscriptions + 'approve/' + reapplied.value.id,{},async response => {
+    const after = (await h.ok(h.tenantAdmin,'GET',graph.subscriptions + reapplied.value.id)).value;
+    h.check('Owner approval activates only exact original pending service/subscriber and future expiry',h.good(response) && after.id === reapplied.value.id && after.service.id === approval.service.id && same(after.subscriberRef,reapplied.value.subscriberRef) && after.status === 2 && after.expireTime > Date.now(),after);
+  });
+  const approvedKey = await graph.credential(h,reapplied,'approved-lifecycle-key'); await graph.succeeds(h,h.user,approval,approvedKey);
   const automatic = await graph.fixture(h,'subscription_automatic_lifecycle'), active = await graph.subscribe(h,automatic);
   h.check('No-approval service automatically enables exact original subscription with future expiry',active.value.status === 2 && active.value.expireTime > Date.now(),active.value);
   const automaticKey = await graph.credential(h,active,'automatic-lifecycle-key'); await graph.succeeds(h,h.user,automatic,automaticKey);
-  for (const [f,s,key,peer,peerKey] of [[approval,pending,approvedKey,automatic,automaticKey],[automatic,active,automaticKey]]) {
+  for (const [f,s,key,peer,peerKey] of [[approval,reapplied,approvedKey,automatic,automaticKey],[automatic,active,automaticKey]]) {
     await unsubscribe(h,h.user,s,key);
     const denied = await graph.call(h,h.user,f,key.apiKey);
     h.check('Original retired subscription Key cannot continue invoking or reach its upstream', [401,403,404].includes(denied.status) && !f.up.requests.some(v => v.marker === denied.marker),denied);
@@ -173,7 +189,8 @@ handlers['F041-001'] = async h => {
     h.check('Original service remains visible and no active subscriber lease survives retirement',!!portal && (!portal.leaseTerm || portal.leaseTerm.status !== 2),portal);
     if (peer) await graph.succeeds(h,h.user,peer,peerKey);
   }
-  await h.partial('Original pending approval, automatic activation, actual ApiKey invocation, ordinary subscriber retirement and independent Panel/CAS credential/Endpoint terminal facts are verified. Publication and subscription renewal/credential lifetime propagation are excluded by design (no expiry; active publish/disable lifecycle). Subscription rejection remains unimplemented.');
+  await graph.retire(h,pending);
+  await h.partial('Original pending rejection, re-application after rejection, approval, automatic activation, actual ApiKey invocation, ordinary subscriber retirement and independent Panel/CAS credential/Endpoint terminal facts are verified. Publication and subscription renewal/credential lifetime propagation remain excluded by confirmed [B] initial design (no expiry; active publish/disable lifecycle).');
 };
 handlers['F046-002'] = async h => {
   const f = await graph.fixture(h, 'portal_quota', { dailyQuota: 1 });
@@ -276,7 +293,66 @@ handlers['F045-003'] = async h => {
   h.check('Forged tenant context is refused or sanitized before external forwarding', response.status === 200 ? response.data.marker === marker && received.length === 1 && !received[0].namespace : [401, 403, 404].includes(response.status) && received.length === 0, { response, received });
   h.check('No upstream request carries forged namespace or raw identity envelope', received.every(r => r.namespace !== foreign && !r.extDataPresent && !r.authorizationPresent), received);
   await graph.succeeds(h, h.user, a, credential);
-  await h.partial('External upstream isolation is proven, but internal upstream verified-tenant propagation requires a formally installed internal capability fixture. Do not infer it from stripped external headers.');
+  const { fixture: deliveryFixture } = require('./delivery_cases.cjs');
+  const business = require('./business_cases.cjs');
+  const generated = require('./generated_service_cases.cjs');
+  const { endpointTemplates, currentRoleRefusal, documentedReader } = require('./service_contract_cases.cjs');
+  const df = await deliveryFixture(h), manager = await business.member(h, 'manager'), context = await business.runtime(h, df, 0, manager), rows = [];
+  let primary, internalCred;
+  try {
+    const reader = await documentedReader(h, context, 'documented-internal-scope-reader');
+    const row = await business.create(h, context, 'internal-tenant-propagation'); rows.push(row);
+    const before = await generated.snapshot(h), source = df.installations[0].receipt.runtimeApplicationUuid;
+    const caps = before[generated.capabilities].filter(c => c.providerKey === source && c.providerType === 'application' && c.kind === 'get' && c.status === 1);
+    h.check('Internal tenant propagation selects one exact unoccupied installed GET capability', caps.length === 1 && !before[generated.bindings].some(b => b.capability?.id === caps[0].id));
+    const gen = generated.intent(h, h.state.prefix + '_internal_tenant', [caps[0].id], source);
+    await generated.converge(h, gen, [caps[0].id], '内部能力租户透传验证');
+    const pubId = gen.last.publications[0].id;
+    await generated.mutation(h, gen, 'PUT', generated.publications + pubId, { service: { id: gen.serviceId }, status: 1, visibleScope: 'panel', allowSubscription: true, requireApproval: false, maxSubscriptions: 2, maxQPS: 0, dailyQuota: 0 }, async (res, all) => {
+      h.check('Internal publication enables subscription cleanly in platform namespace', h.good(res) && all[generated.publications].some(v => v.id === pubId && v.allowSubscription && !v.requireApproval));
+    });
+    await generated.publish(h, gen);
+    const internal = { service: gen.last.service, publication: gen.last.publications[0], ownerIdentity: structuredClone(h.admin.identity) };
+    const template = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-internal-scope-read', name: '内部租户透传读取', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: [{ module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' }] }, 'role-template');
+    const internalSub = await graph.subscribe(h, internal, reader);
+    internalCred = await graph.credential(h, internalSub, 'internal-scope');
+    await endpointTemplates(h, internalCred, [template.key]);
+    const metadata = (await h.ok(reader, 'GET', '/portal/service/debug/' + internal.service.id)).value;
+    const op = metadata.operations.find(o => o.method === 'GET' && o.key === caps[0].key);
+    h.check('Internal service metadata exposes the converged GET path', !!op, metadata);
+    const callPath = new URL(op.pathTemplate.replace(/\{id\}/g, row.recordId).replace('/gateway/managed-services/', '/gateway/services/'), reader.origin).pathname;
+    const callInternal = headers => reader.page.evaluate(async ({ callPath, headers }) => {
+      const r = await fetch(callPath, { credentials: 'omit', headers, signal: AbortSignal.timeout(15000) });
+      const text = await r.text(); let data; try { data = JSON.parse(text); } catch { data = { text: text.slice(0, 500) }; }
+      return { status: r.status, data };
+    }, { callPath, headers });
+    const original = await business.record(h, manager, row);
+    const verified = await callInternal({ Authorization: 'ApiKey ' + internalCred.apiKey });
+    h.check('Internal upstream returns exact original installed record using Gateway-verified tenant and Endpoint identity',
+      verified.status === 200 && h.good(original) && same(verified.data?.value, original.data.value) && String(verified.data?.value?.id) === row.recordId, { verified, original });
+    const forgedInternal = await callInternal({
+      Authorization: 'ApiKey ' + internalCred.apiKey, 'X-Mp-Namespace': foreign, 'X-Namespace': foreign,
+      'X-Mp-Application': 'forged-application', 'X-Mp-Entity-Ext-Data': JSON.stringify({ namespace: foreign, actorSubject: 'account:1' })
+    });
+    h.check('Forged tenant and application headers are overwritten on internal upstream so verified original tenant record still resolves',
+      forgedInternal.status === 200 && same(forgedInternal.data?.value, original.data.value) && String(forgedInternal.data?.value?.id) === row.recordId, forgedInternal);
+    await endpointTemplates(h, internalCred, []);
+    const revokedInternal = await callInternal({ Authorization: 'ApiKey ' + internalCred.apiKey });
+    h.check('Internal upstream evaluates Gateway-forwarded Endpoint identity and rejects once template is revoked', currentRoleRefusal(revokedInternal), revokedInternal);
+    await graph.retireCredential(h, internalCred);
+    await graph.retire(h, internalSub);
+    await generated.cleanup(h, gen);
+  } catch (error) { primary = error; throw error; }
+  finally {
+    try {
+      if (internalCred?.resource.phase === 'created' && internalCred.resource.endpointAuthorityCommands?.at(-1)?.outcome === 'confirmed' && internalCred.resource.endpointAuthorityCommands.at(-1).body.roleTemplateKeys.length) {
+        await endpointTemplates(h, internalCred, []);
+      }
+    } catch (error) { h.observe({ kind: 'internal-endpoint-template-cleanup-open', message: error.message }); if (!primary) throw error; }
+    finally { await business.finishCleanup(h, rows.reverse(), primary); }
+  }
+  await graph.retireCredential(h, credential); await graph.retire(h, subscription);
+  await graph.retireCredential(h, otherCredential); await graph.retire(h, otherSubscription);
 };
 function quotaBoundary(h, probes, upstream, limit, diagnostic) {
   const markers = new Set(probes.map(p => p.marker));
@@ -370,7 +446,7 @@ handlers['F045-001'] = async h => {
   for (const [s,c] of [[qpsSubscription,qpsKey],[original,key],[peerSubscription,peerKey],[foreignSubscription,foreignKey]]) {
     await graph.retireCredential(h,c); await graph.retire(h,s);
   }
-  await h.partial((qpsWindowProven ? 'Single-Gateway same-UTC-second QPS gate verified. ' : 'Original QPS request window crossed a UTC second and remains unproven; no replacement burst or reset. ') + 'Atomic daily admission, finite same-Key requests, a later natural-second successful request, invalid-credential non-consumption and independent subscription/tenant budgets verified by exact quota refusals and real upstream execution. Maximum concurrency and multi-Gateway shared counters are deferred by confirmed design; independent public counter reads remain open. Natural daily rollover remains a separate special condition.');
+  await h.partial((qpsWindowProven ? 'Single-Gateway same-UTC-second QPS gate verified. ' : 'Original QPS request window crossed a UTC second and remains unproven; no replacement burst or reset. ') + 'Atomic daily admission, finite same-Key requests, a later natural-second successful request, invalid-credential non-consumption and independent subscription/tenant budgets verified by exact quota refusals and real upstream execution. Maximum concurrency, multi-Gateway shared counters (single-machine v1) and independent public counter reads are excluded by confirmed [B] scope; natural daily rollover remains a separate special condition [C].');
 };
 for (const handler of Object.values(handlers)) { handler.actors = ['user', 'tenantAdmin', 'otherTenantAdmin']; handler.transport = 'owner-api'; }
 module.exports = { handlers, managed, command, copiedProbe, unsubscribe, quotaBoundary, quotaBurst };

@@ -397,7 +397,7 @@
       "id": "platform-standard-service-scope",
       "path": "~/codespace/magicTest/regression/service_scope_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F045-003常规跨服务/伪造租户上下文与F046-003管理调试范围；真实发布、订阅Key及上游marker回读。按已确认产品边界：发布与订阅不设续期期限传播，最大并发/多Gateway延后，管理调试沿用既有路由/网关日志。F041-001覆盖审批/自动开通/退订，驳回仍未实现记partial；F045-001覆盖单Gateway同Key QPS/日额与预算隔离，独立计数回读仍开放；F046-001核对显式管理调用前序及耗尽后不重置额度。"
+      "limitation": "F045-003常规跨服务/伪造租户上下文与F046-003管理调试范围；真实发布、订阅Key及上游marker回读。按已确认产品边界：发布与订阅不设续期期限传播[B]，最大并发/多Gateway延后（当前版本仅支持单机部署）[B]，独立公开计数器读取归[B]，管理调试沿用既有路由/网关日志。F041-001覆盖待审驳回、驳回后重申请、审批、自动开通与退订；F045-001覆盖单Gateway同Key QPS/日额与预算隔离；F046-001核对显式管理调用前序及耗尽后不重置额度。"
     },
     {
       "id": "platform-standard-service-scope-tests",
@@ -829,7 +829,7 @@
       "id": "platform-native-runtime",
       "path": "~/codespace/magicTest/regression/native_runtime_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F023-001/003、F030-001、F031-001、F061-001：真实单/双实例与HTTPS、原失败正式终结、源包清理保持运行、分类目录和核心挂载隔离；审批卸载保留卷，独立容器不存在。 F033-002复用双实例retain审批卸载子集，整例仍partial。"
+      "limitation": "F023-001/003、F030-001、F031-001、F061-001：真实单/双实例与HTTPS、原失败正式终结、源包清理保持运行、分类目录和核心挂载隔离；审批卸载保留卷，独立容器不存在。 F033-002已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄为partial：已覆含入口单消费者destroy显式拒绝、retain卸载与HTTPS路由及/apps/application/runtimes/撤除、双实例retain卸载与peer保持；packaged destroy按首期合同排除[B]，共享授权owner与CAS/注入副本残留读待专项[C]。"
     },
     {
       "id": "platform-native-runtime-tests",
@@ -1023,25 +1023,25 @@
       "id": "platform-frozen-page-runtime",
       "path": "~/codespace/magicTest/regression/page_runtime_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F069-002原冻结列表分页；F069-004新显式视图双安装的账号读取/撤权及安装围栏。空视图原发布与运行不一致保留产品失败；完整筛选/Endpoint/迟到响应未验证。"
+      "limitation": "F069-002已在Live 20261116T012301Z-4eca3404（allCleaned: true）收窄为partial：覆冻结主键分页、多列复合orderBy（sortOrder ASC, id ASC）跨游标决胜、parameters精确eq筛选与未声明字段拒绝、options选择器游标及主体/实例隔离；仅自然游标过期未验[C]。F069-004已在Live 20261115T153424Z-a0109a50（allCleaned: true）收窄为partial；Endpoint按合同排除[B]，引用标签投影及迟到响应窗口仍未验证[C]。"
     },
     {
       "id": "platform-frozen-page-runtime-tests",
       "path": "~/codespace/magicTest/regression/page_runtime_cases.test.cjs",
       "layer": "tool",
-      "limitation": "F069-002原冻结列表分页；F069-004新显式视图双安装的账号读取/撤权及安装围栏。空视图原发布与运行不一致保留产品失败；完整筛选/Endpoint/迟到响应未验证。"
+      "limitation": "F069-002原冻结列表分页与F069-004 list/aggregate/options三类源授权离线单测；Endpoint按合同排除[B]，引用标签投影与迟到响应窗口仍待专项[C]。"
     },
     {
       "id": "platform-frozen-page-aggregate",
       "path": "~/codespace/magicTest/regression/page_aggregate_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F069-003正式发布安装后的计数/分组/无分组均值及样本数、空态和精确数值已取得独立Live子集证据；sum/min/max及条件均值只读预检拒绝。时间桶/窗口/精度/组数预算和取消未覆盖，整例partial。"
+      "limitation": "F069-003：计数/分组/无分组均值及样本数、空态、UTC [from,to)小时time-bucket时间窗（空桶/右开排除/装入均值与样本数/删行更新及精度与bucket/point/group预算拒绝）、Asia/Shanghai前端展示时区、导航离开中止请求取消、owner回读及sum/min/max/条件均值[B]预检拒绝。>1000分组SQL上限留[C]。"
     },
     {
       "id": "platform-frozen-page-aggregate-tests",
       "path": "~/codespace/magicTest/regression/page_aggregate_cases.test.cjs",
       "layer": "tool",
-      "limitation": "F069-003正式发布安装后的计数/分组/无分组均值及样本数、空态和精确数值已取得独立Live子集证据；sum/min/max及条件均值只读预检拒绝。时间桶/窗口/精度/组数预算和取消未覆盖，整例partial。"
+      "limitation": "F069-003聚合与time-bucket组件结构/精确分数比较/预检/解码离线单测；非UTC展示时区、组/点上限及取消仍待验证。"
     },
     {
       "id": "platform-installation-summary",
@@ -1071,13 +1071,13 @@
       "id": "platform-frozen-page-sources",
       "path": "~/codespace/magicTest/regression/page_source_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F069-001：新显式视图双安装的冻结list/detail/options原主体读取、三宽度实际入口、作者未发布修改及正式源包清理后的安装读取；源码已补，Live待串行。独立实体fallback和UI options选择消费者仍未覆盖，整例保持partial。"
+      "limitation": "F069-001已在Live 20261115T143141Z-c2e8f473通过（status: passed，已移除h.partial）：涵盖显式视图双安装list/detail/options、未配置回退UI(ApplicationRuntimeShell)、options选择器UI消费、三宽度页面、作者未发布隔离及源包销毁后安装存续。"
     },
     {
       "id": "platform-frozen-page-sources-tests",
       "path": "~/codespace/magicTest/regression/page_source_cases.test.cjs",
       "layer": "tool",
-      "limitation": "F069-001：新显式视图双安装的冻结list/detail/options原主体读取、三宽度实际入口、作者未发布修改及正式源包清理后的安装读取；源码已补，Live待串行。独立实体fallback和UI options选择消费者仍未覆盖，整例保持partial。"
+      "limitation": "F069-001离线单测（配对Live 20261115T143141Z-c2e8f473已全项passed）。"
     },
     {
       "id": "platform-feedback-tests",
@@ -1101,13 +1101,13 @@
       "id": "platform-capability-switches",
       "path": "~/codespace/magicTest/regression/capability_switch_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F019-001正式七实体总/逐操作开关矩阵、发布冻结、安装回执绑定完整能力目录、未发布修改隔离及原安装正式退役。实际服务调用/重新发布关闭仍未覆盖；源码新增，Live待串行，整例partial。"
+      "limitation": "F019-001已在Live 20261115T154708Z-ae8b6eb4通过（status: passed，allCleaned: true，已移除h.partial）：七实体开关矩阵、CAS端点授权、五类CRUD实调与owner回读、服务退役及反转开关重发布后禁用移除与新开实调拒绝均已实证。"
     },
     {
       "id": "platform-capability-switches-tests",
       "path": "~/codespace/magicTest/regression/capability_switch_cases.test.cjs",
       "layer": "tool",
-      "limitation": "F019-001正式七实体总/逐操作开关矩阵、发布冻结、安装回执绑定完整能力目录、未发布修改隔离及原安装正式退役。实际服务调用/重新发布关闭仍未覆盖；源码新增，Live待串行，整例partial。"
+      "limitation": "F019-001目录校验与零ID包实体映射单测（配对Live 20261115T154708Z-ae8b6eb4已passed）。"
     },
     {
       "id": "platform-business-collections",
@@ -1198,7 +1198,7 @@
       "path": "~/codespace/magicTest/regression/business_action_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "正式冻结动作及页面绑定；查看/编辑/管理/无访问、仅动作、原会话撤权、双实例拒绝、安装身份失配，三宽度真实表单/单次动作/原回执/独立完整行/终态禁用断言源码已补。Endpoint/真实另一租户/真实过期安装/完整生命周期仍缺；本阶段不运行平台Live，不计整例通过。"
+      "limitation": "F070-001/002（Live 20261115T150258Z-93e35591已清理通过至收窄partial）：冻结动作、跨动作隔离、跨租户拒绝、禁用安装拒绝/重启恢复、数据级/仅动作分离、原会话撤权、三宽度真实表单/回执/终态、双实例及输入/版本/状态冲突；Endpoint动作受限于serviceExpose仅支持CRUD排除[B]，自然过期与负例全矩阵待专项[C]。"
     },
     {
       "id": "platform-business-actions-tests",
@@ -1212,7 +1212,7 @@
       "path": "~/codespace/magicTest/regression/model_input_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "模型标量、引用与结构准入及可靠表单子集；多租户及完整关联矩阵仍缺。 本阶段只补源码，未执行平台Live，不能计整例通过。"
+      "limitation": "F014-001（Live 20261116T021732Z-73b2c8ba收窄至[B]）：单/集合引用写读、入向引用删除拒绝、单引用清空与删除引用方后目标可删、集合update拒绝；拥有嵌套写由首期writeRules排除[B]。F014-003（Live 20261116T024042Z-7b4efa33收窄至[B]）：作者含自环/集合自环/互引用/包含环/缺目标PK/跨pkg拒绝与单值指针自引用CRUD/防删，拥有嵌套写排除[B]。F014-004（Live 20261116T023346Z-d2320e33收窄至[B]）：作者入向引用删拒、解除后安全删及已安装v2减实体升级preview拒绝与双实例保持，首期冻结Schema不热删实体[B]。"
     },
     {
       "id": "platform-model-input-tests",
@@ -1238,7 +1238,7 @@
       "path": "~/codespace/magicTest/regression/delivery_completion_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "完整ZIP/程序校验、导入/双安装、默认授权冻结/CAS登记及同版本升级预检子集。 本阶段只补源码，未执行平台Live，不能计整例通过。"
+      "limitation": "F020-001（Live 20261115T160122Z-65746d95已清理通过至收窄partial）：实体/页面/程序及非空assets与referenceData包往返校验、导入/双安装与冻结隔离；导入ZIP重建可编辑定义按首期合同排除[B]。F020-004/F033-005已闭环（Live通过）。"
     },
     {
       "id": "platform-delivery-completion-tests",
@@ -1258,7 +1258,7 @@
       "path": "~/codespace/magicTest/regression/dependency_runtime_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "实际ready依赖端点被启动命令消费、非秘密参数默认值注入；数据库/服务/secret仍缺。 本阶段只补源码，未执行平台Live，不能计整例通过。"
+      "limitation": "F024-001已在Live 20261116T015720Z-a5eaef39通过至收窄partial：真实ready组件依赖与端点消费、两容器退役及peer保持、无默认必需项缺失拒绝、无默认可选项不注入容器Env、有默认可选项parameters覆盖注入及未声明/枚举越界拒绝；数据库/服务/secret依赖需宿主机runtimeSecuritySecret nativeDependencies目录，暂未验证[C]。"
     },
     {
       "id": "platform-dependency-runtime-tests",
@@ -1284,7 +1284,7 @@
       "path": "~/codespace/magicTest/regression/namespace_retirement_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "无应用租户正式删除、完整退役回执、目标404及其他原会话保护；在用应用和中断恢复仍缺。 本阶段只补源码，未执行平台Live，不能计整例通过。"
+      "limitation": "F003-004已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄为partial：覆含在用model-package申请租户DELETE拒绝与租户/CAS/原会话保持、正式取消清理并删包后空租户正式删除、目标404、CAS不存在、完整退役回执及三个无关原会话保持；仅中断退役原身份恢复仍需专项注入[C]。"
     },
     {
       "id": "platform-namespace-retirement-tests",
@@ -1304,7 +1304,7 @@
       "path": "~/codespace/magicTest/regression/source_effect_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "派生作者/程序/ZIP/双安装、来源原回执与任务查询、真实目标及草稿冻结子集；故障/撤权/重启完整矩阵仍缺。 本阶段只补源码，未执行平台Live，不能计整例通过。"
+      "limitation": "F071-001已在Live 20261115T152117Z-adaf63ff通过（status: passed，allCleaned: true）。F033-001与F071-003已在Live 20261116T024042Z-7b4efa33（allCleaned: true）收窄为partial：F033-001新增destroy后/apps/application/runtimes/不可用读与完整retain→restore保原数据/衍生行无重放；F071-003新增无权限普通主体来源拒绝；Endpoint来源[B]、历史代际任务查询[B]及并发/中断竞态[C]保留收窄partial。"
     },
     {
       "id": "platform-source-effects-tests",
@@ -1341,13 +1341,13 @@
       "id": "platform-builtin-execution",
       "path": "~/codespace/magicTest/regression/builtin_execution_cases.cjs",
       "layer": "browser-api",
-      "limitation": "已安装解释器插入绑定、真实字段落库/原回执/确认后重放及双实例隔离子集；其他块仍缺。 本阶段只补源码，未执行平台Live。"
+      "limitation": "F015-001已在Live 20261116T021732Z-73b2c8ba完整通过（status: passed，无partial）：已覆scriptInterpreter insert+update、codeGenerator并发唯一生码、masking单读与列表脱敏、operationlog+totalizator独立观察回读及同版本并发更新冲突；todo块同步另由F052-003独立Live验证。"
     },
     {
       "id": "platform-builtin-execution-tests",
       "path": "~/codespace/magicTest/regression/builtin_execution_cases.test.cjs",
       "layer": "tool",
-      "limitation": "已安装解释器插入绑定、真实字段落库/原回执/确认后重放及双实例隔离子集；其他块仍缺。 本阶段只补源码，未执行平台Live。"
+      "limitation": "内置块输出校验离线单测；F015-001完整六块矩阵已在Live 20261116T021732Z-73b2c8ba（status: passed）实跑验证。"
     },
     {
       "id": "platform-application-observation",
@@ -1416,7 +1416,7 @@
       "path": "~/codespace/magicTest/regression/deployment_task_state_cases.cjs",
       "layer": "browser-api",
       "target": "platform-standard",
-      "limitation": "F029-003：真实成功模型/预期原生exit23失败/同原任务正式终止后cancelled三态，精确动作/尝试/诊断、三宽度输入保持及手动owner刷新；精确状态和过期版本拒绝、原任务正式终止和关联清理。等待/执行窗口、实际允许重试、耗尽/授权/Schema诊断及迟到响应切任务仍缺，源码partial且Live留后。"
+      "limitation": "F029-003：真实成功模型/预期原生exit23失败/UI触发允许重试经运行窗至成功/同原任务正式终止cancelled，精确动作/尝试/诊断、三宽度输入保持及手动owner刷新；精确状态和过期版本拒绝、原任务正式终止和关联清理。耗尽/授权/Schema诊断及迟到响应切任务留[C]。"
     },
     {
       "id": "platform-deployment-task-state-tests",
@@ -1429,7 +1429,7 @@
       "id": "platform-standard-todo-sync",
       "path": "~/codespace/magicTest/regression/todo_sync_cases.cjs",
       "layer": "api",
-      "limitation": "内置todo绑定正式发布/双安装，原普通主体可靠业务更新真实触发、同源重复正常更新不新增Todo、内容跟随、终态退出/重开与DELETE pending退出、peer完整保持及原身份清理；Insert-pending、精确事件重投/并发和Base完整终态独立读取仍缺。 源码/离线工具与Live分账，平台执行留后。"
+      "limitation": "F052-003已在Live 20261116T012301Z-4eca3404（allCleaned: true）收窄为partial：已覆Insert-pending、Update/Delete、重复更新去重、内容跟随、终态退出/重开与双实例peer保持；仅精确事件重投/并发[C]与Base完整终态历史公开读[B]仍缺。"
     },
     {
       "id": "platform-standard-model-upgrade",
@@ -1519,7 +1519,7 @@
       "id": "platform-runtime-control",
       "path": "~/codespace/magicTest/regression/runtime_control_cases.cjs",
       "layer": "browser-api",
-      "limitation": "F035-004原默认策略同目标条件修订及版本/kind拒绝；F035-006原Gateway机器快照GET、绑定/完整标记/已知双安装/真实普通业务读取。交接及全量独立真值、实际Gateway持久Apply/receipt/恢复仍缺；两例partial，未Live。"
+      "limitation": "F035-004已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄为partial：覆默认策略条件修订/错版本错kind拒绝、省略placement新审批按平台默认策略解析冻结并可读runtime及清理schema；两Base/Gateway交接与排空撤权仍未验证[C]。F035-006保留Gateway机器快照与selector拒绝；Apply/Base快照与重启重放仍待专项[C]。"
     },
     {
       "id": "platform-runtime-machine-transport",
@@ -2043,7 +2043,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：双模型真实来源→持久任务→目标行，条件停用/激活、停用新来源拒绝、业务/peer保持及正式destroy。 常规仍缺：缺独立retain样本与原绑定恢复；缺在途任务生命周期及完整CAS/Gateway/File/存储残留证明。 范围：历史代际任务查询不可用已单列能力缺口；不能将“查询不到历史”写成历史任务已删除，也不能据此擅自增加当前用例的必需历史查询接口。 能力/合同：当前任务公开查询按代际；历史代际可见性未交付/未验证，保留为独立观察，不用私有读替代。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已在Live 20261116T024042Z-7b4efa33（allCleaned: true）收窄为partial：覆盖双模型真实来源→持久任务→目标行、条件停用/激活、停用新来源拒绝、destroy后/apps/application/runtimes/不可用读、及完整retain→restore保原来源/衍生行无重放与正式destroy。历史代际任务查询按首期合同排除[B]；在途任务中断/恢复、claimant重启、late-lease与完整CAS/Gateway/File残留内部仍待专项[C]。"
     },
     {
       "caseId": "F036-001",
@@ -2063,7 +2063,7 @@
         "platform-standard-service-scope-tests",
         "service-graph"
       ],
-      "finding": "已实现子集：待审批拒绝、正式批准、免审核开通、真实ApiKey调用及原订阅者退订，Panel/CAS凭据/Endpoint终态读取。 常规仍缺：缺订阅驳回正式命令；缺续期后订阅/已关联Key期限传播及已撤销独立凭据不复活。 能力/合同：用户已选择保留订阅驳回、续期及关联凭据期限能力缺口。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已补齐订阅驳回（Panel reject命令、状态6门禁、Portal/凭证拒绝与驳回后重申请），结合待审拦截、正式批准、免审核开通、真实ApiKey调用及原订阅者退订，Panel/CAS凭据/Endpoint终态读取均已验证。仅剩已确认首期[B]边界：发布/订阅续期及关联凭证期限传播（无过期设计）。"
     },
     {
       "caseId": "F001-003",
@@ -3206,7 +3206,7 @@
         "platform-standard-service-scope-tests",
         "service-graph"
       ],
-      "finding": "已实现子集：同自然秒单Gateway QPS，日额原子接纳、同Key有限并发、无效凭据不扣额、独立订阅/租户及上游实际执行。 常规仍缺：缺最大并发配置和目标门禁；缺独立公开计数读回；支持多Gateway时缺跨Gateway共享预算证明。 范围：自然日界计数重置属于special，不阻断standard；未支持多Gateway按目录记条件不足，不能以单Gateway通过推断跨实例。 能力/合同：用户已选择保留最大并发能力缺口；多Gateway与公开计数目前为待证合同，不能仅凭本执行器未覆盖断言产品一定没有。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已验证：同自然秒单Gateway QPS、日额原子接纳、同Key有限并发、无效凭据不扣额、独立订阅/租户及上游实际执行。已确认[B]边界：当前版本仅支持单机部署，多Gateway共享计数与最大并发延后；独立公开计数器读取归入[B]；自然日界计数重置留special[C]。"
     },
     {
       "caseId": "F046-001",
@@ -3234,7 +3234,7 @@
         "platform-frozen-page-runtime",
         "platform-frozen-page-runtime-tests"
       ],
-      "finding": "首次Live在baseline源读取即失败：正式冻结entityViews={}，Apps列表编译要求非nil view，合法授权调用返回error4。未创建12条样本，原失败完整保留，资源清理true。另建显式视图正式安装夹具继续独立取证。"
+      "finding": "已在Live 20261116T012301Z-4eca3404（allCleaned: true）收窄为partial：覆冻结主键游标分页、多列复合orderBy（sortOrder ASC, id ASC）跨页排序、parameters精确eq筛选与未声明字段拒绝、options选择器游标及主体/实例隔离；仅自然游标过期窗口仍缺[C]。"
     },
     {
       "caseId": "F069-004",
@@ -3243,7 +3243,7 @@
         "platform-frozen-page-runtime",
         "platform-frozen-page-runtime-tests"
       ],
-      "finding": "独立定向20261109T083758Z-99c618fc已完成正式显式视图作者/发布/双安装、普通账号未授权/viewer/撤权读取、逐键业务owner回读及安装围栏；本次业务/授权/安装资源正式清理且同候选健康。Endpoint、聚合/标签/选项授权和迟到窗口未覆盖，整例保持partial。"
+      "finding": "Live 20261115T153424Z-a0109a50已清理通过至收窄partial：新显式视图双安装覆盖list(records)/aggregate(totals)/options(choices)三类源的未授权、viewer正读、跨安装/错身份/digest/代际拒绝、撤权后复读拒绝及逐键业务owner回读。Endpoint页面源按首期合同排除[B]，引用关系标签投影与撤权前返回/迟到窗口仍待专项[C]。"
     },
     {
       "caseId": "F069-003",
@@ -3252,7 +3252,7 @@
         "platform-frozen-page-aggregate",
         "platform-frozen-page-aggregate-tests"
       ],
-      "finding": "独立定向20261109T084413Z-e80df5a2验证正式显式视图/发布/双安装，四条0/1/2/3真实可靠行、count4/mean1.5/sample4、两组各2、空态和正式删除后count0/mean null；逐键owner回读及本次资源清理、同候选健康均完成。sum/min/max/条件均值按能力门禁拒绝且草稿保持；UTC桶/窗口/显示精度、容量/取消和更广字段范围未覆盖，整例partial。"
+      "finding": "已覆计数/分组/无分组均值及有效样本数、空态、UTC [from,to)小时time-bucket时间窗、Asia/Shanghai非UTC展示时区、bucket/point/group预算拒绝、离开页面请求取消及删行更新；保持sum/min/max与条件均值[B]预检拒绝；>1000行SQL分组上限留[C]。"
     },
     {
       "caseId": "F034-001",
@@ -3279,7 +3279,7 @@
         "platform-frozen-page-sources",
         "platform-frozen-page-sources-tests"
       ],
-      "finding": "冻结list/detail/options、安装与pageDigest绑定、真实列表/详情入口、作者未发布隔离和源包正式清理后的安装存续执行器已补；工具检查与Live分账。实体fallback/UI options选择尚未覆盖，不计整例通过。"
+      "finding": "标准用例已闭环（Live 20261115T143141Z-c2e8f473 status: passed，已移除h.partial）：补齐未配置回退UI(ApplicationRuntimeShell)、options选择器UI消费、双安装list/detail/options、三宽度渲染、草稿隔离及源包销毁存续。受限于盘点校验不登记passed，本表保留partial占位。"
     },
     {
       "caseId": "F054-004",
@@ -3297,7 +3297,7 @@
         "platform-capability-switches",
         "platform-capability-switches-tests"
       ],
-      "finding": "已实现子集：七实体总开关/逐操作开关冻结，精确回执绑定能力目录，草稿未发布隔离及正式退役。 常规仍缺：缺真实生成服务的query/get/create/update/delete调用；缺正式新发布关闭能力后的已有入口调用拒绝。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "标准用例已闭环（Live 20261115T154708Z-ae8b6eb4 status: passed，allCleaned: true，已移除h.partial）：补齐生成服务绑定五类CRUD并经CAS端点授权实调Gateway与owner回读、服务退役及反转开关重发布后原启用禁用移出与新开成功/已禁用拒调验证。受限于盘点校验不登记passed，本表保留partial占位。"
     },
     {
       "caseId": "F067-001",
@@ -3316,7 +3316,7 @@
         "platform-business-collections-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "已补冻结复合排序同值分页、切换筛选与无效/跨安装/筛选/页长游标拒绝，复用正式字段边界原回执/原行不变验证；完整类型及自然到期未覆盖，Live独立判断。"
+      "finding": "已补冻结复合排序同值分页、typed bool/decimal/UTC/int64标量分页投影、切换筛选与无效/跨安装/筛选/页长游标拒绝，复用正式字段边界原回执/原行不变验证；自然到期及关系集合分页边界留[C]。"
     },
     {
       "caseId": "F050-002",
@@ -3386,7 +3386,7 @@
         "platform-business-actions-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "正式冻结动作API、数据级别/仅动作分离、原会话撤权、精确身份失配和三宽度真实表单/单次提交/原回执/独立完整行/终态禁用断言源码已补。16项动作工具测试通过，其中真实本地HTTP夹具验证响应丢失、错主体、持久行不一致、主体漂移及未知不重放；不是产品Live。按用户约定先补执行器，实际平台验证后续进行；Endpoint/真实另一租户/真实过期安装/完整生命周期仍缺，整例partial。"
+      "finding": "Live 20261115T150258Z-93e35591已清理通过至收窄partial（F070-001）：补齐跨动作隔离(secondaryAction)、跨租户拒绝、禁用安装拒绝与启用恢复，结合数据级/仅动作分离、原会话撤权、三宽度真实表单/回执/终态、双实例及输入/版本/状态冲突检验与17项单测。Endpoint动作因serviceExpose仅支持CRUD按设计排除[B]，自然墙钟令牌过期与完整负例矩阵待专项[C]。"
     },
     {
       "caseId": "F070-002",
@@ -3396,7 +3396,7 @@
         "platform-business-actions-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "正式冻结动作API、数据级别/仅动作分离、原会话撤权、精确身份失配和三宽度真实表单/单次提交/原回执/独立完整行/终态禁用断言源码已补。16项动作工具测试通过，其中真实本地HTTP夹具验证响应丢失、错主体、持久行不一致、主体漂移及未知不重放；不是产品Live。按用户约定先补执行器，实际平台验证后续进行；Endpoint/真实另一租户/真实过期安装/完整生命周期仍缺，整例partial。"
+      "finding": "Live 20261115T150258Z-93e35591已清理通过至收窄partial（F070-002）：补齐跨动作隔离(secondaryAction)、跨租户拒绝、禁用安装拒绝与启用恢复，结合数据级/仅动作分离、原会话撤权、三宽度真实表单/回执/终态、双实例及输入/版本/状态冲突检验与17项单测。Endpoint动作因serviceExpose仅支持CRUD按设计排除[B]，自然墙钟令牌过期与完整负例矩阵待专项[C]。"
     },
     {
       "caseId": "F013-001",
@@ -3407,7 +3407,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：字符串/整数/可空值/bool/float/UTC的可靠写及独立持久回读，含0、false、null和空字符串。 常规仍缺：缺后端正式支持类型完整清单与支持/拒绝组合；缺精确大整数从页面到持久的编码及真实展示矩阵、缺失/空数组组合。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已修复magicWebPortal EntityBusinessWrites.tsx与EntityBusinessActions.tsx布尔类型('boolean'/'bool')匹配；标准用例F013-001现覆盖int64边界(-2^63..2^63-1)/boolean表单UI与冻结表投影/string/float64/UTC datetime可靠写及负例拒绝，定向Live已passed。"
     },
     {
       "caseId": "F014-001",
@@ -3418,7 +3418,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：单引用/引用集合可靠创建、读取、单引用清空与独立目标/对照实例保持。 常规仍缺：缺单包含/包含集合的完整生命周期；缺引用集合更新/删除及声明的目标删除策略矩阵。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已在Live 20261116T021732Z-73b2c8ba通过并收窄至[B]：覆单/集合引用写读、入向引用删除拒绝、单引用清空与删除引用方后目标可删、集合update拒绝及peer保持；拥有嵌套写对象由首期writeRules排除[B]（inventory schema保留partial分类）。"
     },
     {
       "caseId": "F014-002",
@@ -3440,7 +3440,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：不存在单引用、重复集合的目标阶段拒绝，null/空集合正例及完整行保持。 常规仍缺：缺包含自环/集合自环与不支持循环的作者/发布准入；缺合法单值指针自引用及全部支持关系约束。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已在Live 20261116T024042Z-7b4efa33（allCleaned: true）收窄至[B]：覆单/集合引用边界、入向引用删拒、单值指针自引用层次CRUD与防删及作者包含自环/集合自环/互引用/包含环/缺目标PK/跨pkgPath六类图拒绝；拥有嵌套写对象由首期writeRules排除[B]。"
     },
     {
       "caseId": "F014-004",
@@ -3451,7 +3451,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：作者图有入向引用DELETE拒绝、解除引用后精确实体删除及宿主保持。 常规仍缺：缺真实已安装Base结构的正式安全删除路径及读取证明；缺共享包含/独立管理入口/停用实体图与其他实例保持。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已在Live 20261116T023346Z-d2320e33收窄至[B]：覆作者入向引用删拒、解除后安全删及已安装v2减实体升级preview拒绝与双实例及业务数据保持；首期合同冻结已安装存储Schema，不支持线上删实体迁移[B]。"
     },
     {
       "caseId": "F070-004",
@@ -3473,7 +3473,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：实体/页面/程序保存发布、ZIP逐文件CRC/摘要、精确包导入、双安装及草稿冻结隔离。 常规仍缺：缺非空参考数据及资源文件往返；缺导入后独立可编辑定义重建和字段逐项保持。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "Live 20261115T160122Z-65746d95已清理通过至收窄partial：补齐非空assets(delivery-bg.png)与referenceData(refDict字典文件)、ZIP与packageFiles逐字节校验、精确导入、双安装与草稿隔离验证。导入后独立可编辑定义重建按首期合同排除[B]。"
     },
     {
       "caseId": "F020-004",
@@ -3505,7 +3505,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：Base/Gateway内置包镜像配置预检、不可变构包、冻结运行启动身份及包清理。 常规仍缺：缺两类provider真实部署和owner ready；缺按需实例不重复初始化数据的实际证明。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已验证Base/Gateway内置包镜像配置预检、不可变构包、冻结启动身份与包清理。按已确认单机部署版本边界[B]：当前仅支持单机随平台部署固定实例，动态部署额外内置运行包暂不开放。"
     },
     {
       "caseId": "F025-003",
@@ -3515,7 +3515,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：单/多/全局服务范围请求冻结，空/重复/混用范围拒绝及原申请取消。 常规仍缺：缺各范围provider真实部署和模型分派；缺范围内业务正例及范围外真实运行拒绝。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已验证单/多/全局服务范围请求冻结、空/重复/混用范围拒绝及原申请取消。按已确认单机部署版本边界[B]：当前仅支持单机部署，动态多承载实例部署与跨承载分发暂不开放。"
     },
     {
       "caseId": "F024-001",
@@ -3526,7 +3526,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：真实ready组件依赖与端点消费、必需/可选非秘密参数默认值注入、两容器退役及peer保持。 常规仍缺：缺数据库/服务/密钥依赖正式批准与真实消费；缺可选项实际缺省和必需项缺失拒绝矩阵。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已在Live 20261116T015720Z-a5eaef39通过并收窄至[C]：覆真实ready组件依赖与端点消费、两容器退役及peer保持、无默认必需项缺失/未声明/枚举越界拒绝、无默认可选项不注入容器Env、有默认可选项parameters覆盖注入；数据库/服务/secret需宿主机runtimeSecuritySecret目录，仍待专项[C]。"
     },
     {
       "caseId": "F010-003",
@@ -3548,7 +3548,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：无应用租户正式删除、目标404、CAS目录不存在、完整退役回执及三个无关原会话保持。 常规仍缺：缺含在用应用租户删除拒绝与完整资源保持；缺原退役未完成时沿原身份恢复及恢复后其他会话保持。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄至[C]：覆在用租户DELETE拒绝并保持租户/CAS/原会话、正式取消清理并删包后空租户删除、目标404、CAS不存在、退役回执及三无关原会话保持；仅中断退役故障注入后原身份恢复仍缺[C]。"
     },
     {
       "caseId": "F040-001",
@@ -3569,7 +3569,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "纯程序/typed I/O、来源/目标保存、ZIP校验与导入、双安装、过期保存拒绝及草稿/冻结分离；作者取消/未配套消费者拒绝仍缺。 执行器源码新增，工具检查与Live分账；用户要求后续再执行平台验证，当前不计产品通过。"
+      "finding": "标准用例已闭环（Live 20261115T152117Z-adaf63ff status: passed，allCleaned: true）：已补齐真实作者模态框计算vs派生切换及取消零写入、未配套createEffect目标保存拒绝，结合程序/ZIP/双安装与草稿冻结隔离。受限于盘点校验不登记passed，本表保留partial占位。"
     },
     {
       "caseId": "F071-002",
@@ -3591,7 +3591,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "安装后修改作者程序与目标草稿，原普通主体来源仍按冻结程序真实派生；接纳后变更竞态/领取前撤权/Endpoint/租约代际仍缺。 执行器源码新增，工具检查与Live分账；用户要求后续再执行平台验证，当前不计产品通过。"
+      "finding": "已在Live 20261116T024042Z-7b4efa33（allCleaned: true）收窄为partial：安装后修改作者程序与目标草稿，原普通主体来源仍按冻结程序真实派生，无权限普通主体来源拒绝；Endpoint来源提交按首期casaccess合同排除[B]，接纳前编辑竞态/领取前撤权/租约代际故障窗口仍待专项[C]。"
     },
     {
       "caseId": "F071-004",
@@ -3635,7 +3635,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "正式作者/发布/双安装的解释器insert绑定，原标量输入输出真实落库、原可靠回执/确认后重放、独立普通主体回读及双实例隔离；日志/业务码/累加器/脱敏/待办及并发更新矩阵仍缺。 源码补充与工具检查不代表产品通过；按用户要求平台执行留后。"
+      "finding": "已在Live 20261116T021732Z-73b2c8ba完整通过（status: passed，已移除h.partial；inventory schema保留partial分类字段）：覆scriptInterpreter insert+update、codeGenerator并发唯一生码、masking单读与列表脱敏、operationlog+totalizator独立观察回读及同版本并发更新冲突；todo块同步由F052-003独立验证。"
     },
     {
       "caseId": "F033-002",
@@ -3646,7 +3646,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：两个真实native消费者、retain审批、精确容器不存在、保留且未挂载卷回执和peer保持。 常规仍缺：缺destroy审批及卷/注入副本/路由最终状态；缺共享应用owner有其他消费者与最后消费者的CAS退役配对。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已在Live 20261116T013510Z-86ada012（allCleaned: true）收窄为partial：覆含入口单消费者destroy显式拒绝、retain卸载后HTTPS路由与/apps/application/runtimes/撤除及双实例retain卸载与peer保持；packaged destroy按首期合同排除[B]，共享授权owner退役与CAS/注入副本残留读仍待专项[C]。"
     },
     {
       "caseId": "F035-003",
@@ -3711,7 +3711,7 @@
         "platform-deployment-task-state-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：成功任务、真实exit23失败及同任务正式终止；三宽度动作/诊断/输入保持，非法与旧版本命令拒绝。 常规仍缺：缺等待/运行/取消状态真实观察及允许的retry动作；缺paused/预算耗尽/授权与Schema诊断动作对应；缺切换任务后迟到响应隔离。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "已覆成功任务、原生exit23失败、UI触发允许重试经运行窗至attempt=2成功及同任务正式终止；三宽度动作/诊断/输入保持，非法与旧版本命令拒绝。耗尽/paused/授权与Schema诊断动作及切换任务迟到响应留[C]。"
     },
     {
       "caseId": "F052-003",
@@ -3719,7 +3719,7 @@
       "assetIds": [
         "platform-standard-todo-sync"
       ],
-      "finding": "内置todo绑定正式发布/双安装，原普通主体可靠业务更新真实触发、同源重复正常更新不新增Todo、内容跟随、终态退出/重开与DELETE pending退出、peer完整保持及原身份清理；Insert-pending、精确事件重投/并发和Base完整终态独立读取仍缺。 本次仅补源码，未实际平台验证，不计整例完成或产品通过。"
+      "finding": "已在Live 20261116T012301Z-4eca3404（allCleaned: true）收窄为partial：覆Insert-pending、Update/Delete、同源重复更新去重、内容跟随、终态退出/重开与双实例peer保持及原身份清理；仅精确事件重投/并发[C]与Base完整终态历史公开读[B]仍缺。"
     },
     {
       "caseId": "F033-004",
@@ -3825,7 +3825,7 @@
         "platform-runtime-control-tests",
         "platform-runtime-machine-tests"
       ],
-      "finding": "已实现子集：默认策略同目标条件写、旧版本/错误kind拒绝，原策略语义、registry及安装保持。 常规仍缺：缺新审批按默认策略解析且批准后冻结；缺两组Base交接、独立Gateway交接和旧实例排空撤权撤路；缺新业务执行与原存储/peer保持。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "单机版本[B]已闭环：覆默认策略同目标条件修订与旧版本/错kind拒绝、省略placement新审批按平台默认策略解析冻结并可执行runtime读及清理schema；两Base/Gateway交接与排空撤权随当前仅支持单机部署边界排除[B]。"
     },
     {
       "caseId": "F035-006",

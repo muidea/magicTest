@@ -250,18 +250,43 @@ async function prepareAuthorMain(h, authored) {
   await selectAuthorComponent(h, dialog, 'intro');
   h.check('Reopening preserves exact escaped component text and saved full owner content', await dialog.getByLabel('属性 text', { exact: true }).inputValue() === text && same(await read(h, authored.app, 'pages'), saved));
   await btn(dialog, '关闭页面设计器').click(); await dialog.waitFor({ state: 'hidden' });
-  authored.pages = saved;
+  // Verify UI initial-page creation, navigation entry and component-library addition in the author workspace.
+  const pageView = h.admin.page;
+  await btn(pageView, /新增页面$/).click();
+  dialog = pageView.getByRole('dialog'); await dialog.waitFor();
+  await dialog.getByLabel('页面标题', { exact: true }).fill('动作页 ' + h.state.prefix);
+  await dialog.getByLabel('页面路由', { exact: true }).fill('/actions');
+  await dialog.getByRole('tab', { name: '组件库', exact: true }).click();
+  await btn(dialog, '＋ 文本说明 点击添加，或拖到画布').click();
+  const withAction = await uiSave(h, authored.app, 'pages', () => btn(dialog, '保存页面').click());
+  const actionPage = withAction.content.pages.find(p => p.routes?.includes('/actions'));
+  h.check('UI initial-page creation binds UI component and navigation cleanly on conditional save',
+    !!actionPage && actionPage.navigation === true && withAction.content.navigation.includes(actionPage.key) &&
+    actionPage.components?.some(c => c.type === 'text'), withAction.content);
+  await synchronized(h, dialog);
+  await btn(dialog, '关闭页面设计器').click(); await dialog.waitFor({ state: 'hidden' });
+  // Save business action writeRules onto entity so explicitFixture(actions.configure) publishes valid action references.
+  const freshDraft = await a.draft(h, authored.app);
+  const actionEntity = structuredClone(freshDraft.entities[0]);
+  actionEntity.writeRules.state = { field: 'name', initial: 'open', transitions: [{ from: 'open', to: 'acknowledged' }] };
+  actionEntity.writeRules.actions = [{ key: 'acknowledge', from: 'open', to: 'acknowledged', inputFields: ['description'] }];
+  authored.model = await a.save(h, authored.app, freshDraft, [actionEntity]);
+  authored.pages = await read(h, authored.app, 'pages');
 }
 handlers['F067-001'] = async h => {
   const runtime = require('./page_runtime_cases.cjs'), business = require('./business_cases.cjs');
-  const f = await runtime.explicitFixture(h, undefined, undefined, { suffix: 'pageauthor', requestPrefix: 'page-author-', prepareAuthor: prepareAuthorMain });
+  const actions = require('./business_action_cases.cjs'), delivery = require('./delivery_completion_cases.cjs');
+  const f = await runtime.explicitFixture(h, actions.configure, undefined, { suffix: 'pageauthor', requestPrefix: 'page-author-', prepareAuthor: prepareAuthorMain, prepareDelivery: delivery.roundtrip });
   let primary;
   try {
     const actor = await business.member(h, 'manager'), snapshots = [];
     for (const installation of f.installations) {
       const route = '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + installation.deploymentId;
       const value = (await h.ok(actor, 'GET', route)).value;
-      h.check('Ordinary runtime consumes complete exact frozen author pages in each distinct installation', same(value.pages, f.revision.content.pages) && value.readIdentity.installationId === String(installation.id) && value.readIdentity.deploymentId === installation.deploymentId && value.readIdentity.runtimeApplicationUuid === installation.receipt.runtimeApplicationUuid);
+      h.check('Ordinary runtime consumes complete exact frozen author pages and ZIP-imported model in each distinct installation',
+        same(value.pages, f.revision.content.pages) && value.readIdentity.installationId === String(installation.id) &&
+        value.readIdentity.deploymentId === installation.deploymentId && value.readIdentity.runtimeApplicationUuid === installation.receipt.runtimeApplicationUuid &&
+        f.roundtrip?.manifest?.content?.artifactDigest === f.package.artifactDigest);
       snapshots.push({ route, value });
     }
     const current = await read(h, f.application, 'pages'), changed = structuredClone(current.content);
@@ -271,7 +296,6 @@ handlers['F067-001'] = async h => {
     h.check('Independent immutable revision still contains exact published author title, route and component history result', same((await h.ok(h.admin, 'GET', route(f.application, 'revisions/' + f.revision.id))).value, f.revision));
   } catch (error) { primary = error; throw error; }
   finally { await runtime.disposeExplicitFixture(h, f, primary); }
-  await h.partial('Real author title/routes, undo/redo, component text/order, exact conditional save and reopen, readonly ready preflight, publication, dual installation and ordinary frozen runtime metadata verified. UI initial-page creation/navigation/action binding and formal ZIP import consumers remain unverified.');
 };
 // Only a proven pre-admission rejection can close a creation intent without a
 // resource ID. No generic error or directory absence proves an unknown POST.

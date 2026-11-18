@@ -142,9 +142,124 @@ async function runControls(h, run = attempt) {
   }
   h.check('Normal first-party callback and all independent nonce/state/S256 binding controls enforce their original transaction', results.every(result => result.passed), results);
 }
-const handlers = { 'F001-006': async h => {
+function callbackTamperURL(origin, params = {}) {
+  const url = new URL(callbackPath, origin);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+  }
+  return url.href;
+}
+async function awaitRows(read, predicate) {
+  let rows = [];
+  for (let i = 0; i < 15; i++) {
+    rows = await read();
+    if (predicate(rows)) return rows;
+    if (i < 14) await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  return rows;
+}
+async function verifyCallbackSubstitutionsAndAudit(h) {
+  const original = h.user, n = original.identity.namespace;
+  const beforeSession = (await h.ok(original, 'GET', '/api/v1/web/session/')).value;
+  const subject = 'account:' + beforeSession.account.id;
+  const casAuditRoute = '/cas/namespaces/' + n + '/oauth/audit/';
+  const panelAccessRoute = '/panel/support/audit/access';
+  const sessionRoute = '/api/v1/web/login-sessions/?' + new URLSearchParams({ namespace: n, accountId: String(beforeSession.account.id), _pageSize: '100' });
+  const sessions = () => h.directory(h.tenantAdmin, sessionRoute).then(rows => rows.map(r => r.id).sort());
+  const beforeCasAuditIDs = new Set((await h.directory(h.tenantAdmin, casAuditRoute)).map(r => r.id));
+  const beforePanelAccessIDs = new Set((await h.directory(h.tenantAdmin, panelAccessRoute)).map(r => r.id));
+  const beforeSessionIDs = await sessions();
+  const startedAt = Date.now();
   await runControls(h);
-  await h.partial('Normal first-party callback and nonce/state/S256 controls proven; callback substitutions, original CAS code-consumption/reuse and security-audit correlation still require their complete independent assertions.');
-} };
+  const normalProbe = [...(h.state.callbackProbes || [])].reverse().find(p => p.mode === 'normal');
+  const consumedCode = normalProbe?.callbacks?.[0]?.originalURL ? new URL(normalProbe.callbacks[0].originalURL).searchParams.get('code') : '';
+  h.check('Normal first-party probe captured a real single-use CAS authorization code', typeof consumedCode === 'string' && consumedCode.length > 0);
+  const casAfterControls = await awaitRows(
+    () => h.directory(h.tenantAdmin, casAuditRoute),
+    rows => {
+      const fresh = rows.filter(r => !beforeCasAuditIDs.has(r.id) && r.subject === subject && r.createTime >= startedAt - 2000);
+      return fresh.some(r => r.eventType === 'login_success' && r.outcome === 'success') &&
+        fresh.some(r => r.eventType === 'token_issued' && r.outcome === 'success' && JSON.parse(r.detailJson || '{}').grantType === 'authorization_code') &&
+        fresh.some(r => r.eventType === 'logout_success' && r.outcome === 'success');
+    }
+  );
+  const newCasEvents = casAfterControls.filter(r => !beforeCasAuditIDs.has(r.id) && r.subject === subject && r.createTime >= startedAt - 2000);
+  const authCodeTokens = newCasEvents.filter(r => r.eventType === 'token_issued' && r.outcome === 'success' && JSON.parse(r.detailJson || '{}').grantType === 'authorization_code');
+  h.check('CAS OAuth audit records exact authorization-code consumption, login and logout for original subject without code/token leakage',
+    newCasEvents.some(r => r.eventType === 'login_success' && r.outcome === 'success') &&
+    authCodeTokens.length >= 1 &&
+    newCasEvents.some(r => r.eventType === 'logout_success' && r.outcome === 'success') &&
+    newCasEvents.every(r => r.namespace === n && !(r.detailJson || '').includes(consumedCode) && !(r.detailJson || '').includes('access_token') && !(r.detailJson || '').includes('refresh_token')),
+    { count: newCasEvents.length, eventTypes: newCasEvents.map(r => r.eventType) });
+  const panelEvents = await awaitRows(
+    () => h.directory(h.tenantAdmin, panelAccessRoute),
+    rows => authCodeTokens.every(a => rows.some(p => !beforePanelAccessIDs.has(p.id) && p.id === a.id))
+  );
+  h.check('Panel access audit correlates with CAS OAuth audit on first-party authorization-code grant',
+    authCodeTokens.every(a => panelEvents.some(p => p.id === a.id && p.eventType === a.eventType && p.subject === a.subject && p.namespace === n)));
+  const tokenIssuedBeforeReplay = new Set(casAfterControls.filter(r => r.eventType === 'token_issued').map(r => r.id));
+  const loginSuccessBeforeReplay = new Set(casAfterControls.filter(r => r.eventType === 'login_success').map(r => r.id));
+  const runCallbackProbe = async (probeName, buildParams) => {
+    const context = await h.browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 768 } });
+    const probeActor = { context, page: await context.newPage(), origin: original.origin, identity: structuredClone(original.identity) };
+    try {
+      const page = probeActor.page;
+      let pendingState = '', loginStatus = 0;
+      const captureLogin = res => {
+        const u = new URL(res.url());
+        if (u.origin === original.origin && u.pathname === '/api/v1/web/auth/login') {
+          loginStatus = res.status();
+          if (res.status() === 302 && res.headers().location) {
+            pendingState = new URL(res.headers().location, original.origin).searchParams.get('state') || '';
+          }
+        }
+      };
+      page.on('response', captureLogin);
+      await page.goto(original.origin + '/api/v1/web/auth/login?return_to=%2Fportal%2F', { waitUntil: 'networkidle' });
+      page.off('response', captureLogin);
+      h.check('Callback probe ' + probeName + ' starts from a genuine pending BFF transaction', loginStatus === 302 && typeof pendingState === 'string' && pendingState.length > 0, { loginStatus });
+      const targetURL = callbackTamperURL(original.origin, buildParams(pendingState));
+      const response = await page.goto(targetURL, { waitUntil: 'networkidle' });
+      const status = response ? response.status() : 0;
+      const bodyText = await page.textContent('body').catch(() => '');
+      const sessionCheck = await ownerRequest(probeActor, 'GET', '/api/v1/web/session/', undefined, h.observe);
+      const unauthenticated = sessionCheck.status === 401 || sessionCheck.data?.error?.code === 11;
+      const noLeak = !bodyText.includes(consumedCode) && !bodyText.includes('access_token') && !bodyText.includes('refresh_token') && !bodyText.includes('client_secret');
+      h.check('Callback probe ' + probeName + ' refuses substitution/replay without establishing a session or leaking code',
+        [400, 401, 403].includes(status) && unauthenticated && noLeak, { probeName, status, sessionStatus: sessionCheck.status });
+      h.observe({ kind: 'first-party-callback-substitution-probe', probeName, status, unauthenticated, noLeak });
+    } finally {
+      await context.close();
+    }
+    const retained = await ownerRequest(original, 'GET', '/api/v1/web/session/', undefined, h.observe);
+    h.check('Callback probe ' + probeName + ' leaves original ordinary session intact', h.good(retained) && retained.data.value.account.id === beforeSession.account.id && retained.data.value.homeNamespace === n);
+    h.check('Callback probe ' + probeName + ' creates zero new BFF sessions', require('node:util').isDeepStrictEqual(await sessions(), beforeSessionIDs));
+  };
+  await runCallbackProbe('consumed-code-reuse', pendingState => ({ code: consumedCode, state: pendingState }));
+  await runCallbackProbe('forged-code', pendingState => ({ code: 'forged-' + crypto.randomBytes(16).toString('base64url'), state: pendingState }));
+  await runCallbackProbe('missing-code', pendingState => ({ state: pendingState }));
+  await runCallbackProbe('tampered-callback-state', () => ({ code: consumedCode, state: crypto.randomBytes(16).toString('base64url') }));
+  const bareContext = await h.browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1366, height: 768 } });
+  const bareActor = { context: bareContext, page: await bareContext.newPage(), origin: original.origin, identity: structuredClone(original.identity) };
+  try {
+    const barePage = bareActor.page;
+    const res = await barePage.goto(callbackTamperURL(original.origin, { code: consumedCode, state: crypto.randomBytes(16).toString('base64url') }), { waitUntil: 'networkidle' });
+    const sessionCheck = await ownerRequest(bareActor, 'GET', '/api/v1/web/session/', undefined, h.observe);
+    h.check('Callback without original pending browser cookie is rejected', !!res && [400, 401, 403].includes(res.status()) && (sessionCheck.status === 401 || sessionCheck.data?.error?.code === 11));
+    for (const badTarget of ['https://other.test/', '//other.test/', '/\\other.test/']) {
+      const loginRes = await barePage.goto(original.origin + '/api/v1/web/auth/login?return_to=' + encodeURIComponent(badTarget), { waitUntil: 'networkidle' });
+      const cookies = await bareContext.cookies();
+      h.check('Unsafe return_to ' + badTarget + ' is rejected cleanly before redirecting or setting cookies',
+        !!loginRes && loginRes.status() === 400 && new URL(barePage.url()).pathname === '/api/v1/web/auth/login' && cookies.length === 0,
+        { badTarget, status: loginRes?.status(), finalURL: barePage.url(), cookieCount: cookies.length });
+    }
+  } finally {
+    await bareContext.close();
+  }
+  const casAfterReplay = await h.directory(h.tenantAdmin, casAuditRoute);
+  const unexpectedGrants = casAfterReplay.filter(r => r.subject === subject && ((r.eventType === 'token_issued' && !tokenIssuedBeforeReplay.has(r.id)) || (r.eventType === 'login_success' && !loginSuccessBeforeReplay.has(r.id))));
+  h.check('Code reuse and callback substitution probes generate zero new CAS token issuances or logins', unexpectedGrants.length === 0 && require('node:util').isDeepStrictEqual(await sessions(), beforeSessionIDs), unexpectedGrants);
+}
+const handlers = { 'F001-006': verifyCallbackSubstitutionsAndAudit };
 handlers['F001-006'].actors = ['user', 'tenantAdmin']; handlers['F001-006'].transport = 'owner-api';
-module.exports = { handlers, authorizationVariant, withOriginalAuthorizationEntry, runControls };
+module.exports = { handlers, authorizationVariant, withOriginalAuthorizationEntry, runControls, callbackTamperURL };

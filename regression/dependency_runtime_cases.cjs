@@ -47,7 +47,43 @@ async function dependencies(h) {
     apiId: api.Id, workerId: worker.Id, produced, consumed });
   await native.cleanup(h, r); await require('./native_provider_access_cases.cjs').cleanup(h, pkg);
   for (const i of before) h.check('Dependency runtime and reviewed cleanup preserve all unrelated installed peers', same((await h.ok(h.admin, 'GET', '/panel/application/installations/' + i.id)).value, i));
-  await h.partial('Real ready component dependency, scoped endpoint consumed by application, required/optional nonsecret parameter defaults and exact two-container retirement implemented. Database/service/secret resources and explicit optional-absence matrix remain open.');
+  await parameterMatrix(h);
+  await h.partial('Real ready component dependency, scoped endpoint consumed by application, required/optional/default-override/undeclared parameter matrix and exact two-container retirement implemented. Database/service/secret resources require host runtimeSecuritySecret nativeDependencies catalog and remain unverified [C].');
+}
+async function parameterMatrix(h) {
+  const value = native.input(h, false);
+  value.contract.parameters = {
+    req_nodef: { type: 'string', required: true },
+    opt_nodef: { type: 'string', required: false },
+    opt_def: { type: 'string', required: false, default: 'def-init', enum: ['def-init', 'override-ok'] },
+  };
+  Object.assign(value.contract.components.api.environment, {
+    REGRESSION_REQ_NODEF: { parameterRef: 'req_nodef' },
+    REGRESSION_OPT_NODEF: { parameterRef: 'opt_nodef' },
+    REGRESSION_OPT_DEF: { parameterRef: 'opt_def' },
+  });
+  const pkg = await require('./native_package_cases.cjs').build(h, value);
+  try {
+    const reqBody = params => ({
+      sourceKind: 'deployment-package', packageId: pkg.package.id, expectedDigest: pkg.package.packageDigest,
+      instanceKey: native.instanceKey(h, value, 'param'), instanceName: '参数校验样本',
+      parameters: params, reason: 'Verify native parameter resolution & refusal matrix',
+    });
+    for (const bad of [{}, { req_nodef: 'ok', unknown_key: 'bad' }, { req_nodef: 'ok', opt_def: 'not-in-enum' }]) {
+      const denied = await h.api(h.admin, 'POST', '/panel/application/deployment-requests/', reqBody(bad));
+      h.check('Invalid native installation parameters are explicitly refused at admission',
+        !h.good(denied) && [4, 21].includes(denied.data?.error?.code) && denied.data.value == null, { bad, denied });
+    }
+    const r = await native.install(h, pkg.package, value, 'params', undefined, { req_nodef: 'req-live', opt_def: 'override-ok' });
+    const api = ownedContainer(h, r, 'api');
+    h.check('Container environment injects required parameter and overridden default while omitting unset optional without default',
+      api.Config.Env.includes('REGRESSION_REQ_NODEF=req-live') &&
+      api.Config.Env.includes('REGRESSION_OPT_DEF=override-ok') &&
+      !api.Config.Env.some(e => e.startsWith('REGRESSION_OPT_NODEF=')), api.Config.Env);
+    await native.cleanup(h, r);
+  } finally {
+    await require('./native_provider_access_cases.cjs').cleanup(h, pkg);
+  }
 }
 dependencies.transport = 'owner-api'; dependencies.requiresOnlyDeliveryFixture = true;
 module.exports = { handlers: { 'F024-001': dependencies }, input, ownedContainer };

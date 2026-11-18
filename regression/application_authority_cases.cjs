@@ -303,11 +303,64 @@ async function independentDataRoles(h) {
       h.check('Independent role changes leave original other-installation record unchanged', same((await business.record(h, manager, second)).data.value, second.created));
     }
     // This template was created before the account and is retired after it.
-    // Explicitly remove the later raw-role templates before reverse teardown.
+    // Explicitly remove the later raw-role templates before third-instance and action checks.
     await assign(h, member, group, []);
+    const actions = require('./business_action_cases.cjs'), pages = require('./page_runtime_cases.cjs');
+    const fx = await pages.explicitFixture(h, actions.configure, undefined, { suffix: 'datarole-action', requestPrefix: 'dract-', prepareAuthor: actions.prepare });
+    const actionRows = [];
+    let actionErr;
+    try {
+      const ctxC = await business.runtime(h, fx, 0, manager);
+      const rowC = { kind: 'business-record', phase: 'intent', actorRole: 'manager', ...ctxC, origin: manager.origin, actorIdentity: structuredClone(manager.identity), commands: [] };
+      delete rowC.ui; actionRows.push(rowC); h.state.resources.push(rowC); h.persist();
+      await business.execute(h, manager, rowC, business.request(rowC, 'create', [
+        { name: 'code', value: 'RG-' + require('node:crypto').randomBytes(8).toString('hex').toUpperCase() },
+        { name: 'name', value: 'open' }, { name: 'description', value: null }, { name: 'sortOrder', value: 0 },
+      ]));
+      await assign(h, member, group, [
+        { applicationUuid: contexts[0].identity.deploymentId, accessLevel: 'manager' },
+        { applicationUuid: contexts[1].identity.deploymentId, accessLevel: 'viewer' },
+      ]);
+      h.denied(await business.record(h, member.actor, rowC), 'Same account with manager on A and viewer on B cannot read unassigned third installation C');
+      await matrixWrite(h, member, rowC, 'update', false);
+      await matrixWrite(h, member, rowC, 'delete', false);
+      const groupC = await h.create(base + 'role-templates/', {
+        key: h.state.prefix + '-third-instance',
+        name: '第三实例数据管理',
+        subjectType: 'account',
+        status: 2,
+        roleRefs: ordinary.roleRefs,
+        applicationAccess: [{ applicationUuid: fx.installations[0].deploymentId, accessLevel: 'manager' }],
+      }, 'role-template');
+      await assign(h, member, groupC, [{ applicationUuid: fx.installations[0].deploymentId, accessLevel: 'manager' }]);
+      h.check('Granted manager level on third installation allows exact ordinary business read',
+        same(await business.record(h, member.actor, rowC), await business.record(h, manager, rowC)));
+      const memUpdateBody = business.request(rowC, 'update', [{ name: 'sortOrder', value: 7 }]);
+      const memUpdateRoute = business.route(rowC, 'update', false);
+      const memUpdateRes = await h.ok(member.actor, 'POST', memUpdateRoute, memUpdateBody);
+      h.check('Third installation data-manager executes ordinary sortOrder update cleanly', business.receiptMatches(member.actor, memUpdateBody, memUpdateRes.value), memUpdateRes);
+      rowC.version = memUpdateRes.value.version; h.persist();
+      const deniedAction = await h.api(member.actor, 'POST', actions.route(rowC), actions.request(rowC));
+      h.check('Data-manager role on third installation does not implicitly grant frozen business action execute',
+        actions.routeDenied(deniedAction) || actions.refused(deniedAction, 5, '当前用户角色未授予此实例的业务动作权限'), deniedAction);
+      const afterAction = await business.record(h, manager, rowC);
+      h.check('Refused business action leaves exact original state and fields unchanged',
+        h.good(afterAction) && afterAction.data.value.name === 'open' && afterAction.data.value.sortOrder === 7 && afterAction.data.value.description === null && String(afterAction.data.value.version) === rowC.version, afterAction);
+      await assign(h, member, groupC, []);
+      h.denied(await business.record(h, member.actor, rowC), 'Removing third installation manager scope revokes C access cleanly');
+      const detachBody = { roleTemplateKeys: ['portal-basic-user'] };
+      const detachCmd = { method: 'PUT', route: base + 'accounts/' + member.value.id + '/role-templates', body: detachBody, outcome: 'unknown', retiredTemplateKey: groupC.key };
+      (member.resource.authorityCommands ||= []).push(detachCmd); h.persist();
+      detachCmd.response = await h.api(h.admin, 'PUT', detachCmd.route, detachBody); h.persist();
+      h.check('Detaching third installation template from test account cleans template references before deletion', h.good(detachCmd.response), detachCmd.response);
+      detachCmd.outcome = 'confirmed'; h.persist();
+    } catch (error) { actionErr = error; throw error; }
+    finally {
+      try { await business.finishCleanup(h, [...actionRows].reverse(), actionErr); }
+      finally { await pages.disposeExplicitFixture(h, fx, actionErr); }
+    }
   } catch (error) { primary = error; throw error; }
   finally { await business.finishCleanup(h, [...rows].reverse(), primary); }
-  await h.partial('Same-account dual-installation levels and independent current read/write/delete commands verified. A third actual installation and explicit business-action denial under data-manager authority remain unverified; no empty action catalogue is used as permission proof.');
 }
 independentDataRoles.transport = 'owner-api';
 async function reconcileMatrixWriteRefusal(h, r) {

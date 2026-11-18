@@ -106,7 +106,7 @@ async function taskRow(h, r) {
   await card.waitFor(); await card.locator('.ant-spin-spinning').first().waitFor({ state: 'hidden' });
   return { card, row: await findTaskRow(h, r, card) };
 }
-const labels = { succeeded: '已完成', failed: '失败', cancelled: '已取消' };
+const labels = { succeeded: '已完成', failed: '失败', cancelled: '已取消', running: '运行中', queued: '排队中' };
 async function controls(h, r, target) {
   const actual = (await target.locator('button').allTextContents()).map(v => v.replace(/\s/g, '')).filter(Boolean).sort();
   h.check('Real task row exposes exactly supported actions for its independently read current original state', same(actual, expectedButtons(r.operation).sort()), { id: r.operation.id, actual, operation: r.operation });
@@ -165,6 +165,44 @@ async function visible(h, r) {
     h.check('Manual refresh and discarded forms send no operation command and preserve all original owner facts', writes.length === 0 && unchanged(before, await snapshot(h, r)), writes);
   } finally { await page.unroute(pattern, watch); }
 }
+async function verifyAllowedRetryAndRunningWindow(h) {
+  const pkgMod = require('./native_package_cases.cjs'), provider = require('./native_provider_access_cases.cjs');
+  const value = native.input(h, false);
+  value.applicationName = h.state.prefix + '-retry-once';
+  value.contract.components.api.command[1] = 'if [ ! -f /data/retried ]; then touch /data/retried; exit 23; fi\nsleep 4\n' + value.contract.components.api.command[1];
+  const pkg = await pkgMod.build(h, value);
+  let r;
+  try {
+    r = await native.approveRequest(h, pkg.package, value, 'retry-once');
+    for (let n = 0; n < 120; n++) {
+      r.operation = await read(h, operations + r.last.operationId);
+      r.last = await read(h, requests + r.id); h.persist();
+      if (r.operation.status === 'failed' && r.last.status === 'failed') break;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    h.check('First attempt of controlled retry package enters retryable failed state with attempt < maxAttempts',
+      r.operation.status === 'failed' && r.operation.attempt === 1 && r.operation.maxAttempts > 1, r.operation);
+    const page = h.admin.page;
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { row } = await taskRow(h, r);
+    await row.getByRole('button', { name: /^重\s*试$/ }).click();
+    const dialog = page.getByRole('dialog', { name: '重试部署任务', exact: true });
+    const reason = h.state.prefix + ' 允许的真实重试';
+    await dialog.getByLabel('重试原因', { exact: true }).fill(reason);
+    const retryResponse = page.waitForResponse(res => res.request().method() === 'POST' && new URL(res.url()).pathname.endsWith('/application-deployment-operations/' + r.operation.id + '/retry'));
+    await dialog.getByRole('button', { name: /^确认重试$/ }).click();
+    const retried = await retryResponse;
+    h.check('Real allowed retry button dispatches owner retry successfully', retried.status() === 200 && !(await retried.json()).error);
+    await dialog.waitFor({ state: 'hidden' });
+    let sawRunning = false;
+    await native.settle(h, r, (_req, op) => { if (op.status === 'running' || op.status === 'queued') sawRunning = true; });
+    h.check('Real retried deployment reaches succeeded attempt 2 after active window',
+      r.operation.status === 'succeeded' && r.operation.attempt === 2 && (sawRunning || r.operation.startTime > 0), { operation: r.operation, sawRunning });
+  } finally {
+    if (r) await native.cleanup(h, r);
+    await provider.cleanup(h, pkg);
+  }
+}
 async function states(h) {
   const f = await require('./delivery_cases.cjs').fixture(h), peers = [];
   for (const installed of f.installations) peers.push(await read(h, installations + installed.id));
@@ -188,8 +226,9 @@ async function states(h) {
     await visible(h, terminated);
     for (const action of ['retry', 'cancel']) await rejectAction(h, terminated, action);
   });
+  await verifyAllowedRetryAndRunningWindow(h);
   for (const peer of peers) h.check('Task actions and exact termination preserve unrelated original installed peers', same(await read(h, installations + peer.id), peer));
-  await h.partial('Actual successful model, intended native exit23 failure and the same formally terminated task: exact UI actions, diagnostic/counters, three widths, manual owner refresh and preserved discarded inputs, exact state/stale-version refusals, original formal termination and source cleanup. Waiting/running windows, actual allowed retry, exhausted/paused authorization/Schema diagnostic actions and late responses switching task selection remain unverified.');
+  await h.partial('Actual successful model, intended native exit23 failure, real allowed UI retry -> active window -> succeeded, and formally terminated task: exact UI actions, diagnostic/counters, three widths, manual owner refresh and preserved discarded inputs, exact state/stale-version refusals, original formal termination and source cleanup. Exhausted/paused authorization/Schema diagnostic actions and late responses switching task selection remain unverified [C].');
 }
 states.transport = 'owner-api';
 module.exports = { handlers: { 'F029-003': states }, bound, snapshot, unchanged, refusal, rejectAction, expectedButtons, controls, visible, findTaskRow };

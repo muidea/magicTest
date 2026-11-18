@@ -19,8 +19,9 @@ async function ownerExchange(actor, method, route, body, observe, mode = 'json',
   try {
     // Namespace creation/replacement synchronously waits for its CAS owner.
     // Observe the original command once; a timeout still forbids resending it.
-    const timeout = method === 'POST' && route === '/panel/namespace-onboardings/' ||
-      method === 'PUT' && /^\/panel\/namespace-onboardings\/[1-9][0-9]*$/.test(route) ? 120000 : 30000;
+    const timeout = method === 'POST' && /^\/panel\/(?:namespace-onboardings\/$|application\/(?:installations|deployment-requests)\/|operations\/namespaces\/)/.test(route) ||
+      method === 'PUT' && /^\/panel\/namespace-onboardings\/[1-9][0-9]*$/.test(route) ? 120000 :
+      route.startsWith('/cas/namespaces/') ? 90000 : 30000;
     const response = await transport.fetch(connect.href, { method, headers: { Host: target.host, Origin: origin, ...(readIdentity ? { 'X-Magic-Expected-Installation': Buffer.from(JSON.stringify(readIdentity)).toString('base64url') } : {}), ...(body === undefined || mode.endsWith('upload') ? {} : { 'Content-Type': 'application/json' }) },
       ...(body === undefined ? {} : mode.endsWith('upload') ? { multipart: { file: { name: body.name, mimeType: 'application/octet-stream', buffer: body.bytes } } } : { data: body }), maxRedirects: 0, maxRetries: 0, timeout });
     let data;

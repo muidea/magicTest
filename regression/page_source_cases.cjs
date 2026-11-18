@@ -9,11 +9,19 @@ function configure(content, entity) {
   content.dataSources.push({ ...structuredClone(list), key: 'choices', mode: 'options' });
   content.dataSources.push({ key: 'detail', entity, mode: 'detail', fields: ['id', 'name'],
     authorization: list.authorization, instanceScope: list.instanceScope, record: { idField: 'id', parameter: 'id' } });
-  content.navigation.push('detail');
+  content.navigation.push('detail', 'filter');
   content.pages.push({ key: 'detail', title: '冻结详情', routes: ['/detail/:id'], navigation: true, routeParameters: ['id'],
     layout: { type: 'responsive-grid', columns: 12, gap: 0 },
     components: [{ key: 'record-detail', type: 'entity-summary', layout: { span: 12, order: 0 }, dataSources: ['detail'],
       properties: { entity, fields: ['id', 'name'] } }] });
+  content.pages.push({ key: 'filter', title: '选项筛选', routes: ['/filter'], navigation: true, routeParameters: [],
+    layout: { type: 'responsive-grid', columns: 12, gap: 0 },
+    components: [
+      { key: 'selector', type: 'relation-filter', layout: { span: 6, order: 0 }, dataSources: ['choices'],
+        properties: { valueField: 'id', labelField: 'name' } },
+      { key: 'selected-detail', type: 'selected-entity-detail', layout: { span: 6, order: 1 }, dataSources: ['choices'],
+        properties: { entity, selectionFrom: 'selector', actions: [] } },
+    ] });
 }
 function sourceRows(value, context, sourceKey) {
   if (!['records', 'choices', 'detail'].includes(sourceKey)) throw Error('Exact declared source required');
@@ -27,10 +35,22 @@ async function metadata(h, f, index, actor) {
     same(value.readIdentity, context.identity) && /^sha256:[a-f0-9]{64}$/.test(value.installation?.pageDigest));
   context.pageDigest = value.installation.pageDigest; return context;
 }
+async function sourceReadOnceWithNetRetry(h, actor, context, body) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try { return await page.sourceRead(h, actor, context, body); }
+    catch (error) {
+      if (attempt < 3 && /Failed to fetch|ERR_NETWORK_CHANGED/i.test(error?.message || '')) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        continue;
+      }
+      throw error;
+    }
+  }
+}
 async function sources(h, actor, context, row) {
   for (const key of ['records', 'choices', 'detail']) {
     const body = { sourceKey: key, ...(key === 'detail' ? { recordId: row.recordId } : { pageSize: 10 }) };
-    const result = await page.sourceRead(h, actor, context, body);
+    const result = await sourceReadOnceWithNetRetry(h, actor, context, body);
     h.check('Actual exact frozen ' + key + ' read succeeds with no private caching', h.good(result) && result.cacheControl?.includes('no-store'), result);
     h.check('Frozen ' + key + ' projection contains only the original owner primary key and displayed name',
       same(sourceRows(result.data.value, context, key), [{ id: row.recordId, name: row.created.name }]), result.data.value);
@@ -88,6 +108,67 @@ async function frozenSources(h) {
     }
     await render(h, actor, f, contexts[0], rows[0], 'home', 1440, 'after-source-removal');
     await render(h, actor, f, contexts[0], rows[0], 'detail', 1440, 'after-source-removal');
+
+    // UI option-selection consumer (relation-filter bound to frozen choices) & clear selection.
+    const filterTarget = new URL('/workbench/apps/' + encodeURIComponent(f.application.name), actor.origin);
+    for (const [k, v] of Object.entries({ source: 'portal', deploymentId: contexts[0].identity.deploymentId, pageKey: 'filter' })) filterTarget.searchParams.set(k, v);
+    const choicesResp = actor.page.waitForResponse(r => {
+      const url = new URL(r.url()), req = r.request();
+      return req.method() === 'POST' && url.origin === actor.origin && url.pathname === '/api/v1/web/proxy/apps/page/sources/' &&
+        url.searchParams.get('deploymentId') === contexts[0].identity.deploymentId && req.postDataJSON()?.sourceKey === 'choices';
+    }); choicesResp.catch(() => {});
+    await actor.page.goto(filterTarget.href, { waitUntil: 'networkidle' });
+    const choicesJson = await (await choicesResp).json();
+    h.check('Actual UI option-selection consumer reads frozen choices projection', !choicesJson.error && same(sourceRows(choicesJson.value, contexts[0], 'choices'), [{ id: rows[0].recordId, name: rows[0].created.name }]), choicesJson);
+    const optionGroup = actor.page.locator('.application-page-relation-options');
+    await optionGroup.waitFor();
+    const selectedDetailResp = actor.page.waitForResponse(r => {
+      const url = new URL(r.url()), req = r.request();
+      return req.method() === 'POST' && url.origin === actor.origin && url.pathname === '/api/v1/web/proxy/apps/page/sources/' &&
+        url.searchParams.get('deploymentId') === contexts[0].identity.deploymentId && req.postDataJSON()?.sourceKey === 'choices';
+    }); selectedDetailResp.catch(() => {});
+    await optionGroup.getByText(rows[0].created.name, { exact: true }).click();
+    const selectedDetailJson = await (await selectedDetailResp).json();
+    h.check('Relation filter consumer fetches exact selected choice projection', !selectedDetailJson.error &&
+      same(sourceRows(selectedDetailJson.value, contexts[0], 'choices'), [{ id: rows[0].recordId, name: rows[0].created.name }]), selectedDetailJson);
+    const clearBtn = actor.page.getByRole('button', { name: '清除关系选择', exact: true });
+    await clearBtn.waitFor();
+    await clearBtn.click();
+    await clearBtn.isDisabled().then(disabled => h.check('Clearing relation filter resets consumer selection cleanly', disabled));
+    await h.screenshot(actor, 'frozen-source-option-selection-consumer');
+
+    // Separate ordinary entity fallback UI verification on an unauthored-pages installation.
+    const aCases = require('./authoring_cases.cjs').authoring;
+    const authority = require('./application_authority_cases.cjs');
+    const review = require('./deployment_review_cases.cjs');
+    const fbApp = await aCases.definition(h, 'fallbackui');
+    const fbSaved = await aCases.save(h, fbApp, await aCases.draft(h, fbApp), [aCases.newEntity(h, fbApp)]);
+    h.check('Unauthored pages remain empty before fallback delivery', (await author.read(h, fbApp, 'pages')).content.pages.length === 0 && fbSaved.entities.length === 1);
+    const fbDelivery = await delivery.publish(h, fbApp);
+    h.admin.id = (await h.ok(h.admin, 'GET', '/api/v1/web/session/')).value.account.id;
+    const fbReq = await review.create(h, fbDelivery, 'fallback-ui');
+    delivery.linkRequest(h, fbDelivery, fbReq);
+    let fbGrant;
+    try {
+      await review.approve(h, fbReq, [h.admin]);
+      const managerAccountId = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value.account.id;
+      fbGrant = { kind: 'member-access-retirement', phase: 'created', accountId: managerAccountId, installation: fbReq.installation, commands: [], active: false, origin: h.admin.origin, actorIdentity: structuredClone(h.admin.identity) };
+      h.state.resources.push(fbGrant); h.persist();
+      await authority.accessCommand(h, fbGrant, 'manager', 0);
+      const fallbackUrl = new URL('/workbench/apps/' + encodeURIComponent(fbApp.name), actor.origin);
+      fallbackUrl.searchParams.set('source', 'portal');
+      fallbackUrl.searchParams.set('deploymentId', fbReq.installation.deploymentId);
+      await actor.page.goto(fallbackUrl.href, { waitUntil: 'networkidle' });
+      await actor.page.getByText('功能导航', { exact: true }).waitFor();
+      await h.screenshot(actor, 'frozen-source-separate-entity-fallback');
+    } finally {
+      try {
+        for (const r of [fbGrant, fbReq, fbDelivery.resource].filter(Boolean)) require('./scenario_commands.cjs').guard(h, r);
+        if (fbGrant && fbGrant.phase !== 'deleted') await authority.retireAccess(h, fbGrant);
+        if (fbReq.phase !== 'deleted') await review.cleanup(h, fbReq);
+        await delivery.retained(h, fbDelivery.resource);
+      } catch (err) { h.observe({ kind: 'fallback-ui-cleanup-open', message: err.message }); if (!primary) throw err; }
+    }
   } catch (error) { primary = error; throw error; }
   finally {
     await business.finishCleanup(h, [...rows].reverse(), primary);
@@ -98,7 +179,6 @@ async function frozenSources(h) {
       if (!primary) throw new h.Blocked('Original page source row disposition unresolved; retain installation');
     } else await page.disposeExplicitFixture(h, f, primary);
   }
-  await h.partial('Exact frozen list/detail/options and ordinary independent owner rows, dual installation identities, three-width real list/detail entry, unpublished author isolation and source package removal survival verified. Separate entity fallback and UI option-selection consumer remain unverified.');
 }
 frozenSources.transport = 'owner-api';
 module.exports = { handlers: { 'F069-001': frozenSources }, configure, sourceRows };

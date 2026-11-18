@@ -216,9 +216,9 @@ async function approve(h, r, actors, { probeCleanup = false, probeCancel = false
       h.observe({ kind: 'real-executing-withdrawal-guard', ...r.executingCancelGuard });
     } else { r.executingCancelGuard = { before, observedRunningOnBothSides: false }; h.persist(); }
   }
+  await settle(h, r, observeOperation);
   const ops = (await h.directory(h.admin, operations)).filter(v => v.requestId === r.id);
   h.check('Independent complete operation directory contains exactly one operation with original request identity', ops.length === 1 && ops[0].id === r.last.operationId && ops[0].deploymentId === r.last.deploymentId, ops);
-  await settle(h, r, observeOperation);
   const storage = r.creation.intended.storageProvisioning || { mode: 'allocate' }, database = r.installation.receipt.database;
   h.check('Successful delivery preserves frozen explicit approval choices and original selected storage intent', same(r.last.runtimePlacement, runtimePlacement) && r.last.resolvedRuntimePlacement?.execution.instanceId === runtimePlacement.executionInstanceId && r.last.resolvedRuntimePlacement?.gateway.instanceId === runtimePlacement.gatewayInstanceId &&
     database?.provisioningMode === storage.mode && database.bindingId > 0 && database.schemaResourceId > 0 &&

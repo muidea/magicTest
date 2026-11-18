@@ -100,12 +100,32 @@ async function synchronize(h) {
     // reverse lifecycle using the source's reliable DELETE in cleanup.
     const reopened = await update(h, actor, r, h.state.prefix + '-reopened', 'pending');
     await observe(h, r, reopened);
+    // Direct insert-pending producer check on the same installed todo binding.
+    const r2 = { kind: 'business-record', actorRole: r.actorRole || 'manager', phase: 'intent',
+      applicationKey: r.applicationKey, entity: r.entity, identity: r.identity, instance: r.instance,
+      sourceWrites: r.sourceWrites, scenarioDefinitionId: r.scenarioDefinitionId, origin: actor.origin,
+      actorIdentity: structuredClone(actor.identity), commands: [], todoSync: {} };
+    rows.push(r2); h.state.resources.push(r2); h.persist();
+    const insertCode = 'RG-' + require('node:crypto').randomBytes(8).toString('hex').toUpperCase();
+    const insertName = h.state.prefix + '-insert-pending';
+    const createBody = business.request(r2, 'create', [
+      { name: 'code', value: insertCode }, { name: 'name', value: insertName },
+      { name: 'description', value: 'pending' }, { name: 'sortOrder', value: 0 },
+    ]);
+    const createReceipt = await business.execute(h, actor, r2, createBody);
+    const inserted = (await business.record(h, actor, r2)).data.value;
+    h.check('Direct insert with pending status creates readable complete owner row',
+      !!inserted && String(inserted.id) === createReceipt.id && inserted.name === insertName && inserted.description === 'pending', inserted);
+    r2.created = inserted; h.persist();
+    await observe(h, r2, inserted);
+    const insertExited = await update(h, actor, r2, h.state.prefix + '-insert-approved', 'approved');
+    await confirmSourceExit(h, r2, insertExited);
   } catch (error) { primary = error; throw error; }
   finally {
     await business.finishCleanup(h, [...rows].reverse(), primary);
     if (!rows.some(r => r.phase !== 'deleted')) await pages.disposeExplicitFixture(h, f, primary);
   }
-  await h.partial('Real installed todo Update/Delete producers, repeated normal updates of one original source, same Todo ID/content, terminal pending exit/reopen, reliable source cleanup and dual-instance peer preservation implemented. Insert-pending production, exact event redelivery/concurrency and independent Base full terminal-history reads remain open; Panel pending absence is not terminal-storage proof.');
+  await h.partial('Real installed todo Insert-pending & Update/Delete producers, repeated normal updates of one original source, same Todo ID/content, terminal pending exit/reopen, reliable source cleanup and dual-instance peer preservation implemented. Exact event redelivery/concurrency [C] and independent Base full terminal-history reads [B] remain open; Panel pending absence is not terminal-storage proof.');
 }
 synchronize.transport = 'owner-api';
 module.exports = { handlers: { 'F052-003': synchronize }, binding, sourceIdentity, matchesSource, pendingMatches, observe, confirmSourceExit, update };

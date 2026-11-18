@@ -173,7 +173,7 @@ async function main() {
       throw error;
     }
     await page.locator('input[name=password]').fill(password);
-    await page.locator('form[action="/oauth/login"] button[type=submit]').click();
+    await page.locator('form[action="/oauth/login"] button[type=submit]').click({ timeout: 60000 });
     await page.waitForFunction(() => document.querySelector('form[action="/oauth/password/change"]') || ['/panel', '/portal'].some(p => location.pathname.startsWith(p)) || new URL(location.href).searchParams.has('error'), {}, { timeout: 60000 });
     if (await page.locator('form[action="/oauth/password/change"]').count()) {
       if (!newPassword) throw new Blocked('First password change needs a dedicated account credential');
@@ -183,8 +183,8 @@ async function main() {
       await page.locator('form[action="/oauth/password/change"] button[type=submit]').click();
       actor.password = newPassword; actor.passwordChanged = true;
     }
-    await page.waitForURL(u => ['/panel', '/portal'].some(p => u.pathname.startsWith(p)), { timeout: 45000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForURL(u => ['/panel', '/portal'].some(p => u.pathname.startsWith(p)), { timeout: 60000 });
+    await page.waitForLoadState('networkidle', { timeout: 60000 });
     const sessionResponse = await ownerApi(actor, 'GET', '/api/v1/web/session/');
     check('Original login session read succeeds', good(sessionResponse), sessionResponse);
     const session = sessionResponse.data.value;

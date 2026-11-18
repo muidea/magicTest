@@ -147,7 +147,7 @@ async function invoke(actor, parsed, apiKey) {
     return {status:response.status,data};
   },{url:parsed.url.toString(),method:parsed.method,body:parsed.body,apiKey});
 }
-async function documentedReader(h, context) {
+async function documentedReader(h, context, suffix = 'documented-reader') {
   const authority = require('./application_authority_cases.cjs'), base = '/cas/namespaces/panel/';
   const ordinary = (await h.directory(h.admin, base + 'role-templates/')).filter(t =>
     t.key === 'portal-basic-user' && t.systemManaged && t.subjectType === 'account' && t.status === 2);
@@ -155,9 +155,9 @@ async function documentedReader(h, context) {
   const role = { module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' };
   const refs = [...new Map([...ordinary[0].roleRefs, role].map(ref => [JSON.stringify([ref.module, ref.key]), structuredClone(ref)])).values()];
   const access = [{ applicationUuid: context.identity.deploymentId, accessLevel: 'viewer' }];
-  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-documented-reader', name: '接口文档普通读取账号',
+  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-' + suffix, name: '接口文档普通读取账号',
     subjectType: 'account', status: 2, roleRefs: refs, applicationAccess: access }, 'role-template');
-  const member = await authority.account(h, 'documented-reader');
+  const member = await authority.account(h, suffix);
   await authority.assign(h, member, group, access);
   return member.actor;
 }

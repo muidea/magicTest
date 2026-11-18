@@ -37,16 +37,28 @@ async function assetRead(h, actor, context, key, extra = {}) {
   const identity = structuredClone(actor.identity), origin = actor.origin;
   const route = '/api/v1/web/proxy/apps/application/assets/' + encodeURIComponent(key) + '?' + new URLSearchParams({ application: context.applicationKey, deploymentId: context.identity.deploymentId, ...extra.query });
   const header = Buffer.from(JSON.stringify(extra.identity || context.identity)).toString('base64url');
-  const result = await actor.page.evaluate(async ({ route, header }) => {
-    const response = await fetch(route, { method: 'GET', credentials: 'same-origin', redirect: 'error', cache: 'no-store', headers: { Accept: 'image/png, image/jpeg', 'X-Magic-Expected-Installation': header } });
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length > 8 * 1024 * 1024) throw Error('Asset exceeds the public finite image budget');
-    const mime = response.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
-    const data = mime === 'application/json' ? JSON.parse(new TextDecoder().decode(bytes)) : {};
-    return { ...data, status: response.status, mime, size: bytes.length,
-      digest: 'sha256:' + Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), x => x.toString(16).padStart(2, '0')).join(''),
-      cache: response.headers.get('Cache-Control'), nosniff: response.headers.get('X-Content-Type-Options') };
-  }, { route, header });
+  let result;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let networkChanged = false;
+    const onFail = req => { if (req.failure()?.errorText === 'net::ERR_NETWORK_CHANGED') networkChanged = true; };
+    if (typeof actor.page.on === 'function') actor.page.on('requestfailed', onFail);
+    try {
+      result = await actor.page.evaluate(async ({ route, header }) => {
+        const response = await fetch(route, { method: 'GET', credentials: 'same-origin', redirect: 'error', cache: 'no-store', headers: { Accept: 'image/png, image/jpeg', 'X-Magic-Expected-Installation': header } });
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.length > 8 * 1024 * 1024) throw Error('Asset exceeds the public finite image budget');
+        const mime = response.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
+        const data = mime === 'application/json' ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+        return { ...data, status: response.status, mime, size: bytes.length,
+          digest: 'sha256:' + Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), x => x.toString(16).padStart(2, '0')).join(''),
+          cache: response.headers.get('Cache-Control'), nosniff: response.headers.get('X-Content-Type-Options') };
+      }, { route, header });
+      break;
+    } catch (error) {
+      if (attempt === 0 && networkChanged) continue;
+      throw error;
+    } finally { if (typeof actor.page.off === 'function') actor.page.off('requestfailed', onFail); }
+  }
   h.check('Image GET retains original browser actor and exact same origin', same(actor.identity, identity) && actor.origin === origin);
   h.observe({ kind: 'installed-image-original-read', actor: identity, identity: extra.identity || context.identity, route, result });
   return result;
@@ -179,15 +191,22 @@ async function installedImages(h) {
     for (const [i, context] of contexts.entries()) {
       for (const width of [1440, 768, 390]) for (const pageKey of ['home', 'image-screen']) {
         await actor.page.setViewportSize({ width, height: 1000 });
-        const responses = [], listener = response => {
-          const url = new URL(response.url());
-          if (url.origin === actor.origin && /^\/api\/v1\/web\/proxy\/apps\/application\/(assets|asset\/query)\//.test(url.pathname)) responses.push({ method: response.request().method(), path: url.pathname, status: response.status(), mime: response.headers()['content-type'] });
-        };
-        actor.page.on('response', listener);
-        try { await actor.page.goto(actor.origin + '/workbench/apps/' + encodeURIComponent(f.application.name) + '?' + new URLSearchParams({ source: 'portal', deploymentId: context.identity.deploymentId, pageKey }), { waitUntil: 'networkidle' }); }
-        finally { actor.page.off('response', listener); h.observe({ kind: 'actual-installed-image-network', identity: context.identity, pageKey, width, responses }); }
-        try { await inspect(h, actor.page, assets, dimensions, pageKey === 'image-screen', i + '-' + pageKey + '-' + width); }
-        catch (error) { rendererError ||= error; h.observe({ kind: 'real-installed-image-consumer-failure', installation: context.identity, pageKey, width, message: error.message }); }
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const responses = [], listener = response => {
+            const url = new URL(response.url());
+            if (url.origin === actor.origin && /^\/api\/v1\/web\/proxy\/apps\/application\/(assets|asset\/query)\//.test(url.pathname)) responses.push({ method: response.request().method(), path: url.pathname, status: response.status(), mime: response.headers()['content-type'] });
+          };
+          let networkChanged = false;
+          const failListener = req => { if (req.failure()?.errorText === 'net::ERR_NETWORK_CHANGED') networkChanged = true; };
+          actor.page.on('response', listener); actor.page.on('requestfailed', failListener);
+          try { await actor.page.goto(actor.origin + '/workbench/apps/' + encodeURIComponent(f.application.name) + '?' + new URLSearchParams({ source: 'portal', deploymentId: context.identity.deploymentId, pageKey }), { waitUntil: 'networkidle' }); }
+          finally { actor.page.off('response', listener); actor.page.off('requestfailed', failListener); h.observe({ kind: 'actual-installed-image-network', identity: context.identity, pageKey, width, responses, attempt }); }
+          try { await inspect(h, actor.page, assets, dimensions, pageKey === 'image-screen', i + '-' + pageKey + '-' + width); break; }
+          catch (error) {
+            if (attempt === 0 && networkChanged) continue;
+            rendererError ||= error; h.observe({ kind: 'real-installed-image-consumer-failure', installation: context.identity, pageKey, width, message: error.message });
+          }
+        }
         await h.screenshot(actor, 'frozen-images-' + i + '-' + pageKey + '-' + width);
       }
     }
@@ -205,6 +224,58 @@ async function installedImages(h) {
     await actor.page.reload({ waitUntil: 'networkidle' });
     await inspect(h, actor.page, assets, dimensions, false, 'after-failure-restored');
 
+    // Cross-tenant isolation: tenant administrators on distinct origins cannot access panel installed assets.
+    for (const [label, tenant] of [['tenantA', h.tenantAdmin], ['tenantB', h.otherTenantAdmin]]) {
+      const cross = await h.api(tenant, 'GET', '/apps/application/assets/' + encodeURIComponent(assets[0].key) + '?' + new URLSearchParams({ application: f.application.name, deploymentId: contexts[0].identity.deploymentId }));
+      h.inaccessible(cross, 'Cross-tenant session (' + label + ') cannot read panel installed image asset');
+    }
+
+    // Ordinary outsider denial + session/instance switching + controlled late old image response.
+    const outsider = await business.member(h, 'outsider');
+    const outsiderDenied = await assetRead(h, outsider, contexts[0], assets[0].key);
+    h.check('Unassigned panel session cannot read installed image asset', deniedAssetMatches(outsiderDenied, 5, '读取安装资源需要实例运行权限'), outsiderDenied);
+
+    let captureLate, releaseLate, lateDone;
+    const lateCaptured = new Promise(resolve => { captureLate = resolve; });
+    const lateGate = new Promise(resolve => { releaseLate = resolve; });
+    const lateSettled = new Promise(resolve => { lateDone = resolve; });
+    let heldCalls = 0;
+    const lateMatch = url => url.origin === actor.origin && url.pathname === '/api/v1/web/proxy/apps/application/assets/' + assets[0].key && url.searchParams.get('deploymentId') === contexts[0].identity.deploymentId;
+    const holdLate = async route => {
+      if (route.request().method() !== 'GET' || heldCalls > 0) return route.continue().catch(() => {});
+      heldCalls++;
+      try {
+        const response = await route.fetch({ maxRetries: 0 });
+        captureLate();
+        await lateGate;
+        await route.fulfill({ response }).catch(() => {});
+      } catch {
+        captureLate();
+        await route.continue().catch(() => {});
+      } finally {
+        lateDone();
+      }
+    };
+    await actor.page.route(lateMatch, holdLate);
+    try {
+      await actor.page.setViewportSize({ width: 1440, height: 1000 });
+      await actor.page.goto(actor.origin + '/workbench/apps/' + encodeURIComponent(f.application.name) + '?' + new URLSearchParams({ source: 'portal', deploymentId: contexts[0].identity.deploymentId, pageKey: 'home' }), { waitUntil: 'domcontentloaded' });
+      await lateCaptured;
+      await actor.page.goto(actor.origin + '/workbench/apps/' + encodeURIComponent(f.application.name) + '?' + new URLSearchParams({ source: 'portal', deploymentId: contexts[1].identity.deploymentId, pageKey: 'image-screen' }), { waitUntil: 'networkidle' });
+      await inspect(h, actor.page, assets, dimensions, true, 'session-switch-inst1');
+      releaseLate();
+      await lateSettled;
+      await actor.page.waitForTimeout(400);
+      h.check('Controlled late old image response from installation 0 never alters active installation 1 screen blobs',
+        heldCalls === 1 && new URL(actor.page.url()).searchParams.get('deploymentId') === contexts[1].identity.deploymentId);
+      await inspect(h, actor.page, assets, dimensions, true, 'late-old-discarded');
+    } finally {
+      releaseLate();
+      await actor.page.unroute(lateMatch, holdLate).catch(() => {});
+    }
+    await actor.page.goto(actor.origin + '/workbench/apps/' + encodeURIComponent(f.application.name) + '?' + new URLSearchParams({ source: 'portal', deploymentId: contexts[0].identity.deploymentId, pageKey: 'home' }), { waitUntil: 'networkidle' });
+    await inspect(h, actor.page, assets, dimensions, false, 'session-switch-restored');
+
     } else h.observe({ kind: 'controlled-image-failure-not-executed', reason: 'Natural original renderer failure must be resolved before injected failure/recovery can be proved' });
     await require('./application_authority_cases.cjs').retireAccess(h, f.pageGrants[0]);
     const denied = await assetRead(h, actor, context, assets[0].key);
@@ -213,8 +284,8 @@ async function installedImages(h) {
     if (rendererError) throw rendererError;
   } catch (error) { primary = error; throw error; }
   finally { await page.disposeExplicitFixture(h, f, primary); }
-  await h.partial('Exact immutable ZIP PNG/JPEG bytes/import, ordinary dual-installation three-width normal/screen rendering, inherited/none images, wrong identity/key/forbidden selectors, unpublished replacement/source removal, actual image GET failure fallback and formal one-instance retirement verified. Cross-tenant fixtures, session switching and controlled late old responses remain unverified.');
 }
 installedImages.transport = 'owner-api';
 installedImages.requiresOnlyDeliveryFixture = true;
+installedImages.actors = ['tenantAdmin', 'otherTenantAdmin'];
 module.exports = { handlers: { 'F068-004': installedImages }, assetRead, assetMatches, deniedAssetMatches, archiveMatches };

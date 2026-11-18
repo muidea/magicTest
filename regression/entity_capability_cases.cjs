@@ -65,7 +65,37 @@ async function admission(h) {
   await delivery.retained(h, f.resource);
   h.check('All independent invalid capability declarations are semantically rejected by both check and save without model mutation',
     findings.length === variants.length * 2 && findings.every(f => f.refused && f.unchanged), findings);
-  await h.partial('Invalid declaration and frozen total-switch author contracts verified. Exact disabled installation capability catalogue and its real service consumer remain unverified; do not infer runtime refusal from a missing arbitrary URL.');
+
+  const pages = require('./page_runtime_cases.cjs'), { authorFixture: pageAuthor } = require('./page_author_cases.cjs'), business = require('./business_cases.cjs');
+  const fx = await pages.explicitFixture(h, undefined, undefined, {
+    suffix: 'capdisabled',
+    requestPrefix: 'capdisabled-',
+    prepareAuthor: async (h, authored) => {
+      const current = await a.draft(h, authored.app), entity = structuredClone(current.entities[0]);
+      entity.serviceExpose = { enabled: false, capabilities: [{ key: 'get', enabled: true }] };
+      authored.model = await a.save(h, authored.app, current, [entity]);
+      authored.pages = await pageAuthor.read(h, authored.app, 'pages');
+    },
+  });
+  let fxPrimary;
+  try {
+    const installed = fx.installations[0], rtUuid = installed.receipt.runtimeApplicationUuid;
+    const manager = await business.member(h, 'manager');
+    const rt = (await h.ok(manager, 'GET', '/apps/application/runtimes/' + fx.application.name + '?deploymentId=' + installed.deploymentId)).value;
+    const rtEntity = rt.entities?.find(e => e.entity?.pkgPath === fx.revision.entities[0].pkgPath && e.entity?.name === fx.revision.entities[0].name);
+    h.check('Installed runtime metadata reflects total-disabled service exposure cleanly', !rtEntity?.serviceExpose?.enabled, rtEntity);
+    const hubCaps = await h.directory(h.admin, '/panel/hub/capabilitys/');
+    const leakedCaps = hubCaps.filter(c => c.application?.uuid === rtUuid || c.runtimeApplicationUuid === rtUuid || c.deploymentId === installed.deploymentId);
+    h.check('Panel capability directory registers zero exposed capabilities for total-disabled installed entity', leakedCaps.length === 0, leakedCaps);
+    const svcAttempt = await h.api(h.admin, 'POST', '/panel/hub/services/', {
+      name: h.state.prefix + '_capdisabled_svc',
+      displayName: '总开关关闭禁止服务',
+      type: 'external',
+      capabilities: [],
+    });
+    h.check('Cannot create a service consumer around empty capability list from total-disabled entity', !h.good(svcAttempt), svcAttempt);
+  } catch (error) { fxPrimary = error; throw error; }
+  finally { await pages.disposeExplicitFixture(h, fx, fxPrimary); }
 }
 admission.transport = 'owner-api';
 module.exports = { handlers: { 'F019-003': admission }, rejected, variants };

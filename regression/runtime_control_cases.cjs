@@ -80,8 +80,56 @@ async function policy(h) {
   await policyCommand(h, r, { ...body, expectedVersion: p.version + 1, gatewayInstanceId: p.executionInstanceId }, 'runtime instance kind or namespace admission does not match');
   for (const i of installations) h.check('Default policy revision does not rewrite an original installation or its frozen receipt', same((await h.ok(h.admin, 'GET', '/panel/application/installations/' + i.id)).value, i));
   h.observe({ kind: 'runtime-policy-conditional-owner-proof', journal: r });
+  // Exercise actual default-policy resolution on a new deployment approval omitting explicit runtimePlacement.
+  const review = require('./deployment_review_cases.cjs');
+  const reqRes = await review.create(h, f, 'defpolicy');
+  try {
+    const latestPolicy = (await policyRows(h)).find(v => v.id === p.id);
+    const approveRoute = '/panel/operations/namespaces/panel/application-deployment-requests/' + reqRes.id + '/approve';
+    const approveBody = { expectedVersion: reqRes.last.version, reason: 'Verify default runtime policy resolution at approval' };
+    const approveCmd = { route: approveRoute, body: approveBody, actorIdentity: structuredClone(h.admin.identity), origin: h.admin.origin, outcome: 'unknown' };
+    reqRes.commands.push(approveCmd); h.persist();
+    approveCmd.response = await h.api(h.admin, 'POST', approveRoute, approveBody);
+    h.check('Approval omitting runtimePlacement succeeds cleanly', h.good(approveCmd.response) && approveCmd.response.data.value?.id === reqRes.id, approveCmd.response);
+    approveCmd.outcome = 'confirmed';
+    reqRes.last = (await h.ok(h.admin, 'GET', '/panel/application/deployment-requests/' + reqRes.id)).value;
+    reqRes.placement = null; h.persist();
+    const installed = await review.settle(h, reqRes);
+    h.check('Approved model request resolves exact active platform default policy version and targets',
+      reqRes.last.runtimePlacement == null &&
+      reqRes.last.resolvedRuntimePlacement?.execution?.resolutionSource === 'platformDefault' &&
+      reqRes.last.resolvedRuntimePlacement.execution.policyId === latestPolicy.id &&
+      reqRes.last.resolvedRuntimePlacement.execution.policyVersion === latestPolicy.version &&
+      reqRes.last.resolvedRuntimePlacement.execution.instanceId === latestPolicy.executionInstanceId &&
+      reqRes.last.resolvedRuntimePlacement?.gateway?.resolutionSource === 'platformDefault' &&
+      reqRes.last.resolvedRuntimePlacement.gateway.policyId === latestPolicy.id &&
+      reqRes.last.resolvedRuntimePlacement.gateway.policyVersion === latestPolicy.version &&
+      reqRes.last.resolvedRuntimePlacement.gateway.instanceId === latestPolicy.gatewayInstanceId &&
+      installed.status === 'ready', reqRes.last);
+    const mgr = await require('./business_cases.cjs').member(h, 'manager');
+    const authority = require('./application_authority_cases.cjs');
+    const accountId = (await h.ok(mgr, 'GET', '/api/v1/web/session/')).value.account.id;
+    const grant = { kind: 'member-access-retirement', phase: 'created', accountId, installation: installed, commands: [], active: false, origin: h.admin.origin, actorIdentity: structuredClone(h.admin.identity) };
+    h.state.resources.push(grant); h.persist();
+    await authority.accessCommand(h, grant, 'viewer', 0);
+    try {
+      const rt = await h.ok(mgr, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + installed.deploymentId);
+      h.check('Default-policy-resolved installation executes ordinary runtime metadata read cleanly',
+        rt.value?.readIdentity?.deploymentId === installed.deploymentId && rt.value.readIdentity.installationId === String(installed.id), rt);
+    } finally {
+      if (grant.phase !== 'deleted') await authority.retireAccess(h, grant);
+    }
+  } finally {
+    await review.cleanup(h, reqRes);
+    const schemaId = reqRes.retiredInstallation?.receipt?.database?.schemaResourceId;
+    if (schemaId) {
+      const purgeRoute = '/panel/operations/namespaces/panel/database-schemas/' + schemaId + '/purge';
+      const pre = (await h.api(h.admin, 'GET', purgeRoute)).data?.value;
+      if (pre?.eligible) await h.api(h.admin, 'POST', purgeRoute, { expectedResourceVersion: pre.expectedResourceVersion, reason: 'F035-004 schema cleanup', confirmation: pre.confirmation }).catch(() => {});
+    }
+  }
   await cleanupPolicy(h, r);
-  await h.partial('Isolated original default policy same-target conditional write, stale version and wrong-kind refusal; complete policy/registry and original installation receipts retained. No policy creation or target change. Actual default resolution at a new approval and two-Base/Gateway handoff, drain/revoke/recover and live new business execution remain uncovered.');
+  await h.partial('Isolated original default policy same-target conditional write, stale version, wrong-kind refusal, and real default-policy resolution & frozen execution on a new approval omitting explicit placement; complete policy/registry and original installation receipts retained. Two-Base/Gateway handoff, drain/revoke/recover are excluded by confirmed single-machine v1 scope [B].');
 }
 function binding(h, c, inventory) {
   const rows = inventory.filter(i => i.id === c.instanceId);

@@ -36,9 +36,15 @@ async function waitForRegistrationIngress(h, ns, actor, pause = ms => new Promis
   for (let attempt = 0; attempt <= 5; attempt++) {
     const current = (await h.ok(h.admin, 'GET', '/cas/namespaces/' + ns.id)).value;
     h.check('Ingress readiness never waits for a foreign, changed or unavailable namespace', current.id === ns.id && current.name === ns.name && current.updateTime === ns.updateTime && current.status === 2 && current.startTime <= Date.now() && current.expireTime > Date.now(), current);
-    const response = await h.api(actor, 'GET', '/api/v1/web/session/');
-    if (response.status === 401 || (response.status === 200 && response.data?.error?.code === 11)) return;
-    h.check('Only a transient missing new registration ingress permits another read', response.status === 404 && attempt < 5, { attempt, response });
+    const sessionRes = await h.api(actor, 'GET', '/api/v1/web/session/');
+    const portalRes = actor.page ? await actor.page.evaluate(async () => {
+      const response = await fetch('/login/cas', { credentials: 'omit' });
+      return { status: response.status };
+    }) : { status: 200 };
+    const sessionReady = sessionRes.status === 401 || (sessionRes.status === 200 && sessionRes.data?.error?.code === 11);
+    const portalReady = portalRes.status === 200;
+    if (sessionReady && portalReady) return;
+    h.check('Only a transient missing new registration ingress permits another read', (sessionRes.status === 404 || portalRes.status === 404 || (sessionReady && !portalReady)) && attempt < 5, { attempt, sessionRes, portalRes });
     await pause(1000);
   }
 }

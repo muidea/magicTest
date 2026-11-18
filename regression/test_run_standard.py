@@ -193,6 +193,116 @@ class ReportGatesTest(unittest.TestCase):
             with environment_lock(credentials):
                 pass
 
+    def test_delivery_fixture_dry_run_does_not_read_private_files_and_validates_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            config = root / 'config.json'
+            target = str(root / 'uncreated-delivery-fixture.json')
+            config.write_text(json.dumps({'deliveryFixtureConfig': target}))
+            with mock.patch.object(sys, 'argv', ['run_standard.py', '--config', str(config), '--dry-run']), \
+                    mock.patch.object(run_standard.subprocess, 'run', return_value=mock.Mock(returncode=0)) as driver:
+                self.assertEqual(run_standard.main(), 0)
+            command = driver.call_args.args[0]
+            self.assertEqual(command[command.index('--delivery-fixture-config') + 1], target)
+            self.assertFalse(Path(target).exists())
+            for invalid in ['', '   ', None, 3, {}, []]:
+                config.write_text(json.dumps({'deliveryFixtureConfig': invalid}))
+                with mock.patch.object(sys, 'argv', ['run_standard.py', '--config', str(config), '--dry-run']), \
+                        mock.patch.object(run_standard.subprocess, 'run') as driver:
+                    with self.assertRaisesRegex(ValueError, 'deliveryFixtureConfig requires a non-empty private file path'):
+                        run_standard.main()
+                    driver.assert_not_called()
+
+    def _run_fixture_preflight(self, root, *, state_payload=None, manifest_payload=None, members_exists=False, stage_exit=0):
+        private_root = root / 'private-fixture'
+        private_root.mkdir(exist_ok=True)
+        if state_payload is not None:
+            (private_root / 'fixture-state.json').write_text(json.dumps(state_payload))
+        if manifest_payload is not None:
+            (private_root / 'fixture-manifest.json').write_text(json.dumps(manifest_payload))
+        if members_exists:
+            (private_root / 'member-credentials.json').write_text(json.dumps({'manager': {'account': 'rg-mgr'}}))
+        fixture_cfg = root / 'fixture-config.json'
+        fixture_cfg.write_text(json.dumps({'mode': 'local-panel', 'daemonId': 'daemon-1', 'privateRoot': str(private_root)}))
+        health = root / 'health-before.json'
+        health.write_text(json.dumps({'results': [{'status': 'passed'}], 'environment': {'name': 'unit'}}))
+        owner = mock.Mock()
+        owner.digest.return_value = 'unit-digest'
+        owner.capture_health.return_value = health
+        config = {'output': str(root / 'evidence'), 'deliveryFixtureConfig': str(fixture_cfg)}
+
+        def fake_subprocess(cmd, **_kwargs):
+            action = cmd[-1]
+            if stage_exit != 0 and action == 'publish':
+                return mock.Mock(returncode=stage_exit, stdout='', stderr='boom')
+            if action == 'members':
+                (private_root / 'fixture-state.json').write_text(json.dumps({
+                    'daemonId': 'daemon-1', 'stage': 'members-ready', 'commands': [], 'originalCasForms': []}))
+                (private_root / 'fixture-manifest.json').write_text(json.dumps({
+                    'status': 'published', 'daemonId': 'daemon-1'}))
+                (private_root / 'member-credentials.json').write_text(json.dumps({'manager': {'account': 'rg-mgr'}}))
+            return mock.Mock(returncode=0, stdout='{}', stderr='')
+
+        with mock.patch.object(run_standard.tempfile, 'mkdtemp', return_value=str(root / 'private')), \
+                mock.patch.object(run_standard.subprocess, 'run', side_effect=fake_subprocess) as fixture_runner, \
+                mock.patch.object(run_standard, 'run_browser', return_value=0) as browser, \
+                mock.patch.object(run_standard, 'finish', return_value={'counts': {}, 'complete': True, 'executionGates': {}}), \
+                mock.patch('builtins.print'):
+            rc = run_standard.execute_live(config, root / 'catalog.json', owner, {}, ['node', 'standard.cjs'], root / 'credentials', None)
+        evidence_dir = next((root / 'evidence').iterdir())
+        return rc, evidence_dir, fixture_runner, browser
+
+    def test_delivery_fixture_auto_prepares_fresh_state_in_order(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            rc, evidence_dir, fixture_runner, browser = self._run_fixture_preflight(root)
+            self.assertEqual(rc, 0)
+            browser.assert_called_once()
+            actions = [call.args[0][-1] for call in fixture_runner.call_args_list]
+            self.assertEqual(actions, ['bootstrap', 'publish', 'install', 'members'])
+            preflight = json.loads((evidence_dir / 'delivery-fixture-preflight.json').read_text())
+            self.assertEqual(preflight['status'], 'ready')
+            self.assertEqual([item['action'] for item in preflight['preparedActions']], ['bootstrap', 'publish', 'install', 'members'])
+
+    def test_delivery_fixture_skips_prep_when_members_ready(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            rc, evidence_dir, fixture_runner, browser = self._run_fixture_preflight(
+                root,
+                state_payload={'daemonId': 'daemon-1', 'stage': 'members-ready', 'commands': [], 'originalCasForms': []},
+                manifest_payload={'status': 'published', 'daemonId': 'daemon-1'},
+                members_exists=True,
+            )
+            self.assertEqual(rc, 0)
+            browser.assert_called_once()
+            fixture_runner.assert_not_called()
+            preflight = json.loads((evidence_dir / 'delivery-fixture-preflight.json').read_text())
+            self.assertEqual(preflight['preparedActions'], [])
+
+    def test_delivery_fixture_blocks_unsafe_or_failed_state_before_browser_launch(self):
+        unsafe_states = [
+            {'daemonId': 'other-daemon', 'stage': 'new', 'commands': [], 'originalCasForms': []},
+            {'daemonId': 'daemon-1', 'stage': 'publish-in-progress', 'commands': [], 'originalCasForms': []},
+            {'daemonId': 'daemon-1', 'stage': 'published', 'commands': [{'outcome': 'unknown'}], 'originalCasForms': []},
+            {'daemonId': 'daemon-1', 'stage': 'bootstrapped', 'commands': [], 'originalCasForms': [{'phase': 'response-not-delivered'}]},
+        ]
+        for payload in unsafe_states:
+            with self.subTest(payload=payload), tempfile.TemporaryDirectory() as folder:
+                rc, evidence_dir, fixture_runner, browser = self._run_fixture_preflight(Path(folder), state_payload=payload)
+                self.assertEqual(rc, 2)
+                fixture_runner.assert_not_called()
+                browser.assert_not_called()
+                self.assertEqual(json.loads((evidence_dir / 'preflight.json').read_text())['status'], 'blocked')
+
+        with tempfile.TemporaryDirectory() as folder:
+            rc, evidence_dir, fixture_runner, browser = self._run_fixture_preflight(Path(folder), stage_exit=2)
+            self.assertEqual(rc, 2)
+            browser.assert_not_called()
+            self.assertEqual([c.args[0][-1] for c in fixture_runner.call_args_list], ['bootstrap', 'publish'])
+            preflight = json.loads((evidence_dir / 'preflight.json').read_text())
+            self.assertEqual(preflight['status'], 'blocked')
+            self.assertIn('publish failed', preflight['reason'])
+
 
 if __name__ == '__main__':
     unittest.main()

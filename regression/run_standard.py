@@ -96,6 +96,118 @@ def relocate(entry, prefix):
     return entry
 
 
+DELIVERY_STAGE_ACTIONS = (
+    ('new', 'bootstrap', 'bootstrapped'),
+    ('bootstrapped', 'publish', 'published'),
+    ('published', 'install', 'installed'),
+    ('installed', 'members', 'members-ready'),
+)
+UNRESOLVED_CAS_PHASES = {'sending', 'unknown', 'response-not-delivered'}
+
+
+def _delivery_fixture_blocked(directory, reason, **extra):
+    save(directory / 'preflight.json', {'status': 'blocked', 'reason': reason, **extra})
+    return False
+
+
+def _validate_delivery_state(state, fixture_config):
+    if state.get('daemonId') != fixture_config.get('daemonId') or state.get('containerId') != fixture_config.get('containerId'):
+        return 'Original delivery fixture identity does not match deliveryFixtureConfig; no automatic initialization or replay'
+    if any(cmd.get('outcome') == 'unknown' for cmd in state.get('commands', [])):
+        return 'Original delivery fixture has unresolved commands; inspect fixture-state.json without replay'
+    if any(form.get('phase') in UNRESOLVED_CAS_PHASES for form in state.get('originalCasForms', [])):
+        return 'Original delivery fixture has unresolved CAS forms; inspect fixture-state.json without replay'
+    return None
+
+
+def _ready_manifest_error(private_root, fixture_config):
+    manifest_file = private_root / 'fixture-manifest.json'
+    members_file = private_root / 'member-credentials.json'
+    if not manifest_file.is_file() or not members_file.is_file():
+        return 'Delivery fixture reached members-ready but fixture-manifest.json or member-credentials.json is missing'
+    manifest = json.loads(manifest_file.read_text())
+    if manifest.get('status') != 'published' or manifest.get('daemonId') != fixture_config.get('daemonId'):
+        return 'Delivery fixture manifest does not match expected published status or daemonId'
+    return None
+
+
+def ensure_delivery_fixture(fixture_config_path, directory):
+    """Verify delivery fixture readiness and prepare missing stages only from clean confirmed states."""
+    try:
+        fixture_config = json.loads(fixture_config_path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        return _delivery_fixture_blocked(directory, f'Unable to read deliveryFixtureConfig: {error}')
+    private_root_raw = fixture_config.get('privateRoot')
+    if not isinstance(private_root_raw, str) or not private_root_raw.strip():
+        return _delivery_fixture_blocked(directory, 'deliveryFixtureConfig requires a non-empty privateRoot')
+    private_root = Path(private_root_raw).expanduser()
+    state_file = private_root / 'fixture-state.json'
+    manifest_file = private_root / 'fixture-manifest.json'
+
+    if state_file.exists():
+        try:
+            state = json.loads(state_file.read_text())
+        except (OSError, json.JSONDecodeError) as error:
+            return _delivery_fixture_blocked(directory, f'Unable to read delivery fixture state: {error}')
+        conflict = _validate_delivery_state(state, fixture_config)
+        if conflict:
+            return _delivery_fixture_blocked(directory, conflict)
+        stage = state.get('stage')
+    else:
+        if manifest_file.exists():
+            return _delivery_fixture_blocked(directory, 'Delivery fixture manifest exists without fixture-state.json; refusing overwrite')
+        stage = 'new'
+
+    if stage == 'members-ready':
+        error = _ready_manifest_error(private_root, fixture_config)
+        if error:
+            return _delivery_fixture_blocked(directory, error)
+        save(directory / 'delivery-fixture-preflight.json', {
+            'status': 'ready',
+            'stage': stage,
+            'preparedActions': [],
+            'manifestDigest': 'sha256:' + hashlib.sha256(manifest_file.read_bytes()).hexdigest(),
+        })
+        return True
+
+    stage_index = next((idx for idx, item in enumerate(DELIVERY_STAGE_ACTIONS) if item[0] == stage), None)
+    if stage_index is None:
+        return _delivery_fixture_blocked(directory, f'Delivery fixture state is {stage!r}; inspect or reconcile original state without replay')
+
+    prepared = []
+    for _, action, expected_stage in DELIVERY_STAGE_ACTIONS[stage_index:]:
+        print(f'Delivery fixture preflight: running {action}...', flush=True)
+        proc = subprocess.run(
+            ['node', str(ROOT / 'regression/delivery_fixture.cjs'), str(fixture_config_path), action],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        prepared.append({'action': action, 'expectedStage': expected_stage, 'returncode': proc.returncode})
+        if proc.returncode != 0:
+            return _delivery_fixture_blocked(
+                directory,
+                f'Delivery fixture preparation stage {action} failed before browser mutations started',
+                preparedActions=prepared,
+            )
+
+    if not state_file.is_file():
+        return _delivery_fixture_blocked(directory, 'Delivery fixture preparation completed without fixture-state.json', preparedActions=prepared)
+    final_state = json.loads(state_file.read_text())
+    error = _validate_delivery_state(final_state, fixture_config)
+    if error or final_state.get('stage') != 'members-ready':
+        return _delivery_fixture_blocked(directory, error or f"Unexpected final delivery fixture stage: {final_state.get('stage')!r}", preparedActions=prepared)
+    ready_error = _ready_manifest_error(private_root, fixture_config)
+    if ready_error:
+        return _delivery_fixture_blocked(directory, ready_error, preparedActions=prepared)
+
+    save(directory / 'delivery-fixture-preflight.json', {
+        'status': 'ready',
+        'stage': 'members-ready',
+        'preparedActions': prepared,
+        'manifestDigest': 'sha256:' + hashlib.sha256(manifest_file.read_bytes()).hexdigest(),
+    })
+    return True
+
+
 def finish(owner, catalog, before, after, browser, directory, browser_exit, suite='standard'):
     same_candidate = before['environment'] == after['environment']
     cleanup_files = sorted((directory / 'browser/attempts').glob('*/cleanup.json'))
@@ -149,6 +261,8 @@ def main():
         raise ValueError('databaseFixtureMode requires bounded or isolated-tmpfs-only with dedicated deliveryFixtureConfig')
     if 'runtimeSnapshotConfig' in config and (not isinstance(config['runtimeSnapshotConfig'], str) or not config['runtimeSnapshotConfig'].strip()):
         raise ValueError('runtimeSnapshotConfig requires a non-empty private file path')
+    if 'deliveryFixtureConfig' in config and (not isinstance(config['deliveryFixtureConfig'], str) or not config['deliveryFixtureConfig'].strip()):
+        raise ValueError('deliveryFixtureConfig requires a non-empty private file path')
     catalog_path = Path(config.get('catalog', ROOT.parent / 'docs/acceptance/platform-catalog.json')).expanduser().resolve()
     owner = load_owner(catalog_path)
     catalog = json.loads(catalog_path.read_text())
@@ -201,6 +315,10 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     if before['results'][0]['status'] != 'passed':
         save(directory / 'preflight.json', {'status': 'blocked', 'reason': 'Core health preflight failed; browser mutations not started'})
         return 2
+    if config.get('deliveryFixtureConfig'):
+        fixture_config_path = Path(config['deliveryFixtureConfig']).expanduser().resolve()
+        if not ensure_delivery_fixture(fixture_config_path, directory):
+            return 2
     command += ['--credentials', str(credentials), '--private-state', str(private),
                 '--output', str(directory / 'browser'), '--baseline-health', str(before_path)]
     if config.get('chrome'):

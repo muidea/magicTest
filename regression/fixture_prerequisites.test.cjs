@@ -16,7 +16,7 @@ test('namespace observation budget is limited to exact public creation/replaceme
     ['GET', '/panel/namespace-onboardings/7', 30000], ['DELETE', '/panel/namespace-onboardings/7', 30000],
     ['POST', '/panel/namespace-onboardings/7', 30000], ['PUT', '/panel/namespace-onboardings/7/ingress', 30000],
     ['PUT', '/panel/namespace-onboardings/7?other=1', 30000], ['PUT', '/panel/namespace-onboardings/0', 30000],
-    ['PUT', '/cas/namespaces/7', 30000], ['PUT', '/panel/application/installations/7', 30000]
+    ['PUT', '/cas/namespaces/7', 90000], ['PUT', '/panel/application/installations/7', 30000]
   ]) {
     const count = sent.length; await ownerRequest(actor, method, route, {});
     assert.equal(sent.length, count + 1); assert.equal(sent.at(-1).options.timeout, expected);

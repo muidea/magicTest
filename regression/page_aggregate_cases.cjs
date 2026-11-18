@@ -105,7 +105,193 @@ async function aggregates(h) {
     try { if (owned.length) await business.finishCleanup(h, [...owned].reverse(), primary); }
     finally { await pages.disposeExplicitFixture(h, f, primary); }
   }
-  await h.partial('Frozen count/ungrouped average with valid samples, empty/null metrics, grouped counts, independent owner input reads and formal delete effects verified. Sum/min/max and filtered averages are explicitly declined by unchanged public preflight. UTC bucket windows, display precision/timezone, group/point boundaries and cancellation remain unverified.');
+  await verifyTimeBucket(h);
+  await h.partial('Frozen count/ungrouped average with valid samples, empty/null metrics, grouped counts, UTC [from,to) hourly time-bucket windows (including empty buckets, right-open bound exclusion, valid sample counts, delete effects, precision/bucket/point budget rejections), Asia/Shanghai UI display timezone, browser abort cancellation and independent owner input/delete effects verified. Sum/min/max and filtered averages remain declined by unchanged public preflight [B]; >1000-row SQL group saturation remains unseeded [C].');
+}
+function configureWithBuckets(content, entity) {
+  configure(content, entity);
+  content.timezone = 'Asia/Shanghai';
+  content.navigation.push('static');
+  content.pages.push({
+    key: 'static',
+    title: '静态离开目标',
+    routes: ['/static'],
+    navigation: true,
+    routeParameters: [],
+    layout: { type: 'responsive-grid', columns: 12, gap: 0 },
+    components: [{ key: 'static-text', type: 'text', layout: { span: 12, order: 0 }, dataSources: [], properties: { text: '已离开统计页' } }],
+  });
+  content.dataSources.push({
+    key: 'buckets',
+    mode: 'time-bucket',
+    entity,
+    fields: ['occurredAt', 'sortOrder'],
+    authorization: 'validated-tenant-and-instance-and-entity-permissions',
+    instanceScope: 'current-installation',
+    pagination: null,
+    timeWindow: { field: 'occurredAt', defaultHours: 24, maxHours: 24, bounds: '[from,to)', timezone: 'UTC' },
+    bucket: { field: 'occurredAt', interval: 'hour', maxBuckets: 24, maxPoints: 24 },
+    metrics: [{ key: 'sortOrder', operation: 'average', field: 'sortOrder', includeValidSampleCount: true }],
+  });
+  content.pages[0].components.push({
+    key: 'hourly-trend',
+    type: 'time-series-chart',
+    layout: { span: 12, order: 4 },
+    dataSources: ['buckets'],
+    properties: { timeField: 'occurredAt', metrics: [{ field: 'sortOrder' }], bucket: 'hour', aggregation: 'average', connectNulls: false },
+  });
+}
+async function verifyBucketBoundaries(h, authored, content) {
+  for (const mutate of [
+    c => { c.timezone = 'Invalid/Zone'; },
+    c => { c.dataSources.find(s => s.key === 'buckets').bucket.maxBuckets = 23; },
+    c => { c.dataSources.find(s => s.key === 'buckets').bucket.maxPoints = 23; },
+    c => { c.dataSources.find(s => s.key === 'groups').groupBy = []; },
+  ]) {
+    const candidate = structuredClone(content);
+    mutate(candidate);
+    const response = await h.api(h.admin, 'POST', '/panel/application/definitions/' + authored.app.id + '/pages/check', { expectedDefinitionVersion: authored.pages.definitionVersion, content: candidate });
+    const checked = response.data?.value;
+    const refused = response.status === 400 && response.data?.error != null || response.status === 200 && checked?.ready === false && Array.isArray(checked.issues) && checked.issues.length > 0;
+    h.check('Authoring preflight declines invalid timezone, bucket/point budget or empty grouping before save', refused, response);
+  }
+}
+async function verifyTimeBucket(h) {
+  const { field, inputViews } = require('./model_input_cases.cjs');
+  const { authoring } = require('./authoring_cases.cjs');
+  const prepareBucket = async (h2, authored) => {
+    const current = await authoring.draft(h2, authored.app);
+    const entity = structuredClone(current.entities[0]);
+    entity.fields.push(field('occurredAt', 'datetime', true));
+    authored.model = await authoring.save(h2, authored.app, current, [entity]);
+    authored.pages = await require('./page_author_cases.cjs').authorFixture.read(h2, authored.app, 'pages');
+  };
+  const f = await pages.explicitFixture(h, configureWithBuckets, verifyBucketBoundaries, {
+    suffix: 'aggbuckets',
+    requestPrefix: 'agg-buckets-',
+    prepareAuthor: prepareBucket,
+    buildEntityViews: inputViews,
+  });
+  const manager = await business.member(h, 'manager');
+  const context = { ...(await business.runtime(h, f, 0, manager)), pageDigest: f.installations[0].receipt.pageDigest };
+  const rows = [];
+  let primary;
+  try {
+    const from = '2026-10-14T00:00:00.000Z';
+    const to = '2026-10-14T03:00:00.000Z';
+    const base = await pages.sourceRead(h, manager, context, { sourceKey: 'buckets', from, to });
+    h.check('Empty UTC [from,to) hourly bucket query returns three null-metric buckets with zero valid samples',
+      h.good(base) && base.data.value?.value?.aggregate?.rows?.length === 3 &&
+      base.data.value.value.aggregate.rows.every((row, idx) =>
+        Date.parse(row.bucketStart) === Date.parse('2026-10-14T0' + idx + ':00:00Z') &&
+        row.metrics?.[0]?.key === 'sortOrder' && row.metrics[0].value?.kind === 'null' && row.metrics[0].validSampleCount?.number === '0'), base);
+
+    const samples = [
+      ['b0-a', 10, '2026-10-14T00:15:00Z'],
+      ['b0-b', 20, '2026-10-14T00:45:00Z'],
+      ['b2-a', 30, '2026-10-14T02:10:00Z'],
+      ['outside-to', 999, '2026-10-14T03:00:00Z'],
+    ];
+    for (const [label, sortOrder, occurredAt] of samples) {
+      const r = await business.create(h, context, label);
+      rows.push(r);
+      await business.execute(h, manager, r, business.request(r, 'update', [
+        { name: 'sortOrder', value: sortOrder },
+        { name: 'occurredAt', value: occurredAt },
+      ]));
+      r.created = (await business.record(h, manager, r)).data.value;
+    }
+
+    const populated = await pages.sourceRead(h, manager, context, { sourceKey: 'buckets', from, to });
+    const bRows = populated.data?.value?.value?.aggregate?.rows || [];
+    h.check('Populated UTC hourly buckets aggregate per-hour means with valid samples, leave empty hours null, and exclude right-open [from,to) boundary',
+      h.good(populated) && bRows.length === 3 &&
+      numberEquals(bRows[0].metrics[0].value, [15n, 1n]) && bRows[0].metrics[0].validSampleCount?.number === '2' &&
+      bRows[1].metrics[0].value?.kind === 'null' && bRows[1].metrics[0].validSampleCount?.number === '0' &&
+      numberEquals(bRows[2].metrics[0].value, [30n, 1n]) && bRows[2].metrics[0].validSampleCount?.number === '1', bRows);
+
+    for (const badWindow of [
+      { sourceKey: 'buckets', from: to, to: from },
+      { sourceKey: 'buckets', from: '2026-10-14T00:00:00.000001Z', to },
+      { sourceKey: 'buckets', from: '2026-10-14T00:00:00.000Z', to: '2026-10-15T01:00:00.000Z' },
+    ]) {
+      const rejected = await pages.sourceRead(h, manager, context, badWindow);
+      h.check('Invalid time-bucket range, sub-millisecond precision or budget overrun is refused before execution', !h.good(rejected) && rejected.data?.error != null, { badWindow, rejected });
+    }
+
+    const browser = manager.page;
+    const appUrl = new URL('/workbench/apps/' + encodeURIComponent(f.application.name), manager.origin);
+    appUrl.searchParams.set('source', 'portal');
+    appUrl.searchParams.set('deploymentId', context.identity.deploymentId);
+    appUrl.searchParams.set('pageKey', 'home');
+    await browser.setViewportSize({ width: 1440, height: 900 });
+    await browser.goto(appUrl.href, { waitUntil: 'networkidle' });
+    await browser.locator('details.application-page-time-range summary').click();
+    await browser.getByLabel('趋势开始时间 UTC', { exact: true }).fill(from);
+    await browser.getByLabel('趋势结束时间 UTC', { exact: true }).fill(to);
+    const utcRead = browser.waitForRequest(req => {
+      try {
+        const u = new URL(req.url());
+        return req.method() === 'POST' && u.pathname === '/api/v1/web/proxy/apps/page/sources/' && req.postDataJSON()?.sourceKey === 'buckets' && req.postDataJSON()?.from === from;
+      } catch { return false; }
+    }, { timeout: 20000 }); utcRead.catch(() => {});
+    const utcDone = browser.waitForResponse(res => res.request().method() === 'POST' && new URL(res.url()).pathname === '/api/v1/web/proxy/apps/page/sources/' && res.request().postDataJSON()?.sourceKey === 'buckets' && res.request().postDataJSON()?.from === from, { timeout: 20000 }); utcDone.catch(() => {});
+    await browser.getByRole('button', { name: '应用时间范围', exact: true }).click();
+    await utcRead; await utcDone;
+    await browser.locator('details.application-page-hourly-details summary').click();
+    const detailsText = await browser.locator('details.application-page-hourly-details').innerText();
+    h.check('Non-UTC Asia/Shanghai page timezone renders CST hourly bucket labels while sending exact UTC [from,to) bounds',
+      detailsText.includes('小时起点 Asia/Shanghai') && detailsText.includes('2026-10-14 08:00:00.000 Asia/Shanghai') && detailsText.includes('2026-10-14 10:00:00.000 Asia/Shanghai'), detailsText);
+    await h.screenshot(manager, 'aggregate-shanghai-timezone');
+
+    // Verify in-flight aggregate cancellation when leaving the page.
+    let heldSeen, holdRelease, holdOutcome = 'pending';
+    const heldPromise = new Promise(resolve => { heldSeen = resolve; });
+    const holdGate = new Promise(resolve => { holdRelease = resolve; });
+    const matchBucket = '**/api/v1/web/proxy/apps/page/sources/**';
+    const holdHandler = async route => {
+      const req = route.request();
+      if (req.method() === 'POST' && req.postDataJSON()?.sourceKey === 'buckets') {
+        try {
+          const response = await route.fetch({ maxRetries: 0 });
+          heldSeen();
+          await holdGate;
+          try { await route.fulfill({ response }); holdOutcome = 'released'; }
+          catch { holdOutcome = 'aborted'; }
+        } catch { holdOutcome = 'fetch-error'; heldSeen(); }
+        return;
+      }
+      await route.continue();
+    };
+    await browser.route(matchBucket, holdHandler);
+    try {
+      await browser.getByRole('button', { name: '最近完整小时', exact: true }).click();
+      await heldPromise;
+      await browser.locator('.application-page-navigation').getByRole('button', { name: '静态离开目标', exact: true }).click();
+      await browser.getByText('已离开统计页', { exact: true }).waitFor();
+      holdRelease();
+      await browser.waitForTimeout(300);
+      h.check('Navigating away aborts or safely discards in-flight aggregate request without rendering stale metrics',
+        ['aborted', 'released'].includes(holdOutcome) && await browser.locator('details.application-page-hourly-details').count() === 0, holdOutcome);
+    } finally {
+      holdRelease?.();
+      await browser.unroute(matchBucket, holdHandler);
+    }
+
+    await business.execute(h, manager, rows[0], business.request(rows[0], 'delete'));
+    rows[0].phase = 'deleted';
+    h.persist();
+    const afterDelete = await pages.sourceRead(h, manager, context, { sourceKey: 'buckets', from, to });
+    const dRows = afterDelete.data?.value?.value?.aggregate?.rows || [];
+    h.check('Formal business delete shifts exact hourly bucket average and decrements valid sample count',
+      h.good(afterDelete) && dRows.length === 3 &&
+      numberEquals(dRows[0].metrics[0].value, [20n, 1n]) && dRows[0].metrics[0].validSampleCount?.number === '1', dRows);
+  } catch (error) { primary = error; throw error; }
+  finally {
+    try { await business.finishCleanup(h, rows.reverse(), primary); }
+    catch (err) { if (!primary) primary = err; }
+    await pages.disposeExplicitFixture(h, f, primary);
+  }
 }
 aggregates.transport = 'owner-api';
 module.exports = { handlers: { 'F069-003': aggregates }, configure, decodeAggregate, numberEquals, metrics, inspectUnsupported };

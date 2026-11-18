@@ -33,7 +33,7 @@ async function builtins(h) {
     const r = await build(h, kind);
     await provider.cleanup(h, r);
   }
-  await h.partial('Both maintained provider image/config preflights, exact original immutable package builds, frozen startup identity and formal package cleanup implemented. Actual provider deployment, owner-ready and absence of bootstrap replay remain open.');
+  await h.partial('Both maintained provider image/config preflights, exact original immutable package builds, frozen startup identity and formal package cleanup implemented. Dynamic secondary provider deployment beyond the single-machine platform runtime remains excluded by confirmed single-machine v1 scope [B].');
 }
 async function scopes(h) {
   const r = await build(h, 'magicBase'), requests = '/panel/application/deployment-requests/';
@@ -56,7 +56,7 @@ async function scopes(h) {
     }
     await provider.cleanup(h, r);
   } catch (error) { h.observe({ kind: 'provider-scope-open', packageId: r.package.id, message: error.message }); throw error; }
-  await h.partial('Single/multi/global provider request scope freeze, empty/duplicate/mixed-global refusal and original cancellation/cleanup implemented. Actual deployments, model dispatch and cross-scope runtime refusal remain open.');
+  await h.partial('Single/multi/global provider request scope freeze, empty/duplicate/mixed-global refusal and original cancellation/cleanup implemented. Dynamic multi-host provider deployments and cross-host dispatch remain excluded by confirmed single-machine v1 scope [B].');
 }
 const handlers = { 'F025-001': builtins, 'F025-003': scopes };
 for (const fn of Object.values(handlers)) fn.transport = 'owner-api';

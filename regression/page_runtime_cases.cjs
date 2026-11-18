@@ -87,7 +87,84 @@ async function cursors(h) {
     await h.screenshot(manager, 'installed-frozen-source-list');
   } catch (error) { primary = error; throw error; }
   finally { await business.finishCleanup(h, [...rows].reverse(), primary); }
-  await h.partial('Frozen primary-key source pagination, original cursor subject/installation isolation, malformed/oversize cursor, page-size limit and real installed list verified. Shared filters, selectors, composite sort ties and natural cursor expiry require separate frozen fixtures and remain unverified.');
+  await compositeFilterAndSelectorCursors(h, manager);
+  await h.partial('Frozen primary-key source pagination, composite tie-broken cursor sort, shared scalar eq filter + undeclared-filter refusal, options selector cursor pagination, subject/installation isolation, malformed/oversize cursor, page-size limit and real installed list verified. Natural cursor expiry remains unverified [C].');
+}
+async function compositeFilterAndSelectorCursors(h, manager) {
+  let entityKey;
+  const fx = await explicitFixture(h, (content, entity) => {
+    entityKey = entity;
+    content.dataSources.push(
+      {
+        key: 'filteredSorted', entity, mode: 'list', fields: ['id', 'code', 'name', 'sortOrder'],
+        authorization: 'validated-tenant-and-instance-and-entity-permissions', instanceScope: 'current-installation',
+        pagination: { mode: 'cursor', defaultPageSize: 2, maxPageSize: 10 },
+        orderBy: [{ field: 'sortOrder', direction: 'asc' }, { field: 'id', direction: 'asc' }],
+        filters: [{ parameter: 'code', field: 'code', operator: 'eq', kind: 'string', required: false, maxValues: 16 }],
+      },
+      {
+        key: 'nameChoices', entity, mode: 'options', fields: ['id', 'name'],
+        authorization: 'validated-tenant-and-instance-and-entity-permissions', instanceScope: 'current-installation',
+        pagination: { mode: 'cursor', defaultPageSize: 2, maxPageSize: 10 },
+        orderBy: [{ field: 'id', direction: 'asc' }],
+      },
+    );
+  }, undefined, { suffix: 'pagecomp', requestPrefix: 'pagecomp-' });
+  const ctx = await business.runtime(h, fx, 0, manager), rows = [];
+  ctx.pageDigest = (await h.ok(manager, 'GET', '/apps/application/runtimes/' + fx.application.name + '?deploymentId=' + ctx.identity.deploymentId)).value.installation?.pageDigest;
+  let primary;
+  try {
+    for (const sortOrder of [10, 5, 10, 20]) {
+      const r = { kind: 'business-record', actorRole: 'manager', phase: 'intent', ...ctx, scenarioDefinitionId: fx.application.id,
+        origin: manager.origin, actorIdentity: structuredClone(manager.identity), commands: [] };
+      delete r.ui; rows.push(r); h.state.resources.push(r); h.persist();
+      const body = business.request(r, 'create', [
+        { name: 'code', value: 'RG-' + require('node:crypto').randomBytes(8).toString('hex').toUpperCase() },
+        { name: 'name', value: '复合分页样本-' + sortOrder }, { name: 'description', value: null }, { name: 'sortOrder', value: sortOrder },
+      ]);
+      await business.execute(h, manager, r, body);
+      r.created = (await business.record(h, manager, r)).data.value; h.persist();
+    }
+    const collected = [], seenCursors = new Set(); let cursor;
+    for (let i = 0; i < 10; i++) {
+      const res = await sourceRead(h, manager, ctx, { sourceKey: 'filteredSorted', pageSize: 2, ...(cursor ? { cursor } : {}) });
+      h.check('Composite sort page succeeds', h.good(res), res);
+      const val = res.data.value;
+      for (const row of val.value?.rows || []) {
+        collected.push({
+          id: row.fields.find(x => x.key === 'id')?.value?.number,
+          code: row.fields.find(x => x.key === 'code')?.value?.text,
+          sortOrder: Number(row.fields.find(x => x.key === 'sortOrder')?.value?.number),
+        });
+      }
+      if (!val.hasMore) break;
+      h.check('Composite cursor is fresh', val.nextCursor && !seenCursors.has(val.nextCursor));
+      seenCursors.add(val.nextCursor); cursor = val.nextCursor;
+    }
+    const expectedIds = [...rows].sort((a, b) => (a.created.sortOrder - b.created.sortOrder) || (BigInt(a.recordId) < BigInt(b.recordId) ? -1 : 1)).map(r => r.recordId);
+    h.check('Composite sort tie-breaks cleanly across cursor pages by (sortOrder ASC, id ASC)', same(collected.map(v => v.id), expectedIds), { collected, expectedIds });
+    const targetRow = rows[2].created;
+    const filtered = await sourceRead(h, manager, ctx, { sourceKey: 'filteredSorted', pageSize: 10, parameters: [{ name: 'code', value: { kind: 'string', text: targetRow.code } }] });
+    const fRows = filtered.data.value?.value?.rows || [];
+    h.check('Shared eq filter returns exact matching business row only', h.good(filtered) && fRows.length === 1 && fRows[0].fields.find(x => x.key === 'id')?.value?.number === String(targetRow.id), filtered);
+    const badFilter = await sourceRead(h, manager, ctx, { sourceKey: 'filteredSorted', pageSize: 10, parameters: [{ name: 'name', value: { kind: 'string', text: 'nope' } }] });
+    h.check('Undeclared filter field is explicitly rejected', [200, 400, 409].includes(badFilter.status) && badFilter.data?.error?.code > 0 && badFilter.data.value == null, badFilter);
+    const optionsIds = []; cursor = undefined;
+    for (let i = 0; i < 10; i++) {
+      const opt = await sourceRead(h, manager, ctx, { sourceKey: 'nameChoices', pageSize: 2, ...(cursor ? { cursor } : {}) });
+      h.check('Options selector page succeeds', h.good(opt), opt);
+      const val = opt.data.value;
+      for (const row of val.value?.rows || []) optionsIds.push(row.fields.find(x => x.key === 'id')?.value?.number);
+      if (!val.hasMore) break;
+      cursor = val.nextCursor;
+    }
+    h.check('Options selector cursor scan returns all rows in monotonic primary-key order',
+      same(optionsIds, rows.map(r => r.recordId).sort((a, b) => BigInt(a) < BigInt(b) ? -1 : 1)), optionsIds);
+  } catch (error) { primary = error; throw error; }
+  finally {
+    await business.finishCleanup(h, [...rows].reverse(), primary);
+    if (!rows.some(r => r.phase !== 'deleted')) await disposeExplicitFixture(h, fx, primary);
+  }
 }
 cursors.transport = 'owner-api';
 function explicitView(entity, ui) {
@@ -143,12 +220,46 @@ async function disposeExplicitFixture(h, f, primary) {
     await require('./model_delivery.cjs').retained(h, f.resource);
   } catch (error) { h.observe({ kind: 'explicit-page-original-cleanup-open', message: error.message }); if (!primary) throw error; }
 }
+function configureReadAuthority(content, entity) {
+  content.dataSources.push(
+    {
+      key: 'totals',
+      mode: 'aggregate',
+      entity,
+      fields: ['id', 'sortOrder'],
+      authorization: 'validated-tenant-and-instance-and-entity-permissions',
+      instanceScope: 'current-installation',
+      pagination: null,
+      metrics: [
+        { key: 'total', operation: 'count' },
+        { key: 'avgSort', operation: 'average', field: 'sortOrder', includeValidSampleCount: true },
+      ],
+    },
+    {
+      key: 'choices',
+      mode: 'options',
+      entity,
+      fields: ['id', 'name'],
+      authorization: 'validated-tenant-and-instance-and-entity-permissions',
+      instanceScope: 'current-installation',
+      pagination: { mode: 'cursor', defaultPageSize: 5, maxPageSize: 10 },
+      orderBy: [{ field: 'id', direction: 'asc' }],
+    },
+  );
+  content.pages[0].components.push(
+    { key: 'authority-totals', type: 'metric-group', layout: { order: 2, span: 12 }, dataSources: ['totals'], properties: { metrics: ['total', 'avgSort'] } },
+    { key: 'authority-choices', type: 'entity-table', layout: { order: 3, span: 12 }, dataSources: ['choices'], properties: { entity, columns: ['id', 'name'], readonly: true } },
+  );
+}
 async function readAuthority(h) {
-  const f = await explicitFixture(h), manager = await business.member(h, 'manager');
+  const f = await explicitFixture(h, configureReadAuthority, undefined, { suffix: 'pagereadauth', requestPrefix: 'page-read-auth-' }), manager = await business.member(h, 'manager');
   const context = await business.runtime(h, f, 0, manager), peer = await business.runtime(h, f, 1, manager);
   const metadata = (await h.ok(manager, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + context.identity.deploymentId)).value;
   context.pageDigest = metadata.installation?.pageDigest;
-  h.check('Page read authority uses exact frozen installation source and digest', same(metadata.readIdentity, context.identity) && /^sha256:[a-f0-9]{64}$/.test(context.pageDigest) && metadata.pages.dataSources.some(s => s.key === 'records' && same(s.fields, ['id', 'name']) && same(s.orderBy, [{ field: 'id', direction: 'asc' }])));
+  h.check('Page read authority uses exact frozen installation source and digest', same(metadata.readIdentity, context.identity) && /^sha256:[a-f0-9]{64}$/.test(context.pageDigest) &&
+    metadata.pages.dataSources.some(s => s.key === 'records' && same(s.fields, ['id', 'name']) && same(s.orderBy, [{ field: 'id', direction: 'asc' }])) &&
+    metadata.pages.dataSources.some(s => s.key === 'totals' && s.mode === 'aggregate') &&
+    metadata.pages.dataSources.some(s => s.key === 'choices' && s.mode === 'options'));
   const authority = require('./application_authority_cases.cjs');
   const ordinary = (await h.directory(h.admin, '/cas/namespaces/panel/role-templates/')).find(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2 && t.subjectType === 'account');
   h.check('Page source test starts from ordinary functional roles only', ordinary?.roleRefs?.length > 0);
@@ -159,7 +270,11 @@ async function readAuthority(h) {
   try {
     row = await business.create(h, context, 'page-read-authority');
     const read = () => sourceRead(h, actor, context, { sourceKey: 'records', pageSize: 5 });
-    h.denied(await read(), 'Ordinary unassigned account cannot read frozen page source');
+    const readTotals = () => sourceRead(h, actor, context, { sourceKey: 'totals' });
+    const readChoices = () => sourceRead(h, actor, context, { sourceKey: 'choices', pageSize: 5 });
+    h.denied(await read(), 'Ordinary unassigned account cannot read frozen page list source');
+    h.denied(await readTotals(), 'Ordinary unassigned account cannot read frozen aggregate source');
+    h.denied(await readChoices(), 'Ordinary unassigned account cannot read frozen options source');
     await authority.assign(h, member, group, access);
     const observed = await scanPages(h, actor, context);
     h.check('Exact viewer scope exposes the actual owned primary key and display value', observed.rows.some(v => v.id === row.recordId && v.name === row.created.name));
@@ -167,13 +282,27 @@ async function readAuthority(h) {
       const owner = await business.record(h, manager, { ...context, recordId: value.id });
       h.check('Independent original business owner confirms each authorized frozen source row', h.good(owner) && String(owner.data.value.id) === value.id && owner.data.value.name === value.name);
     }
+    const totalsRes = await readTotals();
+    const aggMetrics = totalsRes.data?.value?.value?.aggregate?.rows?.[0]?.metrics || [];
+    h.check('Exact viewer scope reads aggregate source metrics matching owned count and sample count',
+      h.good(totalsRes) && totalsRes.data.value.sourceKey === 'totals' &&
+      aggMetrics.some(m => m.key === 'total' && m.value?.number === '1') &&
+      aggMetrics.some(m => m.key === 'avgSort' && m.validSampleCount?.number === '1'), totalsRes);
+    const choicesRes = await readChoices();
+    const choiceRows = choicesRes.status === 200 && h.good(choicesRes) ? decodePage(choicesRes.data.value, context, 5, 'choices') : [];
+    h.check('Exact viewer scope reads options source rows matching owned record key and name',
+      h.good(choicesRes) && choiceRows.some(v => v.id === row.recordId && v.name === row.created.name), choicesRes);
     h.denied(await sourceRead(h, actor, peer, { sourceKey: 'records', pageSize: 5 }), 'Viewer scope on installationA does not expose installationB page source');
+    h.denied(await sourceRead(h, actor, peer, { sourceKey: 'totals' }), 'Viewer scope on installationA does not expose installationB aggregate source');
+    h.denied(await sourceRead(h, actor, peer, { sourceKey: 'choices', pageSize: 5 }), 'Viewer scope on installationA does not expose installationB options source');
     for (const identity of [{ ...context.identity, artifactDigest: 'sha256:' + '0'.repeat(64) }, { ...context.identity, generation: context.identity.generation + 1 }, { ...context.identity, executionEpoch: context.identity.executionEpoch + 1 }, peer.identity]) {
       const response = await sourceRead(h, actor, { ...context, identity }, { sourceKey: 'records', pageSize: 5 });
       h.check('Wrong frozen identity or generation is explicitly refused without page data', [200, 400, 409].includes(response.status) && [4, 19, 21].includes(response.data?.error?.code) && response.data.value == null, response);
     }
     await authority.assign(h, member, group, []);
     h.denied(await read(), 'Formal current scope removal rejects new frozen source reads using the original session');
+    h.denied(await readTotals(), 'Formal current scope removal rejects new frozen aggregate reads using the original session');
+    h.denied(await readChoices(), 'Formal current scope removal rejects new frozen options reads using the original session');
     h.check('All source refusals preserve the complete original business record', same((await business.record(h, manager, row)).data.value, row.created));
     const currentPeer = await business.runtime(h, f, 1, manager);
     h.check('Source scope changes preserve the independent peer installation fence', same(currentPeer.identity, peer.identity));
@@ -182,7 +311,7 @@ async function readAuthority(h) {
     try { if (row) await business.finishCleanup(h, [row], primary); }
     finally { await disposeExplicitFixture(h, f, primary); }
   }
-  await h.partial('Original ordinary account unassigned/read/revoked source access, independent per-key owner reads and exact installation/digest/generation fences verified. Endpoint source roles, aggregate/options/labels and server-return-before-revocation or late browser response windows remain unverified.');
+  await h.partial('Original ordinary account unassigned/read/revoked list, aggregate and options source access, independent per-key owner reads and exact installation/digest/generation fences verified. Endpoint page-source access remains excluded by initial contract [B]; reference-relation label projections and server-return-before-revocation or late browser response fault windows remain unverified [C].');
 }
 readAuthority.transport = 'owner-api';
 module.exports = { handlers: { 'F069-002': cursors, 'F069-004': readAuthority }, decodePage, sourceRead, scanPages, explicitView, explicitFixture, disposeExplicitFixture, frozenPages };

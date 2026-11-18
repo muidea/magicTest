@@ -248,9 +248,48 @@ async function authorFreeze(h) {
     await require('./scenario_commands.cjs').reject(h, resource, h.admin, 'PUT', '/panel/application/definitions/' + f.application.id + '/model-draft',
       a.command(draft, changed), ['/panel/application/definitions/' + f.application.id + '/model-draft'], { code: 19, messagePattern: '版本|version|changed|conflict' });
     h.check('Stale source draft save preserves complete current owner models', same(await a.draft(h, f.application), current));
+    const sourceEntity = current.entities.find(v => v.blockInfo?.some(b => b.key === 'derive'));
+    const browser = h.admin.page, writes = [];
+    const watchWrite = req => {
+      try {
+        if (req.method() === 'PUT' && new URL(req.url()).pathname === '/api/v1/web/proxy/panel/application/definitions/' + f.application.id + '/model-draft') writes.push(req.url());
+      } catch {}
+    };
+    browser.on('request', watchWrite);
+    try {
+      await browser.goto(h.admin.origin + '/panel/application/definition/entity/edit?aid=' + f.application.id + '&eid=' + sourceEntity.id, { waitUntil: 'networkidle' });
+      await browser.getByText('功能块信息', { exact: true }).waitFor();
+      const editBtn = browser.locator('tr').filter({ hasText: 'derive' }).getByRole('button', { name: /编辑$/ });
+      await editBtn.waitFor();
+      await editBtn.click();
+      const modal = browser.getByRole('dialog');
+      await modal.waitFor();
+      const expandInsert = modal.locator('tr[data-row-key="insert"] button.ant-table-row-expand-icon');
+      await expandInsert.waitFor();
+      if ((await expandInsert.getAttribute('aria-expanded')) !== 'true') await expandInsert.click();
+      await modal.getByText('派生绑定可保存为草稿；当前版本尚不能发布或激活自动派生。', { exact: true }).waitFor();
+      const modeSelect = modal.locator('.ant-select[aria-label="脚本结果处理"], .ant-select:has([aria-label="脚本结果处理"])').locator('.ant-select-selector').first();
+      await modeSelect.click();
+      await browser.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: '普通计算／字段回写' }).click();
+      await modal.getByText('派生绑定可保存为草稿；当前版本尚不能发布或激活自动派生。', { exact: true }).waitFor({ state: 'hidden' });
+      await modeSelect.click();
+      await browser.locator('.ant-select-dropdown:visible .ant-select-item-option').filter({ hasText: '派生创建' }).click();
+      await modal.getByText('派生绑定可保存为草稿；当前版本尚不能发布或激活自动派生。', { exact: true }).waitFor();
+      await h.screenshot(h.admin, 'source-effect-compute-vs-derive-modal');
+      await modal.getByRole('button', { name: /^取\s*消$/ }).click();
+      await modal.waitFor({ state: 'hidden' });
+    } finally { browser.off('request', watchWrite); }
+    h.check('Real author compute-vs-derive toggle and modal cancellation issue zero model-draft writes and preserve owner draft',
+      writes.length === 0 && same(await a.draft(h, f.application), current), { writes });
+    const unsupported = structuredClone(current.entities);
+    const badSource = unsupported.find(v => v.blockInfo?.some(b => b.key === 'derive'));
+    badSource.blockInfo[0].stageInfo.functions.insert.createEffect.targetEntity = badSource.pkgPath + '/missingDerivedTarget';
+    const badDraftRes = await h.api(h.admin, 'PUT', '/panel/application/definitions/' + f.application.id + '/model-draft', a.command(current, unsupported));
+    h.check('Unsupported createEffect consumer model draft is refused while leaving original draft and frozen revision unchanged',
+      !h.good(badDraftRes) && badDraftRes.status >= 200 && same(await a.draft(h, f.application), current) &&
+      same((await h.ok(h.admin, 'GET', '/panel/application/definitions/' + f.application.id + '/revisions/' + original.id)).value, original), badDraftRes);
   } catch (error) { primary = error; throw error; }
   finally { await pages.disposeExplicitFixture(h, f, primary); }
-  await h.partial('Pure file program/typed I/O, append-only source and protected target binding author save, full ZIP checksums/import, double installation, stale-save refusal and mutable draft/frozen separation implemented. Real author cancellation, unsupported-consumer deployment and calculation-vs-automatic UI remain open.');
 }
 async function reception(h, atomic = false, draftMutation = false, lifecycleCase) {
   const suffix = lifecycleCase === 'F033-001' ? 'effectinstall' : lifecycleCase ? 'effectlifecycle' : draftMutation ? 'effectoriginal' : atomic ? 'effecttargets' : 'effectsource';
@@ -324,15 +363,85 @@ async function reception(h, atomic = false, draftMutation = false, lifecycleCase
   h.check('Other actual instance retains entire independent task and target collections', same(await tasks(h, contexts[1]), peerTasks) &&
     same(await collection(h, actor, { ...contexts[1], entity: contexts[1].targetEntity }), peerRows));
   r.dispositionReady = true; h.persist();
+  if (draftMutation) {
+    const unassigned = await require('./application_authority_cases.cjs').account(h, 'effect-unassigned');
+    h.denied(await h.api(unassigned.actor, 'POST', route(r, false), body), 'Unassigned ordinary account cannot invoke frozen source reception despite draft edits');
+  }
   // Append-only data is retired only by the exact installation owner; no
   // ordinary DELETE, direct SQL or data rewrites are used for cleanup.
   await pages.disposeExplicitFixture(h, f);
   h.check('Exact source and target installation destroy finishes through formal owner while retaining source task evidence',
     f.pageRequests.every(v => v.phase === 'deleted' && v.retiredInstallation?.id === v.installation.id && v.retiredInstallation.status === 'uninstalled' &&
       v.retiredInstallation.receipt?.uninstallation?.dataDisposition === 'destroy'));
+  if (lifecycleCase === 'F033-001') {
+    const goneRt = await h.api(actor, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + f.installations[0].deploymentId);
+    h.check('Destroyed source-effect installation runtime metadata is unavailable after uninstall', !h.good(goneRt) && goneRt.data?.value == null, goneRt);
+    await sourceRetainAndRestore(h);
+  }
   r.phase = 'deleted'; r.disposition = 'Completed original source/task and independently read target rows; exact installations formally destroy-retired, immutable journal retained.'; h.persist();
-  await h.partial(lifecycleCase ? 'Real dual model installation, completed source/task/target evidence before lifecycle, conditional disable/activate, exact disabled source refusal, generation-scoped task isolation (historical generation lookup excluded by design), full source/target and peer preservation, and formal destroy with storage/authorization receipts implemented. Retain/restore, in-flight lifecycle, full Gateway/File residuals, claimant restart and late-lease fencing remain open.' : draftMutation ? 'Actual author program and target draft changed after installation; original ordinary producer then creates real source/task/targets using frozen original output and precise source/deployment-derived identities, with original subject, confirmed replay/conflict, peer preservation and formal destroy. Acceptance-before-author-edit race, pre-claim role revocation, Endpoint and lease/generation changes remain open.' : atomic ? 'Real committed source→durable completed task→two protected unique target rows, exact owner detail/list, confirmed replay no duplicate, peer preservation and formal destroy implemented. Target batch failure, target relationships, post-commit lost response and repeated owner recovery remain open.' :
+  await h.partial(lifecycleCase === 'F033-001'
+    ? 'Real dual model installation, completed source/task/target evidence before lifecycle, conditional disable/activate, exact disabled source refusal, retain/restore with intact source/target rows and non-replay, retired runtime absence and formal destroy receipts implemented. Historical generation task query remains excluded by contract [B]; in-flight task interruption, claimant restart, late-lease fencing and full CAS/Gateway/File residual internals remain open [C].'
+    : lifecycleCase
+      ? 'Real dual model installation, completed source/task/target evidence before lifecycle, conditional disable/activate, exact disabled source refusal, generation-scoped task isolation (historical generation lookup excluded by design), full source/target and peer preservation, and formal destroy with storage/authorization receipts implemented. Retain/restore, in-flight lifecycle, full Gateway/File residuals, claimant restart and late-lease fencing remain open.'
+      : draftMutation
+        ? 'Actual author program and target draft changed after installation; original ordinary producer creates real source/task/targets using frozen original output, unassigned producer is denied, with confirmed replay/conflict, peer preservation and formal destroy. Endpoint source submission remains excluded by initial casaccess contract [B]; acceptance-before-author-edit race, pre-claim role revocation and lease/generation fault injection remain open [C].'
+        : atomic ? 'Real committed source→durable completed task→two protected unique target rows, exact owner detail/list, confirmed replay no duplicate, peer preservation and formal destroy implemented. Target batch failure, target relationships, post-commit lost response and repeated owner recovery remain open.' :
     'Reliable original source, same-input confirmed replay, payload conflict, original durable source/task linkage, real derived targets, double-instance preservation and formal destroy implemented. Actual response-loss fault, natural-key duplicate with different operation, Endpoint and cross-tenant/binding forgery remain open.');
+}
+async function sourceRetainAndRestore(h) {
+  const recovery = require('./storage_recovery_cases.cjs'), review = require('./deployment_review_cases.cjs'), authority = require('./application_authority_cases.cjs');
+  const { f, actor, contexts } = await fixture(h, 'srcretain');
+  const context = contexts[0], targetContext = { ...context, entity: context.targetEntity };
+  const baseline = await collection(h, actor, targetContext);
+  const r = { kind: 'source-effect-scenario', phase: 'intent', scenarioDefinitionId: f.application.id, ...context,
+    origin: actor.origin, actorIdentity: structuredClone(actor.identity), commands: [] };
+  h.state.resources.push(r); h.persist();
+  const body = business.request(r, 'create', [{ name: 'code', value: 'SRCRET-' + crypto.randomBytes(6).toString('hex').toUpperCase() },
+    { name: 'name', value: '保留恢复来源样本' }, { name: 'description', value: null }, { name: 'sortOrder', value: 0 }], { apiVersion: version });
+  let primary;
+  try {
+    const receipt = await submit(h, actor, r, body);
+    await completed(h, r);
+    const afterCreate = await collection(h, actor, targetContext);
+    h.check('Retain/restore probe emits derived target rows before retention', afterCreate.length === baseline.length + 2, afterCreate);
+    const source = f.pageRequests[0];
+    source.storageRecovery = { phase: 'prepared', source: structuredClone(source.installation), definitionId: f.application.id,
+      requestIds: f.pageRequests.map(v => v.id), installationIds: f.installations.map(i => String(i.id)), commands: [],
+      origin: h.admin.origin, actorIdentity: structuredClone(h.admin.identity),
+      fixture: { application: f.application, revision: f.revision, package: f.package } };
+    h.persist();
+    await authority.retireAccess(h, f.pageGrants[0]);
+    await recovery.retain(h, source);
+    const restoredReq = await recovery.createRestore(h, f, source);
+    await review.approve(h, restoredReq, [h.admin]);
+    source.storageRecovery.claimed = (await h.ok(h.admin, 'GET', '/panel/application/installations/' + source.installation.id)).value;
+    h.check('Retain/restore claims exact source-effect installation and preserves deployment identity', recovery.restoredMatches(source.storageRecovery, restoredReq, source.storageRecovery.claimed));
+    source.storageRecovery.target = structuredClone(restoredReq.installation); source.storageRecovery.phase = 'restored'; h.persist();
+    const accountId = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value.account.id;
+    const grant = { kind: 'member-access-retirement', phase: 'created', accountId, installation: restoredReq.installation, commands: [], active: false,
+      origin: h.admin.origin, actorIdentity: structuredClone(h.admin.identity) };
+    h.state.resources.push(grant); h.persist();
+    await authority.accessCommand(h, grant, 'manager', 0);
+    try {
+      const restoredCtx = await business.runtime(h, { ...f, installations: [restoredReq.installation] }, 0, actor);
+      const restoredIdentityCtx = { ...context, instance: restoredReq.installation, identity: restoredCtx.identity };
+      const restoredSource = await business.record(h, actor, { ...restoredIdentityCtx, recordId: receipt.id });
+      h.check('Restored source-effect installation preserves complete original source row',
+        h.good(restoredSource) && String(restoredSource.data.value?.id) === receipt.id && restoredSource.data.value.name === '保留恢复来源样本', restoredSource);
+      const afterRestore = await collection(h, actor, { ...restoredIdentityCtx, entity: context.targetEntity });
+      h.check('Restored source-effect installation preserves exact derived target rows without duplicating effects',
+        same(afterRestore, afterCreate), { afterRestore, afterCreate });
+      const afterTasks = await tasks(h, restoredIdentityCtx);
+      h.check('Restored current generation has zero replayed effect tasks for preexisting source row', afterTasks.length === 0, afterTasks);
+    } finally {
+      await authority.retireAccess(h, grant);
+    }
+    source.storageRecovery.phase = 'rows-disposed'; h.persist();
+    r.phase = 'deleted'; h.persist();
+    await review.cleanup(h, restoredReq);
+    await recovery.finishSource(h, source, restoredReq);
+    await pages.disposeExplicitFixture(h, f);
+  } catch (error) { primary = error; r.phase = 'deleted'; h.persist(); throw error; }
 }
 const handlers = { 'F071-001': authorFreeze, 'F071-002': h => reception(h), 'F071-003': h => reception(h, false, true), 'F071-004': h => reception(h, true), 'F033-001': h => reception(h, true, false, 'F033-001'), 'F071-005': h => reception(h, true, false, 'F071-005') };
 for (const handler of Object.values(handlers)) { handler.transport = 'owner-api'; handler.requiresOnlyDeliveryFixture = true; }

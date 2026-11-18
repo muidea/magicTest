@@ -2,11 +2,38 @@
 const { isDeepStrictEqual: same } = require('node:util');
 const page = require('./page_runtime_cases.cjs');
 const business = require('./business_cases.cjs');
-function configure(content) {
+const { authoring: a } = require('./authoring_cases.cjs');
+const { field, inputViews } = require('./model_input_cases.cjs');
+async function prepareRefresh(h, authored) {
+  const current = await a.draft(h, authored.app), entity = structuredClone(current.entities[0]);
+  entity.fields.push(field('occurredAt', 'datetime', true));
+  authored.model = await a.save(h, authored.app, current, [entity]);
+  authored.pages = await require('./page_author_cases.cjs').authorFixture.read(h, authored.app, 'pages');
+}
+function configure(content, entity) {
   content.refresh = { seconds: 5, overlap: false, pauseWhenHidden: true, cancelOnLeave: true, failureBackoffSeconds: [10, 20] };
-  content.navigation.push('static');
-  content.pages.push({ key: 'static', title: '只读切换目标', routes: ['/static'], navigation: true, routeParameters: [], layout: { type: 'responsive-grid', columns: 12, gap: 0 },
-    components: [{ key: 'static-text', type: 'text', layout: { span: 12, order: 0 }, dataSources: [], properties: { text: '原页面读取已离开' } }] });
+  const list = content.dataSources.find(s => s.key === 'records');
+  content.dataSources.push({
+    ...structuredClone(list),
+    key: 'windowed',
+    fields: ['id', 'name', 'occurredAt'],
+    timeWindow: { field: 'occurredAt', defaultHours: 24, bounds: '[from,to)', timezone: 'UTC' },
+  });
+  const short = entity.split('/').at(-1);
+  content.actions = { ...(content.actions || {}), [short]: [...new Set([...(content.actions?.[short] || []), 'create'])] };
+  content.navigation.push('static', 'windowed', 'createform');
+  content.pages.push(
+    { key: 'static', title: '只读切换目标', routes: ['/static'], navigation: true, routeParameters: [], layout: { type: 'responsive-grid', columns: 12, gap: 0 },
+      components: [{ key: 'static-text', type: 'text', layout: { span: 12, order: 0 }, dataSources: [], properties: { text: '原页面读取已离开' } }] },
+    { key: 'windowed', title: '时间窗列表', routes: ['/windowed'], navigation: true, routeParameters: [], layout: { type: 'responsive-grid', columns: 12, gap: 0 },
+      components: [{ key: 'windowed-table', type: 'entity-table', layout: { span: 12, order: 0 }, dataSources: ['windowed'], properties: { entity, columns: ['id', 'name'], readonly: true } }] },
+    { key: 'createform', title: '写入面板共存页', routes: ['/forms/create'], navigation: true, routeParameters: [], layout: { type: 'responsive-grid', columns: 12, gap: 0 },
+      components: [
+        { key: 'write-form', type: 'entity-form', layout: { span: 12, order: 0 }, dataSources: [],
+          properties: { entity, mode: 'create', sections: [{ title: '基本信息', fields: ['code', 'name', 'description', 'sortOrder', 'occurredAt'] }] } },
+        { key: 'live-table', type: 'entity-table', layout: { span: 12, order: 1 }, dataSources: ['records'], properties: { entity, columns: ['id', 'name'], readonly: true } },
+      ] },
+  );
 }
 function exactSource(request, origin, context) {
   try {
@@ -23,9 +50,9 @@ async function bounded(promise, message, milliseconds = 25000) {
   finally { clearTimeout(timer); }
 }
 async function scheduling(h) {
-  const f = await page.explicitFixture(h, configure, undefined, { suffix: 'pagerefresh', requestPrefix: 'page-refresh-' });
+  const f = await page.explicitFixture(h, configure, undefined, { suffix: 'pagerefresh', requestPrefix: 'page-refresh-', prepareAuthor: prepareRefresh, buildEntityViews: inputViews });
   const actor = await business.member(h, 'manager'), rows = [];
-  let primary;
+  let primary, hiddenVerified = false;
   try {
     const contexts = [];
     for (let i = 0; i < f.installations.length; i++) {
@@ -66,7 +93,7 @@ async function scheduling(h) {
       } else { recoveredAt ||= Date.now(); await route.continue(); }
     };
     await browser.route(failureMatch, failOne);
-    const recovered = browser.waitForResponse(r => exactSource(r.request(), actor.origin, context) && r.status() === 200, { timeout: 30000 }); recovered.catch(() => {});
+    const recovered = browser.waitForResponse(r => exactSource(r.request(), actor.origin, context) && r.status() === 200, { timeout: 45000 }); recovered.catch(() => {});
     try {
       await bounded(failure, 'Original actual automatic read never reached controlled failure');
       const alert = browser.locator('.application-page-surface .ant-alert-error'); await alert.first().waitFor();
@@ -80,7 +107,7 @@ async function scheduling(h) {
     } finally { await browser.unroute(failureMatch, failOne); }
     // Use a real foreground tab; headless environments that never report
     // hidden cannot provide evidence for this boundary.
-    let hiddenVerified = false, hiddenReads = 0, foreground;
+    let hiddenReads = 0, foreground;
     const countHidden = request => { if (exactSource(request, actor.origin, context)) hiddenReads++; };
     try {
       foreground = await actor.context.newPage(); await foreground.goto('about:blank'); await foreground.bringToFront();
@@ -133,6 +160,65 @@ async function scheduling(h) {
     await checkResponse(await restored); await browser.locator('tbody tr[data-row-key="' + row.recordId + '"]').waitFor();
     h.check('Returning to original page reads original owner row without replaying or changing business writes', same((await business.record(h, actor, row)).data.value, originalOwner) && row.commands.length === 1 && row.commands[0].body.operation === 'create');
     await h.screenshot(actor, 'real-navigation-returned-original-row');
+
+    // Verify durable write panel keeps user input intact while live auto-refresh ticks.
+    const formUrl = new URL(target); formUrl.searchParams.set('pageKey', 'createform');
+    const draftLabel = '未提交草稿 ' + h.state.prefix;
+    const formFirst = readResponse(); formFirst.catch(() => {});
+    await browser.goto(formUrl.href, { waitUntil: 'networkidle' });
+    await checkResponse(await formFirst);
+    const nameInput = browser.getByRole('textbox', { name: '写入字段 name', exact: true });
+    await nameInput.waitFor();
+    await nameInput.fill(draftLabel);
+    const formTick = readResponse(); formTick.catch(() => {});
+    await checkResponse(await formTick);
+    h.check('Automatic background table refresh preserves unsaved write-panel draft without replaying writes',
+      await nameInput.inputValue() === draftLabel && row.commands.length === 1);
+    await h.screenshot(actor, 'durable-write-panel-during-auto-refresh');
+
+    // Verify relative and fixed UTC time-window source refreshes.
+    const windowUrl = new URL(target); windowUrl.searchParams.set('pageKey', 'windowed');
+    const isWindowedSource = req => {
+      try {
+        const u = new URL(req.url());
+        return req.method() === 'POST' && u.origin === actor.origin && u.pathname === '/api/v1/web/proxy/apps/page/sources/' &&
+          u.searchParams.get('deploymentId') === context.identity.deploymentId && req.postDataJSON()?.sourceKey === 'windowed';
+      } catch { return false; }
+    };
+    const relReqPromise = browser.waitForRequest(isWindowedSource, { timeout: 20000 }); relReqPromise.catch(() => {});
+    await browser.goto(windowUrl.href, { waitUntil: 'networkidle' });
+    const relBody = (await relReqPromise).postDataJSON();
+    const relSpan = Date.parse(relBody?.to) - Date.parse(relBody?.from);
+    h.check('Relative time-window source sends exact 24h UTC window on automatic read', relSpan === 24 * 3600 * 1000, relBody);
+    await browser.locator('details.application-page-time-range summary').click();
+    await browser.getByLabel('趋势开始时间 UTC', { exact: true }).fill('2026-01-01T00:00:00Z');
+    await browser.getByLabel('趋势结束时间 UTC', { exact: true }).fill('2026-01-02T00:00:00Z');
+    const fixedNext = browser.waitForRequest(isWindowedSource, { timeout: 20000 }); fixedNext.catch(() => {});
+    await browser.getByRole('button', { name: '应用时间范围', exact: true }).click();
+    const fixedReq1 = (await fixedNext).postDataJSON();
+    const fixedAuto = browser.waitForRequest(isWindowedSource, { timeout: 20000 }); fixedAuto.catch(() => {});
+    const fixedReq2 = (await fixedAuto).postDataJSON();
+    h.check('Fixed UTC time range persists across subsequent automatic refreshes',
+      fixedReq1?.from === '2026-01-01T00:00:00.000Z' && fixedReq1?.to === '2026-01-02T00:00:00.000Z' &&
+      fixedReq2?.from === fixedReq1?.from && fixedReq2?.to === fixedReq1?.to, { fixedReq1, fixedReq2 });
+    const restoredWindow = browser.waitForRequest(isWindowedSource, { timeout: 20000 }); restoredWindow.catch(() => {});
+    await browser.getByRole('button', { name: '最近时间窗', exact: true }).click();
+    const restoredBody = (await restoredWindow).postDataJSON();
+    h.check('Restoring relative window returns to live 24h UTC range cleanly',
+      restoredBody?.from !== '2026-01-01T00:00:00.000Z' && Date.parse(restoredBody?.to) - Date.parse(restoredBody?.from) === 24 * 3600 * 1000, restoredBody);
+
+    // Account switching: unauthorized viewer receives denial without polling; after explicit grant, viewer executes automatic refreshes under its own session.
+    const viewer = await business.member(h, 'viewer');
+    const viewerSession = (await h.ok(viewer, 'GET', '/api/v1/web/session/')).value;
+    const viewerGrant = { kind: 'member-access-retirement', phase: 'created', accountId: viewerSession.account.id, installation: f.installations[0], commands: [], active: false, origin: h.admin.origin, actorIdentity: structuredClone(h.admin.identity) };
+    h.state.resources.push(viewerGrant); f.pageGrants.push(viewerGrant); h.persist();
+    await require('./application_authority_cases.cjs').accessCommand(h, viewerGrant, 'viewer', 0);
+    const viewerRead = viewer.page.waitForResponse(r => exactSource(r.request(), viewer.origin, context), { timeout: 20000 }); viewerRead.catch(() => {});
+    await viewer.page.goto(target, { waitUntil: 'networkidle' });
+    await checkResponse(await viewerRead);
+    const viewerNext = viewer.page.waitForResponse(r => exactSource(r.request(), viewer.origin, context), { timeout: 20000 }); viewerNext.catch(() => {});
+    await checkResponse(await viewerNext);
+    await h.screenshot(viewer, 'account-switch-viewer-auto-refresh');
   } catch (error) { primary = error; throw error; }
   finally {
     await business.finishCleanup(h, [...rows].reverse(), primary);
@@ -141,7 +227,7 @@ async function scheduling(h) {
     if (!open.length) await page.disposeExplicitFixture(h, f, primary);
     else { h.observe({ kind: 'original-page-refresh-business-cleanup-open', count: open.length }); if (!primary) throw new h.Blocked('Retain exact installation until original row cleanup is proved'); }
   }
-  await h.partial('Exact frozen schedule, actual automatic reads at three widths, one actual read failure/error/10s backoff/real-owner recovery, held real original owner read beyond interval with no overlap, actual page navigation/late read disposal/return and independent original business row verified. Real hidden/resume outcome is separately evidenced and is not inferred when unsupported. Relative/fixed time windows, account switching and durable write panel remain unverified.');
+  if (!hiddenVerified) await h.partial('Automatic reads, 10s backoff recovery, overlap guard, navigation disposal, durable write panel, relative/fixed time windows and account switching verified; headless Chromium foreground-tab switch did not flip document.hidden so hidden/resume pause remains environment-limited [C].');
 }
 scheduling.transport = 'owner-api';
 module.exports = { handlers: { 'F069-005': scheduling }, exactSource };

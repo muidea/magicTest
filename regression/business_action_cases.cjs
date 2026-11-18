@@ -22,12 +22,12 @@ function inputDigest(body) {
     entity: body.entity, action: body.action, id: body.id, expectedVersion: body.expectedVersion, fields: body.fields };
   return 'sha256:' + hash(JSON.stringify(wire).replace(/[<>&\u2028\u2029]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')));
 }
-function receiptMatches(actor, body, value) {
+function receiptMatches(actor, body, value, expectedState = 'acknowledged') {
   const timestamp = typeof value?.executedAt === 'string' && /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z$/.exec(value.executedAt);
   const instant = timestamp && Date.parse(value.executedAt);
   return !!value && value.apiVersion === body.apiVersion && value.operationId === body.operationId && same(value.identity, body.identity) &&
     value.inputDigest === inputDigest(body) && value.subject === actor.subject && value.entity === body.entity && value.action === body.action &&
-    value.id === body.id && value.version === String(BigInt(body.expectedVersion) + 1n) && value.state === 'acknowledged' &&
+    value.id === body.id && value.version === String(BigInt(body.expectedVersion) + 1n) && value.state === expectedState &&
     !!timestamp && Number.isFinite(instant) && (!timestamp[2] || !timestamp[2].endsWith('0')) && new Date(instant).toISOString().slice(0, 19) === timestamp[1];
 }
 function refused(response, code, message) {
@@ -71,6 +71,23 @@ async function prepare(h, authored) {
   authored.model = await a.save(h, authored.app, await a.draft(h, authored.app), [entity]);
   authored.pages = await author.read(h, authored.app, 'pages');
 }
+function configureActions(content, entity) {
+  const short = entity.split('/').at(-1);
+  content.actions = { [short]: ['acknowledge', 'resolve'] };
+  const table = content.pages.find(p => p.key === 'home').components.find(c => c.key === 'records');
+  table.properties.actions = [short + '.acknowledge', short + '.resolve']; table.properties.readonly = false;
+}
+async function prepareActions(h, authored) {
+  const { authoring: a } = require('./authoring_cases.cjs'), { authorFixture: author } = require('./page_author_cases.cjs');
+  const entity = structuredClone(authored.model.entities[0]);
+  entity.writeRules.state = { field: 'name', initial: 'open', transitions: [{ from: 'open', to: 'acknowledged' }, { from: 'acknowledged', to: 'resolved' }] };
+  entity.writeRules.actions = [
+    { key: 'acknowledge', from: 'open', to: 'acknowledged', inputFields: ['description'] },
+    { key: 'resolve', from: 'acknowledged', to: 'resolved', inputFields: ['description'] },
+  ];
+  authored.model = await a.save(h, authored.app, await a.draft(h, authored.app), [entity]);
+  authored.pages = await author.read(h, authored.app, 'pages');
+}
 async function create(h, context, definitionId) {
   const actor = await business.member(h, 'manager');
   const r = { kind: 'business-record', phase: 'intent', actorRole: 'manager', ...context, actionDefinitionId: definitionId,
@@ -98,9 +115,9 @@ async function command(h, actor, r, body, expected) {
   c.query = await h.api(actor, 'POST', route(r, true), body); h.persist();
   const after = await business.record(h, manager, r);
   h.check('Original action retains the exact acting account and subject through execution and confirmation', same(actor.identity, actorIdentity) && actor.subject === subject && actor.origin === r.origin);
-  if (!expected) {
-    const receipt = c.query.data?.value;
-    if (h.good(c.query) && receiptMatches(actor, body, receipt) && (!c.response || h.good(c.response) && same(c.response.data.value, receipt)) &&
+  if (!expected || expected.code == null && !expected.queryRefused) {
+    const receipt = c.query.data?.value, expectedState = expected?.state || 'acknowledged';
+    if (h.good(c.query) && receiptMatches(actor, body, receipt, expectedState) && (!c.response || h.good(c.response) && same(c.response.data.value, receipt)) &&
         Number.isSafeInteger(Number(receipt.version)) && h.good(after) && same(after.data.value, { ...before.data.value, name: receipt.state, version: Number(receipt.version), description: body.fields[0].value })) {
       c.receipt = receipt; c.outcome = 'confirmed'; r.version = receipt.version; h.persist();
     }
@@ -269,22 +286,26 @@ async function actionUI(h, actor, r) {
   } finally { await browser.unroute(pattern, intercept); browser.off('response', observe); await Promise.all(pending); }
 }
 async function actions(h, tag) {
-  const f = await pages.explicitFixture(h, configure, undefined, { suffix: tag, requestPrefix: tag + '-', prepareAuthor: prepare });
+  const f = await pages.explicitFixture(h, configureActions, undefined, { suffix: tag, requestPrefix: tag + '-', prepareAuthor: prepareActions });
   const manager = await business.member(h, 'manager'), contexts = [await business.runtime(h, f, 0, manager), await business.runtime(h, f, 1, manager)];
-  const rows = []; let primary;
+  const rows = []; let primary, activeMember, memberRevoked = false;
   try {
-    h.check('Frozen action is declared while ordinary data manager receives denied action projection', f.revision.entities[0].writeRules.actions[0].key === 'acknowledge' && contexts.every(c => c.ui.businessActionStatus === 'denied' && !c.ui.businessActions));
+    h.check('Frozen action is declared while ordinary data manager receives denied action projection',
+      f.revision.entities[0].writeRules.actions[0].key === 'acknowledge' && f.revision.entities[0].writeRules.actions[1]?.key === 'resolve' &&
+      contexts.every(c => c.ui.businessActionStatus === 'denied' && !c.ui.businessActions));
     for (const context of contexts) rows.push(await create(h, context, f.application.id));
     const r = rows[0], peer = rows[1], denied = { code: 5, message: '当前用户角色未授予此实例的业务动作权限', queryRefused: true };
     await command(h, manager, r, request(r), denied);
     const ordinary = (await h.directory(h.admin, '/cas/namespaces/panel/role-templates/')).filter(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2 && t.subjectType === 'account');
     const roleKey = 'entity-action-' + hash('/apps/entity-actions' + r.entity + '/acknowledge'), owner = '/applications/' + r.identity.deploymentId;
-    const roles = (await h.directory(h.admin, '/cas/namespaces/panel/roles/')).filter(t => t.module === owner && t.key === roleKey && t.status === 2);
-    h.check('CAS contains exactly one built-in frozen exact instance action role and ordinary functional profile', roles.length === 1 && ordinary.length === 1 && ordinary[0].roleRefs.length > 0, roles);
+    const roleKeyResolve = 'entity-action-' + hash('/apps/entity-actions' + r.entity + '/resolve');
+    const allOwnerRoles = (await h.directory(h.admin, '/cas/namespaces/panel/roles/')).filter(t => t.module === owner && t.status === 2);
+    const roles = allOwnerRoles.filter(t => t.key === roleKey), resolveRoles = allOwnerRoles.filter(t => t.key === roleKeyResolve);
+    h.check('CAS contains exact built-in frozen instance action roles and ordinary functional profile', roles.length === 1 && resolveRoles.length === 1 && ordinary.length === 1 && ordinary[0].roleRefs.length > 0, { roles, resolveRoles });
     await dataMatrix(h, f, contexts[0], ordinary[0], tag, rows);
     const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag, name: '仅精确业务动作', subjectType: 'account', status: 2,
       roleRefs: [...structuredClone(ordinary[0].roleRefs), { module: owner, key: roleKey }], applicationAccess: [] }, 'role-template');
-    const member = await authority.account(h, tag); r.actionTemplateId = group.id; peer.actionTemplateId = group.id; h.persist();
+    const member = await authority.account(h, tag); activeMember = member; r.actionTemplateId = group.id; peer.actionTemplateId = group.id; h.persist();
     await authority.assign(h, member, group, []);
     h.denied(await business.record(h, member.actor, r), 'Only-action role grants no ordinary business read access');
     h.denied(await business.record(h, member.actor, peer), 'Only-action role grants no peer business read access');
@@ -305,6 +326,7 @@ async function actions(h, tag) {
       { code: 21, message: '原动作身份或输入不匹配', queryRefused: true });
     h.check('Conflicting input preserves the exact original durable action receipt', same((await h.ok(member.actor, 'POST', route(r, true), body)).value, receipt));
     await command(h, member.actor, r, request(r), { code: 21, message: '动作状态前置条件不满足' });
+    await command(h, member.actor, r, request(r, { action: 'resolve' }), denied);
     h.check('Peer installation complete original row survives all original instance operations', same((await business.record(h, manager, peer)).data.value, peer.created));
     const uiGroup = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-ui', name: '动作及精确实例查看', subjectType: 'account', status: 2,
       roleRefs: structuredClone(group.roleRefs), applicationAccess: [{ applicationUuid: r.identity.deploymentId, accessLevel: 'viewer' }] }, 'role-template');
@@ -315,8 +337,42 @@ async function actions(h, tag) {
     h.check('Current reader with explicit action role receives exactly the frozen action form projection', projected.ui.businessActionStatus === 'available' &&
       same(projected.ui.businessActions, { versionField: 'version', stateField: 'name', actions: [{ key: 'acknowledge', from: 'open', to: 'acknowledged', fields: [{ name: 'description', type: 'string', nullable: true }] }] }), projected.ui.businessActions);
     await actionUI(h, member.actor, uiRow);
-    await revoke(h, member, uiGroup, ordinary[0]);
-    await command(h, member.actor, r, body, denied);
+    const resolveGroup = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-resolve', name: '全动作及精确实例查看', subjectType: 'account', status: 2,
+      roleRefs: [...structuredClone(group.roleRefs), { module: owner, key: roleKeyResolve }], applicationAccess: uiGroup.applicationAccess }, 'role-template');
+    for (const row of rows) row.actionTemplateIds.push(resolveGroup.id);
+    h.persist();
+    await authority.assign(h, member, resolveGroup, resolveGroup.applicationAccess);
+    const resolvedReceipt = await command(h, member.actor, r, request(r, { action: 'resolve', fields: [{ name: 'description', value: '完成动作 ' + h.state.prefix }] }), { state: 'resolved' });
+    h.check('Resolved transition locks out prior acknowledge step on same row', resolvedReceipt.state === 'resolved');
+    await command(h, member.actor, r, request(r), { code: 21, message: '动作状态前置条件不满足' });
+    if (h.tenantAdmin) {
+      const beforeCross = (await business.record(h, manager, r)).data.value;
+      const crossExecute = await h.api(h.tenantAdmin, 'POST', route(r, false), request(r, { action: 'resolve' }));
+      const crossQuery = await h.api(h.tenantAdmin, 'POST', route(r, true), request(r, { action: 'resolve' }));
+      h.check('Cross-tenant actor is refused on business action execute and query while preserving exact original owner record',
+        (refused(crossExecute, 4, '业务动作请求或精确身份无效') || routeDenied(crossExecute)) &&
+        (refused(crossQuery, 4, '业务动作请求或精确身份无效') || routeDenied(crossQuery)) &&
+        same((await business.record(h, manager, r)).data.value, beforeCross), { crossExecute, crossQuery });
+      const crossRead = await business.record(h, h.tenantAdmin, r);
+      h.check('Cross-tenant administrator cannot read business record',
+        crossRead.status === 403 || (crossRead.status === 200 && [2, 5].includes(crossRead.data?.error?.code) && crossRead.data?.value == null), crossRead);
+    }
+    const control = require('./installation_control_cases.cjs').control, req0 = f.pageRequests[0];
+    const beforeDisable = await business.record(h, manager, r), priorGen = r.identity.generation;
+    await control(h, req0, 'disable'); f.installations[0] = req0.installation;
+    const disabledResponse = await h.api(member.actor, 'POST', route(r, false), request(r));
+    h.check('Disabled original installation refuses business action execution at runtime gate',
+      disabledResponse?.status === 200 && disabledResponse.data?.error?.code === 2 && disabledResponse.data.error.message === 'running application not found' && disabledResponse.data.value == null, disabledResponse);
+    await control(h, req0, 'activate'); f.installations[0] = req0.installation;
+    const reactivated = await business.runtime(h, f, 0, manager);
+    for (const row of rows.filter(x => x.identity.installationId === r.identity.installationId)) row.identity = structuredClone(reactivated.identity);
+    h.persist();
+    const afterReactivate = await business.record(h, manager, r);
+    h.check('Disable/activate preserves exact original transitioned business row and advances generation cleanly',
+      h.good(afterReactivate) && same(afterReactivate.data.value, beforeDisable.data.value) && reactivated.identity.generation > priorGen, { afterReactivate, reactivated });
+    await revoke(h, member, resolveGroup, ordinary[0]);
+    memberRevoked = true;
+    await command(h, member.actor, r, request(r), denied);
     await command(h, member.actor, uiRow, request(uiRow), denied);
     h.denied(await business.record(h, member.actor, uiRow), 'Original retired action-reader session loses ordinary data access');
   } catch (error) { primary = error; throw error; }
@@ -326,13 +382,21 @@ async function actions(h, tag) {
     if (open.length) {
       h.observe({ kind: 'business-action-original-cleanup-open', count: open.length, reason: 'Keep exact original row/actor/template/installation; primary failure retained' });
       if (!primary) throw new h.Blocked('Original business action disposition unresolved; retain installation');
-    } else { await retireCaseTemplates(h, tag); await pages.disposeExplicitFixture(h, f, primary); }
+    } else {
+      if (activeMember && !memberRevoked) {
+        await h.api(h.admin, 'PUT', '/cas/namespaces/panel/accounts/' + activeMember.value.id + '/role-templates', { roleTemplateKeys: ['portal-basic-user'], applicationScopes: [] }).catch(() => {});
+      }
+      try { await retireCaseTemplates(h, tag); }
+      catch (err) { if (!primary) throw err; }
+      finally { await pages.disposeExplicitFixture(h, f, primary); }
+    }
   }
-  await h.partial('Frozen action API, data-level and only-action separation, original-session retirement, three-width real action form/single-click receipt/terminal UI, dual-instance refusal and exact receipt/replay/input conflict/stale-version/state guard supported subset completed. Endpoint/cross-tenant/other-action/expired-installation and full lifecycle matrix remain unverified.');
+  await h.partial('Frozen action API, per-action isolation (other-action grant/chain), cross-tenant refusal, disabled-installation refusal/reactivation, data-level/only-action separation, original-session retirement, three-width real action form/single-click receipt/terminal UI, dual-instance refusal and exact receipt/replay/input conflict/stale-version/state guard checks completed. Endpoint actions are excluded by design (serviceExpose supports CRUD only) and natural wall-clock token expiry/full negative fault matrix remain open [B]/[C].');
 }
 const normal = h => actions(h, 'actionnormal'), authorization = h => actions(h, 'actionauthority');
 normal.transport = authorization.transport = 'owner-api';
-module.exports = { handlers: { 'F070-001': normal, 'F070-002': authorization }, route, request, inputDigest, receiptMatches, refused, routeDenied, guardCleanup, command, configure, exactActionRequest, dataCommand, revoke };
+normal.actors = authorization.actors = ['tenantAdmin'];
+module.exports = { handlers: { 'F070-001': normal, 'F070-002': authorization }, route, request, inputDigest, receiptMatches, refused, routeDenied, guardCleanup, command, configure, prepare, create, actionUI, exactActionRequest, dataCommand, revoke };
 
 // The installation destroy fence refuses while a user-owned template still
 // references application roles. This case owns those templates, so it must

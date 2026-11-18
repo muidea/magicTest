@@ -76,9 +76,28 @@ async function prepare(h, authored) {
   h.check('Rendering the author previews never writes computed defaults back to owner', same(await author.read(h, authored.app, 'pages'), authored.pages));
   await dialog.getByRole('button', { name: '关闭页面设计器', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
+  // Attach image background + screen canvas so F068-001 verifies image backgrounds, failure fallback and screen canvas cleanly.
+  const png = await browser.screenshot({ clip: { x: 0, y: 0, width: 2, height: 2 }, animations: 'disabled' });
+  const mBefore = await author.read(h, authored.app, 'package-members'), mNext = structuredClone(mBefore.content);
+  mNext.assets ||= { schemaVersion: 'magic.application-assets/v1', files: [] };
+  const imgDigest = 'sha256:' + require('node:crypto').createHash('sha256').update(png).digest('hex');
+  authored.screenAsset = { key: 'appearance-bg', path: 'assets/appearance-bg.png', purpose: 'page-image', mime: 'image/png', size: png.length, digest: imgDigest };
+  mNext.files[authored.screenAsset.path] = png.toString('base64');
+  mNext.assets.files.push(authored.screenAsset);
+  await author.save(h, authored.app, 'package-members', mBefore, mNext);
+  const pBefore = await author.read(h, authored.app, 'pages'), pNext = structuredClone(pBefore.content);
+  const screenPage = { key: 'appearance-screen', title: '外观大屏', routes: ['/appearance-screen'], navigation: true,
+    layout: { type: 'screen', columns: 12, gap: 0, width: 1280, height: 720, scaleMode: 'proportional-fit', theme: 'dark', narrowMode: 'flow' },
+    routeParameters: [], appearance: { background: { color: '#eeeeee', image: { mode: 'asset', assetKey: 'appearance-bg', size: 'contain', position: 'center', repeat: 'no-repeat' } } },
+    components: [{ key: 'screen-text', type: 'text', layout: { span: 12, order: 1 }, dataSources: [], properties: { text: 'appearance-screen' } }] };
+  pNext.pages.push(screenPage); pNext.navigation.push(screenPage.key);
+  authored.pages = await author.save(h, authored.app, 'pages', pBefore, pNext);
+  authored.model = await require('./authoring_cases.cjs').authoring.draft(h, authored.app);
 }
 async function appearance(h) {
-  const f = await page.explicitFixture(h, undefined, undefined, { suffix: 'appearance', requestPrefix: 'appearance-', prepareAuthor: prepare,
+  let screenAsset;
+  const f = await page.explicitFixture(h, undefined, undefined, { suffix: 'appearance', requestPrefix: 'appearance-',
+    prepareAuthor: async (h2, authored) => { await prepare(h2, authored); screenAsset = authored.screenAsset; },
     prepareDelivery: async (h, f) => {
       const zip = await packageContent(h.admin, '/panel/application/model-packages/' + f.package.id + '/content', h.observe);
       h.check('Appearance roundtrip downloads the real original immutable ZIP', zip.status === 200 && Buffer.isBuffer(zip.data.bytes));
@@ -101,6 +120,24 @@ async function appearance(h) {
       }
       h.check('Three real renderer widths preserve the entire original owner projection', same(await read(), frozen));
     }
+    // Verify screen canvas + asset image background + controlled GET failure fallback on installation 0.
+    const ctx0 = await business.runtime(h, f, 0, actor);
+    await actor.page.setViewportSize({ width: 1440, height: 1000 });
+    await actor.page.goto(actor.origin + '/workbench/apps/' + encodeURIComponent(f.application.name) + '?' + new URLSearchParams({ source: 'portal', deploymentId: ctx0.identity.deploymentId, pageKey: 'appearance-screen' }), { waitUntil: 'networkidle' });
+    const stage = actor.page.locator('.application-page-screen-stage');
+    await stage.waitFor();
+    await actor.page.waitForFunction(el => /^url\("blob:/.test(getComputedStyle(el).backgroundImage), await stage.elementHandle(), { timeout: 30000 });
+    const darkColor = await actor.page.locator('.application-page-screen-dark').evaluate(n => getComputedStyle(n).color);
+    h.check('Appearance screen canvas renders dark theme and background blob cleanly', darkColor === 'rgb(230, 237, 247)', { darkColor });
+    const failMatch = url => url.origin === actor.origin && url.pathname === '/api/v1/web/proxy/apps/application/assets/' + screenAsset.key && url.searchParams.get('deploymentId') === ctx0.identity.deploymentId;
+    let failCount = 0;
+    await actor.page.route(failMatch, async r => { failCount++; await r.fulfill({ status: 503, contentType: 'text/plain', body: 'controlled appearance image unavailable' }); });
+    try {
+      await actor.page.goto(actor.origin + '/workbench/apps/' + encodeURIComponent(f.application.name) + '?' + new URLSearchParams({ source: 'portal', deploymentId: ctx0.identity.deploymentId, pageKey: 'appearance-screen' }), { waitUntil: 'networkidle' });
+      await actor.page.locator('.application-page-image-feedback[role="alert"]').waitFor({ timeout: 30000 });
+      const bgAfterFail = await stage.evaluate(n => getComputedStyle(n).backgroundImage);
+      h.check('Appearance image GET failure falls back cleanly and reports alert', failCount > 0 && bgAfterFail === 'none', { failCount, bgAfterFail });
+    } finally { await actor.page.unroute(failMatch); }
     const current = await author.read(h, f.application, 'pages'), changed = structuredClone(current.content);
     changed.pages.find(p => p.key === 'home').presentationDefaults.background.color = '#ffffff';
     await author.save(h, f.application, 'pages', current, changed);
@@ -110,7 +147,6 @@ async function appearance(h) {
     }
   } catch (error) { primary = error; throw error; }
   finally { await page.disposeExplicitFixture(h, f, primary); }
-  await h.partial('Scalar appearance inheritance/clear/restore, actual background field local clear/conditional save/restore, transparent/six/eight-digit colors,0/12px borders, three author previews, real ZIP import, dual ordinary installations at three widths and unpublished isolation verified. Image backgrounds/failure fallback and screen canvas remain unverified in this scalar executor.');
 }
 appearance.transport = 'owner-api';
 appearance.requiresOnlyDeliveryFixture = true;
