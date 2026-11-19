@@ -152,12 +152,14 @@ async function upgrade(h) {
     const preRefId = seededRows[0].id;
     row = await business.create(h, { ...context, scenarioUpgradeRequestId: source.id, scenarioDefinitionId: f.application.id }, 'upgrade-original');
     peerRow = await business.create(h, { ...peer, scenarioDefinitionId: f.application.id }, 'upgrade-peer');
-    // Prepare compatible generated service + publication + subscription + ApiKey before upgrade.
+    // Prepare compatible generated service (including create on writeRules entity) + publication + subscription + ApiKey before upgrade.
     const allCaps = await generated.snapshot(h), srcUuid = source.installation.receipt.runtimeApplicationUuid;
     const getCap = allCaps[generated.capabilities].find(c => c.providerType === 'application' && c.providerKey === srcUuid && c.kind === 'get' && c.status === 1 && !allCaps[generated.bindings].some(b => b.capability?.id === c.id));
-    h.check('Upgrade fixture finds unoccupied get capability for compatible service handoff', !!getCap);
-    svc = generated.intent(h, h.state.prefix + '_upgrade_svc', [getCap.id], srcUuid);
-    await generated.converge(h, svc, [getCap.id], '升级兼容生成服务');
+    const createCap = allCaps[generated.capabilities].find(c => c.providerType === 'application' && c.providerKey === srcUuid && c.kind === 'create' && c.status === 1 && !allCaps[generated.bindings].some(b => b.capability?.id === c.id));
+    h.check('Upgrade fixture finds unoccupied get and create capabilities for compatible service handoff', !!getCap && !!createCap);
+    const handoffCapIds = [getCap.id, createCap.id];
+    svc = generated.intent(h, h.state.prefix + '_upgrade_svc', handoffCapIds, srcUuid);
+    await generated.converge(h, svc, handoffCapIds, '升级兼容生成服务');
     const pub0 = svc.last.publications[0];
     await generated.mutation(h, svc, 'PUT', generated.publications + pub0.id, { service: { id: svc.serviceId }, status: 1, visibleScope: 'panel', allowSubscription: true, requireApproval: false, maxSubscriptions: 2, maxQPS: 0, dailyQuota: 0 }, async r => h.check('Publication allows upgrade-test subscription', h.good(r)));
     await generated.publish(h, svc);
@@ -172,7 +174,9 @@ async function upgrade(h) {
     cred = await graph.credential(h, sub, 'upgrade-svc-key');
     await endpointTemplates(h, cred, [epTemplate.key]);
     const dbg = (await h.ok(m.actor, 'GET', '/portal/service/debug/' + svc.serviceId)).value;
-    const opGetPath = dbg.operations[0].pathTemplate.replace(/\{id\}/g, row.recordId);
+    const getOp = dbg.operations.find(o => o.method === 'GET' && o.pathTemplate.includes('{id}'));
+    h.check('Upgrade service debug exposes get operation', !!getOp, dbg);
+    const opGetPath = getOp.pathTemplate.replace(/\{id\}/g, row.recordId);
     const preGateway = await keyRead(h.admin.origin, opGetPath, cred.apiKey);
     h.check('Pre-upgrade Gateway call succeeds with exact original ApiKey', h.good(preGateway) && same(preGateway.data.value, row.created), preGateway);
     const beforePages = await author.read(h, f.application, 'pages'), content = structuredClone(beforePages.content);
@@ -198,7 +202,7 @@ async function upgrade(h) {
     h.check('Upgrade preview binds referenceDataPolicy=preserve-existing and exact compatible service handoff',
       target.last.upgrade.referenceDataPolicy === 'preserve-existing' &&
       target.last.upgrade.serviceHandoffs?.length === 1 && target.last.upgrade.serviceHandoffs[0].service?.id === svc.serviceId &&
-      target.last.upgrade.serviceHandoffs[0].bindings?.length === 1, target.last.upgrade);
+      target.last.upgrade.serviceHandoffs[0].bindings?.length === handoffCapIds.length, target.last.upgrade);
     const maintenanceTrail = [];
     await review.approve(h, target, [h.admin], { observeOperation: (_req, op) => maintenanceTrail.push({ status: op.status, currentStep: op.currentStep }) });
     h.observe({ kind: 'model-upgrade-maintenance-trail', trail: maintenanceTrail });
