@@ -2,6 +2,7 @@
 // CAS and the operation-log owner. No direct log writes or fabricated events.
 const { isDeepStrictEqual: same } = require('node:util');
 const crypto = require('node:crypto');
+const { PORTAL_CORE_KEY, TENANT_OPS_ACCOUNTS_KEY } = require('./platform_profiles.cjs');
 const serviceRoute = '/panel/hub/services/';
 const roleKeys = rows => rows.map(r => r.module + ':' + r.key + ':' + r.status).sort();
 async function confirmRoleChange(h, actor, resource, command) {
@@ -44,9 +45,9 @@ const handlers={'F057-001':async h=>{
  const initial=await h.directory(h.admin,audit),beforeIDs=new Set(initial.map(r=>r.id)),started=Date.now();
  await h.rejectedLogin(original.identity.account,original.password+'-wrong-'+crypto.randomBytes(4).toString('hex'),n);
  const fresh=await h.login(original.identity.account,original.password,n);
- const target=await h.createAs('tenantAdmin','/cas/namespaces/'+n+'/accounts/',{account:h.state.prefix+'-audit-target',displayName:'回归审计目标',password:h.state.password,status:2,roleTemplateKeys:['portal-user']},'account');
+ const target=await h.createAs('tenantAdmin','/cas/namespaces/'+n+'/accounts/',{account:h.state.prefix+'-audit-target',displayName:'回归审计目标',password:h.state.password,status:2,roleTemplateKeys:[PORTAL_CORE_KEY]},'account');
  const account=h.state.resources.find(r=>r.kind==='account'&&r.id===target.id);
- const changed=await changeRoles(h,original,account,['portal-user','tenant-security-admin']);
+ const changed=await changeRoles(h,original,account,[PORTAL_CORE_KEY,TENANT_OPS_ACCOUNTS_KEY]);
  const operationActor=h.admin,operationNamespace=operationActor.identity.namespace;
  const operationSession=(await h.ok(operationActor,'GET','/api/v1/web/session/')).value,operationSubject='account:'+operationSession.account.id;
  const key=h.state.prefix+'_audit';
@@ -85,7 +86,7 @@ const handlers={'F057-001':async h=>{
  const roleDetails=authority.map(r=>{try{return JSON.parse(r.detailJson||'{}');}catch{return {};}});
  h.check('Formal authorization-change audit event records original actor, target, namespace, source and role templates',
   authority.length>0&&authority.every(r=>r.namespace===n&&r.targetNamespace===n&&r.actorNamespace===n&&r.actorSubject===subject&&r.remoteAddr&&r.clientId)&&
-  roleDetails.some(d=>d.changed===true&&same([...(d.templateKeys||[])].sort(),['portal-user','tenant-security-admin'])),{authority,roleDetails});
+  roleDetails.some(d=>d.changed===true&&same([...(d.templateKeys||[])].sort(),[PORTAL_CORE_KEY,TENANT_OPS_ACCOUNTS_KEY].sort())),{authority,roleDetails});
  const casEvents=await h.directory(original,audit);
  h.check('Direct CAS namespace security audit agrees with tenant Panel access audit on recorded authorization change',
   authority.every(a=>casEvents.some(c=>c.id===a.id&&c.eventType===a.eventType&&c.subject===a.subject&&c.namespace===a.namespace)),{authorityCount:authority.length});

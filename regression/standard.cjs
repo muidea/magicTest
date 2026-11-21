@@ -12,6 +12,7 @@ const { restoreSessionPolicy } = require('./session_cases.cjs');
 const { publicGet } = require('./public_probe.cjs');
 const { cleanupNegativeMutation } = require('./negative_mutations.cjs');
 const { readDirectory } = require('./directory.cjs');
+const { tenantPortalKeys } = require('./platform_profiles.cjs');
 const { createResource, deleteResource } = require('./resource_lifecycle.cjs');
 const root = path.resolve(__dirname, '..');
 const options = {};
@@ -553,7 +554,10 @@ async function main() {
         }
       }
       const a = state.fixtures.tenantA, b = state.fixtures.tenantB;
-      if (!state.fixtures.user) { state.fixtures.user = await create('/cas/namespaces/' + a.name + '/accounts/', { account: state.prefix + '-member', displayName: '回归普通成员', password: state.password, status: 2, roleTemplateKeys: ['portal-user'] }, 'account'); persist(); }
+      if (!state.fixtures.user) {
+        const userTemplateKeys = await tenantPortalKeys(h, a.name, admin, route => readDirectory(h, admin, route));
+        state.fixtures.user = await create('/cas/namespaces/' + a.name + '/accounts/', { account: state.prefix + '-member', displayName: '回归普通成员', password: state.password, status: 2, roleTemplateKeys: userTemplateKeys }, 'account'); persist();
+      }
       user = await login(state.fixtures.user.account, state.fixtures.userPassword || state.password, a.name, state.password + 'U');
       state.fixtures.userPassword = user.password; persist(); h.user = user;
       for (const [namespace, key] of [[a, 'tenantAdmin'], [b, 'otherTenantAdmin']]) {

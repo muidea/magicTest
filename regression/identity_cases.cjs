@@ -6,7 +6,8 @@ const authorization = '/internal/modules/kernel/authorization';
 const ref = (module, key) => ({ module, key });
 const runnerRef = key => ref(runner, key);
 const casBase = n => '/cas/namespaces/' + n + '/';
-const profile = 'portal-user';
+const { PORTAL_CORE_KEY, TENANT_OPS_AUDIT_METRICS_KEY } = require('./platform_profiles.cjs');
+const profile = PORTAL_CORE_KEY;
 const catalogCollection = '/panel/infra/catalogs/';
 const serviceCollection = '/panel/hub/services/';
 handlers['F010-001'] = async h => {
@@ -36,9 +37,9 @@ async function exact(h, actor, route, before, message) {
   h.check(message, sameAuthority(after, before));
 }
 
-async function template(h, n, suffix, roleRefs, actorName = 'admin') {
+async function template(h, n, suffix, roleRefs, actorName = 'admin', scene = 'management') {
   const payload = { key: h.state.prefix + '-' + suffix, name: '回归模板 ' + suffix,
-    description: '当前用例受控委派模板', subjectType: 'account', roleRefs, applicationAccess: [], status: 2 };
+    description: '当前用例受控委派模板', scene, subjectType: 'account', roleRefs, applicationAccess: [], status: 2 };
   const value = await h.createAs(actorName, casBase(n) + 'role-templates/', payload, 'role-template');
   return { value, payload };
 }
@@ -78,12 +79,24 @@ handlers['F005-001'] = async h => {
   const originalRole = runnerRef('management-service-manager'), editedRole = runnerRef('management-catalog-manager');
   for (const role of [originalRole, editedRole]) h.check('Role directory exposes exact enabled role ' + role.key,
     roles.values.some(x => x.module === role.module && x.key === role.key && x.status === 2));
-  const t = await template(h, n, 'edit-template', [originalRole]);
+  const t = await template(h, n, 'edit-template', [originalRole], 'admin', 'management');
   const route = base + 'role-templates/' + t.value.id;
   const updated = { ...t.payload, name: '已编辑回归模板', description: '模板已切换分类管理角色', roleRefs: [editedRole] };
   await h.ok(h.admin, 'PUT', route, updated);
   const saved = (await h.ok(h.admin, 'GET', route)).value;
-  h.check('Template edit persists exact role composition and new owner revision', saved.key === t.payload.key && saved.name === updated.name && saved.description === updated.description && saved.version > t.value.version && saved.roleRefs?.length === 1 && saved.roleRefs[0].module === editedRole.module && saved.roleRefs[0].key === editedRole.key, saved);
+  h.check('Template edit persists exact role composition, immutable scene and new owner revision', saved.key === t.payload.key && saved.scene === 'management' && saved.name === updated.name && saved.description === updated.description && saved.version > t.value.version && saved.roleRefs?.length === 1 && saved.roleRefs[0].module === editedRole.module && saved.roleRefs[0].key === editedRole.key, saved);
+  // Single-scene & immutable-scene & D4-2 A1 fences must reject invalid custom templates without mutating saved state.
+  for (const [label, method, targetRoute, badPayload] of [
+    ['missing scene', 'POST', base + 'role-templates/', { key: h.state.prefix + '-missing-scene', name: '缺场景', subjectType: 'account', roleRefs: [editedRole], applicationAccess: [], status: 2 }],
+    ['mixed-scene roles', 'POST', base + 'role-templates/', { key: h.state.prefix + '-mixed-scene', name: '混场景', scene: 'management', subjectType: 'account', roleRefs: [ref(authorization, 'role-template-manager'), editedRole], applicationAccess: [], status: 2 }],
+    ['non-usage applicationAccess', 'POST', base + 'role-templates/', { key: h.state.prefix + '-mgmt-app-access', name: '管理模板禁应用范围', scene: 'management', subjectType: 'account', roleRefs: [editedRole], applicationAccess: [{ applicationUuid: '*', accessLevel: 'viewer' }], status: 2 }],
+    ['immutable scene update', 'PUT', route, { ...updated, scene: 'operations' }],
+  ]) {
+    const res = await h.api(h.admin, method, targetRoute, badPayload);
+    if (method === 'POST' && h.good(res) && res.data.value?.id) h.owned(base + 'role-templates/', res.data.value, 'unexpected-template');
+    h.check('Template fence rejects ' + label, !h.good(res) && res.data?.value == null, res);
+  }
+  await exact(h, h.admin, route, saved, 'Rejected template mutations leave saved template unchanged');
   const account = await member(h, n, 'template-member', [profile]);
   const actor = await h.login(account.account, h.state.password, n, h.state.password + 'T');
   const target = await catalog(h, 'template-target');
@@ -102,15 +115,16 @@ handlers['F005-001'] = async h => {
 handlers['F005-002'] = async h => {
   const n = h.need('tenantA').name, base = casBase(n);
   const low = runnerRef('management-catalog-manager'), high = runnerRef('management-service-manager');
-  const delegation = await template(h, n, 'delegator', [ref(authorization, 'role-template-manager'), low]);
-  const manager = await member(h, n, 'delegator', [profile, delegation.value.key]);
+  const delegationOps = await template(h, n, 'delegator-ops', [ref(authorization, 'role-template-manager')], 'admin', 'operations');
+  const delegationMgmt = await template(h, n, 'delegator-mgmt', [low], 'admin', 'management');
+  const manager = await member(h, n, 'delegator', [profile, delegationOps.value.key, delegationMgmt.value.key]);
   const actor = await h.login(manager.account, h.state.password, n, h.state.password + 'D');
   h.limitedTemplateManager = actor;
   const target = await catalog(h, 'delegator-target');
   await h.ok(actor, 'GET', catalogCollection + target.id);
   h.denied(await h.api(actor, 'GET', serviceCollection), 'Limited manager does not own requested higher service authority');
-  const allowed = await template(h, n, 'delegated-low', [low], 'limitedTemplateManager');
-  const highTemplate = await template(h, n, 'higher-owned', [high]);
+  const allowed = await template(h, n, 'delegated-low', [low], 'limitedTemplateManager', 'management');
+  const highTemplate = await template(h, n, 'higher-owned', [high], 'admin', 'management');
   const subject = await member(h, n, 'delegated-member', [profile, allowed.value.key]);
   const route = base + 'role-templates/' + allowed.value.id;
   const templateBefore = (await h.ok(h.admin, 'GET', route)).value;
@@ -125,8 +139,8 @@ handlers['F005-002'] = async h => {
   ceiling(created, 'Cannot create a template above own authority');
   ceiling(await h.api(actor, 'PUT', route, { ...allowed.payload, roleRefs: [low, high] }), 'Cannot enlarge an existing template above own authority');
   ceiling(await h.api(actor, 'POST', base + 'accounts/' + subject.id + '/authority/preview', { roleTemplateKeys: [profile, highTemplate.value.key] }), 'Authority preview cannot escape same delegation ceiling');
-  // Avoid the broad portal-user preset here: its unrelated usage-role ceiling
-  // would reject before the exact higher role targeted by this test.
+  // Avoid passing unrelated usage profiles with the higher-role probe so the
+  // delegation check hits the exact higher management role targeted here.
   ceiling(await h.api(actor, 'PUT', base + 'accounts/' + subject.id + '/role-templates', { roleTemplateKeys: [highTemplate.value.key] }), 'Cannot assign higher owner template to a member');
   ceiling(await h.api(actor, 'POST', base + 'role-templates/' + highTemplate.value.id + '/synchronize'), 'Template synchronization cannot bypass delegation ceiling');
   await exact(h, h.admin, route, templateBefore, 'Rejected create/edit leaves original low template exact');
@@ -201,7 +215,7 @@ handlers['F001-001'] = async h => {
   h.check('Fresh tenant has exactly one owner-created bootstrap administrator', accounts.length === 1 && accounts[0].status === 2);
   const account = accounts[0];
   // OAuth management is namespace-local, even for platform governance admins.
-  const observerAccount = await member(h, created.name, 'local-auditor', [profile, 'tenant-security-admin']);
+  const observerAccount = await member(h, created.name, 'local-auditor', [profile, TENANT_OPS_AUDIT_METRICS_KEY]);
   const observer = await h.login(observerAccount.account, h.state.password, created.name, h.state.password + 'A');
   let restricted = false;
   const actor = await h.login(account.account, h.state.password, created.name, h.state.password + 'F', async pending => {

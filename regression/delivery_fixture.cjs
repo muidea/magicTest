@@ -11,6 +11,7 @@ const { ownerRequest } = require('./owner_transport.cjs');
 const { withOriginalCasForms } = require('./cas_form_transport.cjs');
 const { createResource } = require('./resource_lifecycle.cjs');
 const { sanitize } = require('./evidence_sanitizer.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 
 function isIsolatedNestedDaemon(config) {
   return config?.mode !== 'local-panel';
@@ -211,7 +212,7 @@ async function main() {
       for (const [role, access] of [['manager', 'manager'], ['viewer', 'viewer'], ['outsider', '']]) {
         const password = 'Member@' + crypto.randomBytes(20).toString('hex');
         const account = await h.create('/cas/namespaces/panel/accounts/', { account: state.prefix + '-' + role,
-          displayName: 'Regression ordinary ' + role, password, status: 2, roleTemplateKeys: ['portal-basic-user'] }, 'account');
+          displayName: 'Regression ordinary ' + role, password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS }, 'account');
         state.members[role] = { account: account.account, id: account.id, password, access, assignments: [] }; persist();
         if (access) for (const instance of state.installations) {
           const collection = '/panel/application/installations/' + instance.id + '/access-operations/';

@@ -1,6 +1,7 @@
 // Authoring commands use isolated definitions, never installed business data.
 const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const handlers = {};
 const base = '/panel/application/definitions/';
 const clone = value => structuredClone(value);
@@ -157,10 +158,10 @@ handlers['F067-004'] = async h => {
   content.pages = [{ key: 'home', title: '只读能力预检', routes: ['/'], navigation: true, layout: { type: 'responsive-grid', columns: 12, gap: 0 }, routeParameters: [], components: [{ key: 'title', type: 'text', layout: { span: 12, order: 0 }, dataSources: [], properties: { text: '真实作者草稿' } }] }];
   const payload = { expectedDefinitionVersion: before.definitionVersion, content };
   const cas = '/cas/namespaces/' + h.credentials.namespace + '/';
-  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-page-reader', name: '回归页面只读作者', description: '复用正式发布负责人读取权限', subjectType: 'account', roleRefs: [{ module: '/modules/kernel/runner', key: 'management-application-publisher' }], applicationAccess: [], status: 2 }, 'role-template');
+  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-page-reader', name: '回归页面只读作者', description: '复用正式发布负责人读取权限', scene: 'management', subjectType: 'account', roleRefs: [{ module: '/modules/kernel/runner', key: 'management-application-publisher' }], applicationAccess: [], status: 2 }, 'role-template');
   const account = await h.create(cas + 'accounts/', { account: h.state.prefix + '-page-reader', displayName: '回归页面只读作者', password: h.state.password, status: 2, roleTemplateKeys: [template.key] }, 'account');
   const reader = await h.login(account.account, h.state.password, h.credentials.namespace, h.state.password + 'P');
-  const ordinaryAccount = await h.create(cas + 'accounts/', { account: h.state.prefix + '-page-member', displayName: '同租户无作者权限成员', password: h.state.password, status: 2, roleTemplateKeys: ['portal-basic-user'] }, 'account');
+  const ordinaryAccount = await h.create(cas + 'accounts/', { account: h.state.prefix + '-page-member', displayName: '同租户无作者权限成员', password: h.state.password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS }, 'account');
   const ordinary = await h.login(ordinaryAccount.account, h.state.password, h.credentials.namespace, h.state.password + 'M');
   for (const actor of [h.admin, reader]) {
     h.check('Owner read is identical for authorized author and reader', same((await h.ok(actor, 'GET', route)).value, before));

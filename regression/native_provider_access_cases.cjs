@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
 const { fixture } = require('./delivery_cases.cjs');
 const { packageContent } = require('./owner_transport.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const packages = '/panel/application/deployment-packages/';
 const requests = '/panel/application/deployment-requests/';
 const operations = '/panel/operations/namespaces/panel/application-deployment-operations/';
@@ -105,10 +106,10 @@ async function publisher(h) {
   const base = '/cas/namespaces/panel/', keys = ['management-application-publisher', 'management-namespace-application-operator'], keyPrefix = h.state.prefix + '-native-' + crypto.randomBytes(3).toString('hex');
   const roles = await h.directory(h.admin, base + 'roles/');
   h.check('Current owner catalog contains both human author/requester roles', keys.every(key => roles.some(v => v.key === key && v.module === '/modules/kernel/runner' && v.humanAssignable && v.status === 2)));
-  const template = await h.create(base + 'role-templates/', { key: keyPrefix, name: '仅应用发布及申请', subjectType: 'account',
+  const template = await h.create(base + 'role-templates/', { key: keyPrefix, name: '仅应用发布及申请', scene: 'management', subjectType: 'account',
     roleRefs: keys.map(key => ({ module: '/modules/kernel/runner', key })), applicationAccess: [], status: 2 }, 'role-template');
   const account = await h.create(base + 'accounts/', { account: keyPrefix, displayName: '普通原生作者', password: h.state.password,
-    status: 2, roleTemplateKeys: ['portal-basic-user', template.key] }, 'account');
+    status: 2, roleTemplateKeys: [...PORTAL_BASIC_KEYS, template.key] }, 'account');
   const actor = await h.login(account.account, h.state.password, 'panel', h.state.password + 'N');
   const current = await read(h, base + 'accounts/' + account.id);
   h.check('Independent CAS confirms original default-space author has publisher/requester roles and no operations role', actor.identity.namespace === 'panel' && actor.identity.account === account.account &&

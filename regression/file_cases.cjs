@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
 const { fileTransfer } = require('./owner_transport.cjs');
+const { PORTAL_CORE_KEY, PORTAL_SELF_FILES_KEY } = require('./platform_profiles.cjs');
 const handlers = {}, self = '/files/self/files/', managed = '/files/';
 const hash = b => 'sha256:' + crypto.createHash('sha256').update(b).digest('hex');
 const validID = id => Number.isSafeInteger(id) && id > 0;
@@ -117,7 +118,7 @@ handlers['F049-001'] = async h => {
 handlers['F049-002'] = async h => {
   const r = await createFile(h, 'user', 'self');
   const ns = h.user.identity.namespace;
-  const account = await h.create('/cas/namespaces/' + ns + '/accounts/', { account: h.state.prefix + '-file-peer-' + crypto.randomBytes(4).toString('hex'), displayName: '个人文件同租户对照', password: h.state.password, status: 2, roleTemplateKeys: ['portal-user'] }, 'account');
+  const account = await h.create('/cas/namespaces/' + ns + '/accounts/', { account: h.state.prefix + '-file-peer-' + crypto.randomBytes(4).toString('hex'), displayName: '个人文件同租户对照', password: h.state.password, status: 2, roleTemplateKeys: [PORTAL_CORE_KEY, PORTAL_SELF_FILES_KEY] }, 'account');
   const peer = await h.login(account.account, h.state.password, ns, h.state.password + 'F');
   for (const actor of [peer, h.otherTenantAdmin]) {
     const session = (await h.ok(actor, 'GET', '/api/v1/web/session/')).value;

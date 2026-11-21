@@ -1,5 +1,6 @@
 const graph = require('./service_graph.cjs');
 const { isDeepStrictEqual: same } = require('node:util');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const handlers = {};
 async function policy(h, accessKind, enabled) {
   const n = h.tenantAdmin.identity.namespace, route = '/cas/namespaces/' + n + '/oauth/server';
@@ -28,7 +29,7 @@ async function rejectedCredential(h, s, name, extra, diagnostic) {
 }
 async function member(h, suffix) {
   const n = h.tenantAdmin.identity.namespace;
-  const account = await h.createAs('tenantAdmin', '/cas/namespaces/' + n + '/accounts/', { account: h.state.prefix + '-' + suffix, displayName: '服务回归成员', password: h.state.password, roleTemplateKeys: ['portal-user'], status: 2 }, 'account');
+  const account = await h.createAs('tenantAdmin', '/cas/namespaces/' + n + '/accounts/', { account: h.state.prefix + '-' + suffix, displayName: '服务回归成员', password: h.state.password, roleTemplateKeys: PORTAL_BASIC_KEYS, status: 2 }, 'account');
   return h.login(account.account, h.state.password, n, h.state.password + suffix);
 }
 function refused(h, r, label) {
@@ -94,7 +95,7 @@ handlers['F043-003'] = async h => {
   const n = actor.identity.namespace, accounts = '/cas/namespaces/' + n + '/accounts/';
   const account = (await h.directory(h.tenantAdmin, accounts)).find(x => x.account === actor.identity.account);
   h.check('Disabling targets the dedicated original subscriber account', account?.id > 0);
-  await h.ok(h.tenantAdmin, 'PUT', accounts + account.id, { account: account.account, displayName: account.displayName, email: account.email || '', description: account.description || '', status: 1, roleTemplateKeys: ['portal-user'] });
+  await h.ok(h.tenantAdmin, 'PUT', accounts + account.id, { account: account.account, displayName: account.displayName, email: account.email || '', description: account.description || '', status: 1, roleTemplateKeys: PORTAL_BASIC_KEYS });
   h.check('Independent CAS account owner confirms unavailable original subscriber', (await h.ok(h.tenantAdmin, 'GET', accounts + account.id)).value.status === 1);
   refused(h, await h.api(actor, 'GET', '/portal/service/debug/' + f.service.id), 'Disabled subscriber cannot retain protected service debug access');
   refused(h, await h.api(actor, 'GET', '/portal/service/credentials/?service=' + f.service.id), 'Disabled subscriber cannot retain service credential visibility');

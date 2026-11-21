@@ -4,6 +4,7 @@ const { isDeepStrictEqual: same } = require('node:util');
 const business = require('./business_cases.cjs');
 const pages = require('./page_runtime_cases.cjs');
 const authority = require('./application_authority_cases.cjs');
+const { PORTAL_BASIC_KEYS, portalBasicProfileSet } = require('./platform_profiles.cjs');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 function route(r, query = false) {
   // Bearer NormalizeURI maps action/query/ to actions/.
@@ -137,7 +138,7 @@ async function command(h, actor, r, body, expected) {
 async function revoke(h, member, group, ordinary) {
   const r = member.resource;
   if (r.authorityCommands?.some(c => c.outcome === 'unknown')) throw new h.Blocked('Original role assignment unresolved; no revocation replacement');
-  const body = { roleTemplateKeys: ['portal-basic-user'], applicationScopes: [] };
+  const body = { roleTemplateKeys: PORTAL_BASIC_KEYS, applicationScopes: [] };
   const c = { method: 'PUT', route: '/cas/namespaces/panel/accounts/' + member.value.id + '/role-templates', body, outcome: 'unknown', retiredTemplateKey: group.key };
   (r.authorityCommands ||= []).push(c); h.persist();
   c.response = await h.api(h.admin, c.method, c.route, body); h.persist();
@@ -180,7 +181,7 @@ async function dataCommand(h, actor, r, operation, allowed) {
   h.check('Original reliable data command, receipt and independent full owner row agree with current role', c.outcome !== 'unknown', { command: c, after });
 }
 async function dataMatrix(h, f, context, ordinary, tag, rows) {
-  const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-data', name: '数据权限不隐含动作', subjectType: 'account', status: 2,
+  const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-data', name: '数据权限不隐含动作', scene: 'usage', subjectType: 'account', status: 2,
     roleRefs: structuredClone(ordinary.roleRefs), applicationAccess: [{ applicationUuid: context.identity.deploymentId, accessLevel: 'manager' }] }, 'role-template');
   const member = await authority.account(h, tag + '-data'), row = await create(h, context, f.application.id); rows.push(row); row.actionTemplateIds = [group.id]; h.persist();
   const denied = { code: 5, message: '当前用户角色未授予此实例的业务动作权限', queryRefused: true };
@@ -296,15 +297,15 @@ async function actions(h, tag) {
     for (const context of contexts) rows.push(await create(h, context, f.application.id));
     const r = rows[0], peer = rows[1], denied = { code: 5, message: '当前用户角色未授予此实例的业务动作权限', queryRefused: true };
     await command(h, manager, r, request(r), denied);
-    const ordinary = (await h.directory(h.admin, '/cas/namespaces/panel/role-templates/')).filter(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2 && t.subjectType === 'account');
+    const ordinary = portalBasicProfileSet(await h.directory(h.admin, '/cas/namespaces/panel/role-templates/'));
     const roleKey = 'entity-action-' + hash('/apps/entity-actions' + r.entity + '/acknowledge'), owner = '/applications/' + r.identity.deploymentId;
     const roleKeyResolve = 'entity-action-' + hash('/apps/entity-actions' + r.entity + '/resolve');
     const allOwnerRoles = (await h.directory(h.admin, '/cas/namespaces/panel/roles/')).filter(t => t.module === owner && t.status === 2);
     const roles = allOwnerRoles.filter(t => t.key === roleKey), resolveRoles = allOwnerRoles.filter(t => t.key === roleKeyResolve);
-    h.check('CAS contains exact built-in frozen instance action roles and ordinary functional profile', roles.length === 1 && resolveRoles.length === 1 && ordinary.length === 1 && ordinary[0].roleRefs.length > 0, { roles, resolveRoles });
-    await dataMatrix(h, f, contexts[0], ordinary[0], tag, rows);
-    const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag, name: '仅精确业务动作', subjectType: 'account', status: 2,
-      roleRefs: [...structuredClone(ordinary[0].roleRefs), { module: owner, key: roleKey }], applicationAccess: [] }, 'role-template');
+    h.check('CAS contains exact built-in frozen instance action roles and ordinary functional profiles', roles.length === 1 && resolveRoles.length === 1 && ordinary.complete && ordinary.roleRefs.length > 0, { roles, resolveRoles });
+    await dataMatrix(h, f, contexts[0], ordinary, tag, rows);
+    const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag, name: '仅精确业务动作', scene: 'usage', subjectType: 'account', status: 2,
+      roleRefs: [...structuredClone(ordinary.roleRefs), { module: owner, key: roleKey }], applicationAccess: [] }, 'role-template');
     const member = await authority.account(h, tag); activeMember = member; r.actionTemplateId = group.id; peer.actionTemplateId = group.id; h.persist();
     await authority.assign(h, member, group, []);
     h.denied(await business.record(h, member.actor, r), 'Only-action role grants no ordinary business read access');
@@ -328,7 +329,7 @@ async function actions(h, tag) {
     await command(h, member.actor, r, request(r), { code: 21, message: '动作状态前置条件不满足' });
     await command(h, member.actor, r, request(r, { action: 'resolve' }), denied);
     h.check('Peer installation complete original row survives all original instance operations', same((await business.record(h, manager, peer)).data.value, peer.created));
-    const uiGroup = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-ui', name: '动作及精确实例查看', subjectType: 'account', status: 2,
+    const uiGroup = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-ui', name: '动作及精确实例查看', scene: 'usage', subjectType: 'account', status: 2,
       roleRefs: structuredClone(group.roleRefs), applicationAccess: [{ applicationUuid: r.identity.deploymentId, accessLevel: 'viewer' }] }, 'role-template');
     const uiRow = await create(h, contexts[0], f.application.id); rows.push(uiRow);
     for (const row of rows) { (row.actionTemplateIds ||= []).push(group.id, uiGroup.id); } h.persist();
@@ -337,7 +338,7 @@ async function actions(h, tag) {
     h.check('Current reader with explicit action role receives exactly the frozen action form projection', projected.ui.businessActionStatus === 'available' &&
       same(projected.ui.businessActions, { versionField: 'version', stateField: 'name', actions: [{ key: 'acknowledge', from: 'open', to: 'acknowledged', fields: [{ name: 'description', type: 'string', nullable: true }] }] }), projected.ui.businessActions);
     await actionUI(h, member.actor, uiRow);
-    const resolveGroup = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-resolve', name: '全动作及精确实例查看', subjectType: 'account', status: 2,
+    const resolveGroup = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-' + tag + '-resolve', name: '全动作及精确实例查看', scene: 'usage', subjectType: 'account', status: 2,
       roleRefs: [...structuredClone(group.roleRefs), { module: owner, key: roleKeyResolve }], applicationAccess: uiGroup.applicationAccess }, 'role-template');
     for (const row of rows) row.actionTemplateIds.push(resolveGroup.id);
     h.persist();
@@ -370,7 +371,7 @@ async function actions(h, tag) {
     const afterReactivate = await business.record(h, manager, r);
     h.check('Disable/activate preserves exact original transitioned business row and advances generation cleanly',
       h.good(afterReactivate) && same(afterReactivate.data.value, beforeDisable.data.value) && reactivated.identity.generation > priorGen, { afterReactivate, reactivated });
-    await revoke(h, member, resolveGroup, ordinary[0]);
+    await revoke(h, member, resolveGroup, ordinary);
     memberRevoked = true;
     await command(h, member.actor, r, request(r), denied);
     await command(h, member.actor, uiRow, request(uiRow), denied);
@@ -384,7 +385,7 @@ async function actions(h, tag) {
       if (!primary) throw new h.Blocked('Original business action disposition unresolved; retain installation');
     } else {
       if (activeMember && !memberRevoked) {
-        await h.api(h.admin, 'PUT', '/cas/namespaces/panel/accounts/' + activeMember.value.id + '/role-templates', { roleTemplateKeys: ['portal-basic-user'], applicationScopes: [] }).catch(() => {});
+        await h.api(h.admin, 'PUT', '/cas/namespaces/panel/accounts/' + activeMember.value.id + '/role-templates', { roleTemplateKeys: PORTAL_BASIC_KEYS, applicationScopes: [] }).catch(() => {});
       }
       try { await retireCaseTemplates(h, tag); }
       catch (err) { if (!primary) throw err; }

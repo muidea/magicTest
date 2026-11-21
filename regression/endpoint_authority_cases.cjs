@@ -8,6 +8,7 @@ const authority = require('./application_authority_cases.cjs');
 const business = require('./business_cases.cjs');
 const { fixture } = require('./delivery_cases.cjs');
 const { endpointTemplates, currentRoleRefusal } = require('./service_contract_cases.cjs');
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 const base = '/cas/namespaces/panel/';
 async function keyCall(origin, method, route, apiKey, body) {
   if (!/^https?:\/\//.test(origin) || !route.startsWith('/api/v1/gateway/services/') || route.startsWith('//') || typeof apiKey !== 'string' || !apiKey) throw Error('Exact public Gateway call and original ApiKey required');
@@ -85,14 +86,14 @@ async function read(h, member, credential, route, row, allowed, disabled) {
 }
 async function endpoints(h) {
   const f = await fixture(h), manager = await business.member(h, 'manager'), context = await business.runtime(h, f, 0, manager);
-  const common = (await h.directory(h.admin, base + 'role-templates/')).filter(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2 && t.subjectType === 'account');
-  h.check('Dedicated subscriber uses the protected ordinary functional profile', common.length === 1 && common[0].roleRefs?.length > 0);
+  const common = portalBasicProfileSet(await h.directory(h.admin, base + 'role-templates/'));
+  h.check('Dedicated subscriber uses the protected ordinary functional profiles', common.complete && common.roleRefs.length > 0);
   const access = [{ applicationUuid: context.identity.deploymentId, accessLevel: 'manager' }];
-  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-endpoint-ceiling', name: '独立机器账号上限', subjectType: 'account', status: 2, roleRefs: common[0].roleRefs, applicationAccess: access }, 'role-template');
+  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-endpoint-ceiling', name: '独立机器账号上限', scene: 'usage', subjectType: 'account', status: 2, roleRefs: common.roleRefs, applicationAccess: access }, 'role-template');
   const m = await authority.account(h, 'endpoint-ceiling'); link(h, m.resource, f, m.value.id);
   await authority.assign(h, m, group, access);
-  const template = await h.create(base + 'role-templates/', { key: h.state.prefix + '-endpoint-read', name: '独立Endpoint读取', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: [{ module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' }] }, 'role-template');
-  const writeTpl = await h.create(base + 'role-templates/', { key: h.state.prefix + '-endpoint-write', name: '独立Endpoint写删', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: [
+  const template = await h.create(base + 'role-templates/', { key: h.state.prefix + '-endpoint-read', name: '独立Endpoint读取', scene: 'usage', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: [{ module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' }] }, 'role-template');
+  const writeTpl = await h.create(base + 'role-templates/', { key: h.state.prefix + '-endpoint-write', name: '独立Endpoint写删', scene: 'usage', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: [
     { module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' },
     { module: '/applications/' + context.identity.deploymentId, key: 'application-data-write' },
     { module: '/applications/' + context.identity.deploymentId, key: 'application-data-delete' },

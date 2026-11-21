@@ -5,6 +5,7 @@ const business = require('./business_cases.cjs');
 const review = require('./deployment_review_cases.cjs');
 const delivery = require('./model_delivery.cjs');
 const authority = require('./application_authority_cases.cjs');
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 const installations = '/panel/application/installations/';
 const requests = '/panel/application/deployment-requests/';
 const operations = '/panel/operations/namespaces/panel/application-deployment-operations/';
@@ -163,12 +164,12 @@ async function upgrade(h) {
     const pub0 = svc.last.publications[0];
     await generated.mutation(h, svc, 'PUT', generated.publications + pub0.id, { service: { id: svc.serviceId }, status: 1, visibleScope: 'panel', allowSubscription: true, requireApproval: false, maxSubscriptions: 2, maxQPS: 0, dailyQuota: 0 }, async r => h.check('Publication allows upgrade-test subscription', h.good(r)));
     await generated.publish(h, svc);
-    const ordinary = (await h.directory(h.admin, '/cas/namespaces/panel/role-templates/')).find(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2 && t.subjectType === 'account');
+    const ordinary = portalBasicProfileSet(await h.directory(h.admin, '/cas/namespaces/panel/role-templates/'));
     const access = [{ applicationUuid: source.installation.deploymentId, accessLevel: 'manager' }];
-    const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-upgrade-svc', name: '升级服务账号范围', subjectType: 'account', status: 2, roleRefs: ordinary.roleRefs, applicationAccess: access }, 'role-template');
+    const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-upgrade-svc', name: '升级服务账号范围', scene: 'usage', subjectType: 'account', status: 2, roleRefs: ordinary.roleRefs, applicationAccess: access }, 'role-template');
     const m = await authority.account(h, 'upgrade-svc');
     await authority.assign(h, m, group, access);
-    const epTemplate = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-upgrade-ep', name: '升级Endpoint读取', subjectType: 'endpoint', status: 2, applicationAccess: [],
+    const epTemplate = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-upgrade-ep', name: '升级Endpoint读取', scene: 'usage', subjectType: 'endpoint', status: 2, applicationAccess: [],
       roleRefs: [{ module: '/applications/' + source.installation.deploymentId, key: 'application-data-read' }] }, 'role-template');
     sub = await graph.subscribe(h, { service: svc.last.service, publication: svc.last.publications[0], ownerIdentity: structuredClone(h.admin.identity) }, m.actor);
     cred = await graph.credential(h, sub, 'upgrade-svc-key');

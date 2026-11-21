@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
 const graph = require('./service_graph.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const handlers = {};
 async function managed(h, actor, f, source = 'managed-services') {
   const marker = crypto.randomBytes(12).toString('hex');
@@ -317,7 +318,7 @@ handlers['F045-003'] = async h => {
     });
     await generated.publish(h, gen);
     const internal = { service: gen.last.service, publication: gen.last.publications[0], ownerIdentity: structuredClone(h.admin.identity) };
-    const template = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-internal-scope-read', name: '内部租户透传读取', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: [{ module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' }] }, 'role-template');
+    const template = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-internal-scope-read', name: '内部租户透传读取', scene: 'usage', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: [{ module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' }] }, 'role-template');
     const internalSub = await graph.subscribe(h, internal, reader);
     internalCred = await graph.credential(h, internalSub, 'internal-scope');
     await endpointTemplates(h, internalCred, [template.key]);
@@ -432,7 +433,7 @@ handlers['F045-001'] = async h => {
   h.check('Invalid original credential is rejected before quota admission without upstream effect',invalid.status === 401 && !daily.up.requests.some(r => r.marker === invalid.marker),invalid);
   quotaBoundary(h,await quotaBurst(h,h.user,daily,key,5),daily.up.requests,2,/totalizator daily limit exceeded/);
   const account = await h.createAs('tenantAdmin','/cas/namespaces/' + h.user.identity.namespace + '/accounts/',{
-    account:h.state.prefix + '-quota-peer',displayName:'独立订阅配额成员',password:h.state.password,status:2,roleTemplateKeys:['portal-user']
+    account:h.state.prefix + '-quota-peer',displayName:'独立订阅配额成员',password:h.state.password,status:2,roleTemplateKeys:PORTAL_BASIC_KEYS
   },'account');
   const peer = await h.login(account.account,h.state.password,h.user.identity.namespace,h.state.password + '-quota-peer');
   const peerSubscription = await graph.subscribe(h,daily,peer), peerKey = await graph.credential(h,peerSubscription);

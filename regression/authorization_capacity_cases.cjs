@@ -13,8 +13,8 @@ function declarations(original, count) {
       ['permissions', 'roles', 'templates', 'builtinRoles', 'builtinTemplates'].some(k => original[k]?.length)) throw Error('Fresh extension-free authorization required');
   const value = structuredClone(original);
   value.permissions = Array.from({ length: count }, (_, i) => ({ key: 'capacity-permission-' + i, name: '容量权限 ' + i, permission: 4 }));
-  value.roles = Array.from({ length: count }, (_, i) => ({ key: 'capacity-role-' + i, name: '容量角色 ' + i, subjectKinds: ['human', 'service'], permissions: [value.permissions[i].key] }));
-  value.templates = Array.from({ length: count }, (_, i) => ({ key: 'capacity-template-' + i, name: '容量模板 ' + i, subjectType: i % 2 ? 'endpoint' : 'account', roleKeys: [value.roles[i].key] }));
+  value.roles = Array.from({ length: count }, (_, i) => ({ key: 'capacity-role-' + i, name: '容量角色 ' + i, scene: 'usage', subjectKinds: ['human', 'service'], permissions: [value.permissions[i].key] }));
+  value.templates = Array.from({ length: count }, (_, i) => ({ key: 'capacity-template-' + i, name: '容量模板 ' + i, scene: 'usage', subjectType: i % 2 ? 'endpoint' : 'account', roleKeys: [value.roles[i].key] }));
   return value;
 }
 async function boundary(h, app) {

@@ -2,25 +2,27 @@
 const { isDeepStrictEqual: same } = require('node:util');
 const business = require('./business_cases.cjs');
 const { fixture } = require('./delivery_cases.cjs');
+const { PORTAL_BASIC_KEYS, dedupRoleRefs, portalBasicProfileSet } = require('./platform_profiles.cjs');
 const base = '/cas/namespaces/panel/';
 async function account(h, role) {
   const value = await h.create(base + 'accounts/', { account: h.state.prefix + '-' + role, displayName: '实例范围成员 ' + role,
-    password: h.state.password, status: 2, roleTemplateKeys: ['portal-basic-user'] }, 'account');
+    password: h.state.password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS }, 'account');
   const actor = await h.login(value.account, h.state.password, 'panel', h.state.password + '-' + role);
   h.state.fixtures.businessMembers ||= {};
   h.state.fixtures.businessMembers[role] = { id: value.id, account: value.account, password: actor.password };
   h.persist();
   return { value, role, resource: h.state.resources.find(r => r.kind === 'account' && r.id === value.id), actor: await business.member(h, role) };
 }
-async function assign(h, member, group, access) {
+async function assign(h, member, group, access, options = {}) {
   const r = member.resource, route = base + 'accounts/' + member.value.id + '/role-templates';
   if (r.authorityCommands?.some(c => c.outcome === 'unknown')) throw new h.Blocked('Original member scope command unresolved; no role replacement replay');
-  const body = { roleTemplateKeys: ['portal-basic-user', group.key], applicationScopes: [{ templateKey: group.key, applicationAccess: access }] };
+  const extraKeys = (options.extraTemplates || []).map(t => t.key);
+  const body = { roleTemplateKeys: [...PORTAL_BASIC_KEYS, ...extraKeys, group.key], applicationScopes: [{ templateKey: group.key, applicationAccess: access }] };
   const c = { method: 'PUT', route, body, outcome: 'unknown' }; (r.authorityCommands ||= []).push(c); h.persist();
   c.response = await h.api(h.admin, 'PUT', route, body); h.persist();
-  await confirmAssignment(h, member, group, access, c);
+  await confirmAssignment(h, member, group, access, c, options);
 }
-async function confirmAssignment(h, member, group, access, c) {
+async function confirmAssignment(h, member, group, access, c, options = {}) {
   h.check('Formal CAS group assignment acknowledges exact original member and scoped input', h.good(c.response), c.response);
   const query = new URLSearchParams({ subjectId: member.value.id + '|=', subjectType: 'account|=' });
   const bindings = await h.directory(h.admin, base + 'subject-role-bindings/?' + query);
@@ -30,7 +32,8 @@ async function confirmAssignment(h, member, group, access, c) {
   // Account detail projects binding roleRefs. Member application scopes are
   // expanded by CAS during authorization, then checked on the real runtime.
   const roles = detail.effectiveRoles || [];
-  h.check('Account functional role projection contains only the original common template references', roles.length === group.roleRefs.length && group.roleRefs.every(ref => roles.some(r => r.module === ref.module && r.key === ref.key)), roles);
+  const expectedRoles = options.expectedRoles ? dedupRoleRefs(options.expectedRoles) : dedupRoleRefs(group.roleRefs || []);
+  h.check('Account functional role projection contains only the expected template references', roles.length === expectedRoles.length && expectedRoles.every(ref => roles.some(r => r.module === ref.module && r.key === ref.key)), roles);
   c.outcome = 'confirmed'; h.persist();
 }
 async function reconcile(h, r) {
@@ -69,10 +72,10 @@ async function edit(h, member, r, allowed) {
 async function memberScopes(h) {
   const f = await fixture(h), manager = await business.member(h, 'manager');
   const templates = await h.directory(h.admin, base + 'role-templates/');
-  const ordinary = templates.filter(t => t.key === 'portal-basic-user' && t.systemManaged && t.subjectType === 'account' && t.status === 2);
-  h.check('Existing protected ordinary profile supplies the common functional roles without additional management authority', ordinary.length === 1 && ordinary[0].roleRefs?.length > 0, ordinary);
-  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-instance-group', name: '同组不同实例范围', subjectType: 'account',
-    description: 'Only existing installed instance levels; member subsets decided by CAS', roleRefs: structuredClone(ordinary[0].roleRefs), status: 2,
+  const ordinary = portalBasicProfileSet(templates);
+  h.check('Existing protected ordinary profiles supply the common functional roles without additional management authority', ordinary.complete && ordinary.roleRefs.length > 0, ordinary);
+  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-instance-group', name: '同组不同实例范围', scene: 'usage', subjectType: 'account',
+    description: 'Only existing installed instance levels; member subsets decided by CAS', roleRefs: structuredClone(ordinary.roleRefs), status: 2,
     applicationAccess: f.installations.map(i => ({ applicationUuid: i.deploymentId, accessLevel: 'manager' })) }, 'role-template');
   const members = [await account(h, 'scoped-editor'), await account(h, 'scoped-viewer')];
   for (const [i, member] of members.entries()) await assign(h, member, group, [{ applicationUuid: f.installations[i].deploymentId, accessLevel: i ? 'viewer' : 'editor' }]);
@@ -96,7 +99,7 @@ memberScopes.transport = 'owner-api';
 async function groupScope(h, m, group, enabled) {
   if (m.resource.authorityCommands?.some(c => c.outcome === 'unknown')) throw new h.Blocked('Original group command unresolved; no replacement');
   const c = { method: 'PUT', route: base + 'accounts/' + m.value.id + '/role-templates', outcome: 'unknown', body: {
-    roleTemplateKeys: ['portal-basic-user', ...(enabled ? [group.key] : [])],
+    roleTemplateKeys: [...PORTAL_BASIC_KEYS, ...(enabled ? [group.key] : [])],
     applicationScopes: enabled ? [{ templateKey: group.key, applicationAccess: group.applicationAccess }] : [] } };
   (m.resource.authorityCommands ||= []).push(c); h.persist();
   c.response = await h.api(h.admin, c.method, c.route, c.body); h.persist();
@@ -210,9 +213,9 @@ async function reconcileRejectedRetirement(h, r) {
 }
 async function union(h) {
   const f = await fixture(h), manager = await business.member(h, 'manager');
-  const ordinary = (await h.directory(h.admin, base + 'role-templates/')).find(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2);
-  h.check('Existing ordinary functional profile is present', ordinary?.roleRefs?.length > 0);
-  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-union-group', name: '直接与组授权并集', subjectType: 'account', roleRefs: ordinary.roleRefs, status: 2,
+  const ordinary = portalBasicProfileSet(await h.directory(h.admin, base + 'role-templates/'));
+  h.check('Existing ordinary functional profiles are present', ordinary.complete && ordinary.roleRefs.length > 0);
+  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-union-group', name: '直接与组授权并集', scene: 'usage', subjectType: 'account', roleRefs: ordinary.roleRefs, status: 2,
     applicationAccess: [{ applicationUuid: f.installations[0].deploymentId, accessLevel: 'viewer' }] }, 'role-template');
   const m = await account(h, 'union-member'), context = await business.runtime(h, f, 0, manager), rows = [];
   const r = { kind: 'member-access-retirement', phase: 'created', accountId: m.value.id, installation: f.installations[0], commands: [], active: false,
@@ -270,11 +273,11 @@ async function matrixWrite(h, member, r, operation, allowed) {
 }
 async function independentDataRoles(h) {
   const f = await fixture(h), manager = await business.member(h, 'manager');
-  const ordinary = (await h.directory(h.admin, base + 'role-templates/')).find(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2 && t.subjectType === 'account');
-  h.check('Independent data-role matrix uses existing ordinary functional roles', ordinary?.roleRefs?.length > 0);
+  const ordinary = portalBasicProfileSet(await h.directory(h.admin, base + 'role-templates/'));
+  h.check('Independent data-role matrix uses existing ordinary functional roles', ordinary.complete && ordinary.roleRefs.length > 0);
   const contexts = [await business.runtime(h, f, 0, manager), await business.runtime(h, f, 1, manager)];
   const access = contexts.map((c, i) => ({ applicationUuid: c.identity.deploymentId, accessLevel: i ? 'viewer' : 'manager' }));
-  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-matrix-levels', name: '双实例不同数据级别', subjectType: 'account', status: 2, roleRefs: ordinary.roleRefs, applicationAccess: access }, 'role-template');
+  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-matrix-levels', name: '双实例不同数据级别', scene: 'usage', subjectType: 'account', status: 2, roleRefs: ordinary.roleRefs, applicationAccess: access }, 'role-template');
   const member = await account(h, 'data-role-matrix'), rows = [];
   let primary;
   try {
@@ -290,7 +293,7 @@ async function independentDataRoles(h) {
     for (const permission of ['read', 'write', 'delete']) {
       const ref = { module: '/applications/' + contexts[0].identity.deploymentId, key: 'application-data-' + permission };
       h.check('Independent data role exists in the exact installed CAS catalogue', roles.filter(v => v.module === ref.module && v.key === ref.key && v.status === 2).length === 1, ref);
-      const template = await h.create(base + 'role-templates/', { key: h.state.prefix + '-only-' + permission, name: '独立数据角色 ' + permission, subjectType: 'account', status: 2,
+      const template = await h.create(base + 'role-templates/', { key: h.state.prefix + '-only-' + permission, name: '独立数据角色 ' + permission, scene: 'usage', subjectType: 'account', status: 2,
         roleRefs: [...ordinary.roleRefs, ref], applicationAccess: [] }, 'role-template');
       await assign(h, member, template, []);
       const row = await business.create(h, contexts[0], 'matrix-only-' + permission); rows.push(row);
@@ -327,6 +330,7 @@ async function independentDataRoles(h) {
       const groupC = await h.create(base + 'role-templates/', {
         key: h.state.prefix + '-third-instance',
         name: '第三实例数据管理',
+        scene: 'usage',
         subjectType: 'account',
         status: 2,
         roleRefs: ordinary.roleRefs,
@@ -348,7 +352,7 @@ async function independentDataRoles(h) {
         h.good(afterAction) && afterAction.data.value.name === 'open' && afterAction.data.value.sortOrder === 7 && afterAction.data.value.description === null && String(afterAction.data.value.version) === rowC.version, afterAction);
       await assign(h, member, groupC, []);
       h.denied(await business.record(h, member.actor, rowC), 'Removing third installation manager scope revokes C access cleanly');
-      const detachBody = { roleTemplateKeys: ['portal-basic-user'] };
+      const detachBody = { roleTemplateKeys: PORTAL_BASIC_KEYS };
       const detachCmd = { method: 'PUT', route: base + 'accounts/' + member.value.id + '/role-templates', body: detachBody, outcome: 'unknown', retiredTemplateKey: groupC.key };
       (member.resource.authorityCommands ||= []).push(detachCmd); h.persist();
       detachCmd.response = await h.api(h.admin, 'PUT', detachCmd.route, detachBody); h.persist();

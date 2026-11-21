@@ -2,6 +2,7 @@
 const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
 const { feedbackAttachment } = require('./owner_transport.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const handlers = {}, portal = '/portal/feedbacks/', panel = '/panel/support/feedbacks/';
 const messages = area => area === 'portal' ? '/portal/feedback/messages/' : '/panel/support/feedback/messages/';
 const hash = bytes => 'sha256:' + crypto.createHash('sha256').update(bytes).digest('hex');
@@ -165,7 +166,7 @@ handlers['F054-002'] = async h => {
   const r = await ticket(h, 'private'); await upload(h, r);
   const privateMessage = await message(h, r, h.user, 'portal', '私有消息非空对照：' + h.state.prefix);
   const ns = h.need('tenantA').name;
-  const account = await h.create('/cas/namespaces/' + ns + '/accounts/', { account: h.state.prefix + '-feedback-peer-' + crypto.randomBytes(4).toString('hex'), displayName: '工单同租户对照', password: h.state.password, status: 2, roleTemplateKeys: ['portal-user'] }, 'account');
+  const account = await h.create('/cas/namespaces/' + ns + '/accounts/', { account: h.state.prefix + '-feedback-peer-' + crypto.randomBytes(4).toString('hex'), displayName: '工单同租户对照', password: h.state.password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS }, 'account');
   const peer = await h.login(account.account, h.state.password, ns, h.state.password + 'P');
   for (const actor of [peer, h.otherTenantAdmin]) {
     const positive = await h.api(actor, 'GET', '/api/v1/web/session/'); h.check('Negative actor has its own valid account/tenant session', h.good(positive) && positive.data.value?.account?.account === actor.identity.account && positive.data.value.homeNamespace === actor.identity.namespace, positive);

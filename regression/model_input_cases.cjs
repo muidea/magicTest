@@ -4,6 +4,7 @@ const business = require('./business_cases.cjs');
 const pages = require('./page_runtime_cases.cjs');
 const { authoring: a } = require('./authoring_cases.cjs');
 const probes = require('./scenario_commands.cjs');
+const { PORTAL_BASIC_KEYS, portalBasicProfileSet } = require('./platform_profiles.cjs');
 const definitions = '/panel/application/definitions/';
 function field(name, type, nullable = false, constraint = '') {
   return { name, showName: name, description: '', type: { name: type, pkgPath: '', isPtr: nullable, elemType: null },
@@ -337,15 +338,15 @@ async function tenantIsolationCheck(h, f, actor, host, target, peer, targetKey) 
     tInstall = (await h.directory(h.tenantAdmin, '/panel/application/installations/')).find(v => v.deploymentId === req.deploymentId);
     h.check('Other-tenant installation is ready', tInstall?.status === 'ready', tInstall);
     const tplPrefix = '/cas/namespaces/' + ns + '/';
-    const basicTpl = (await h.directory(h.tenantAdmin, tplPrefix + 'role-templates/')).find(t => t.key === 'portal-user' || t.key === 'portal-basic-user');
-    h.check('Tenant namespace exposes built-in user role-template', !!basicTpl);
+    const basicTpl = portalBasicProfileSet(await h.directory(h.tenantAdmin, tplPrefix + 'role-templates/'));
+    h.check('Tenant namespace exposes built-in user role-templates', basicTpl.complete);
     tTemplate = await h.createAs('tenantAdmin', tplPrefix + 'role-templates/', {
-      key: h.state.prefix + '-isotenant-mgr', name: '跨租户隔离成员', subjectType: 'account', status: 2,
+      key: h.state.prefix + '-isotenant-mgr', name: '跨租户隔离成员', scene: 'usage', subjectType: 'account', status: 2,
       roleRefs: structuredClone(basicTpl.roleRefs), applicationAccess: [{ applicationUuid: tInstall.deploymentId, accessLevel: 'manager' }],
     }, 'role-template');
     tAccount = await h.createAs('tenantAdmin', tplPrefix + 'accounts/', {
       account: h.state.prefix + '-iso-member', displayName: '跨租户成员', password: h.state.password,
-      status: 2, roleTemplateKeys: [basicTpl.key, tTemplate.key],
+      status: 2, roleTemplateKeys: [...PORTAL_BASIC_KEYS, tTemplate.key],
     }, 'account');
     tMember = await h.login(tAccount.account, h.state.password, ns, h.state.password + '-tm');
     const tSession = (await h.ok(tMember, 'GET', '/api/v1/web/session/')).value;

@@ -5,6 +5,7 @@ const accountModule = '/internal/modules/blocks/account';
 const metricsModule = '/internal/modules/blocks/totalizator';
 const base = n => '/cas/namespaces/' + n + '/';
 const role = (module, key) => ({ module, key });
+const { PORTAL_CORE_KEY } = require('./platform_profiles.cjs');
 const profile = role(runner, 'usage-panel-profile-viewer');
 const directory = role(accountModule, 'account-viewer');
 const metrics = role(metricsModule, 'metrics-viewer');
@@ -54,8 +55,17 @@ async function roleMatrix(h) {
   const combinations = [[], [directory], [metrics], [directory, metrics]];
   const fixtures = [];
   for (const [index, refs] of combinations.entries()) {
-    const t = await h.create(base(namespace) + 'role-templates/', { key: h.state.prefix + '-profile-' + index, name: '概览权限组合' + index, description: '目录与指标交集验证', subjectType: 'account', roleRefs: [profile, ...refs], applicationAccess: [], status: 2 }, 'role-template');
-    const keys = ['portal-user', t.key];
+    const t = await h.create(base(namespace) + 'role-templates/', {
+      key: h.state.prefix + '-profile-' + index,
+      name: '概览权限组合' + index,
+      description: '目录与指标交集验证',
+      scene: refs.length ? 'operations' : 'usage',
+      subjectType: 'account',
+      roleRefs: refs.length ? refs : [profile],
+      applicationAccess: [],
+      status: 2,
+    }, 'role-template');
+    const keys = [PORTAL_CORE_KEY, t.key];
     const member = await h.create(base(namespace) + 'accounts/', { account: h.state.prefix + '-profile-' + index, displayName: '概览权限成员' + index, password: h.state.password, email: '', description: '', roleTemplateKeys: keys, status: 2 }, 'account');
     fixtures.push({ refs, t, member, keys });
   }
@@ -78,7 +88,7 @@ async function roleMatrix(h) {
   for (const missing of [directory, metrics]) {
     const retained = missing === directory ? metrics : directory;
     const replacement = fixtures[missing === directory ? 2 : 1];
-    const keys = ['portal-user', replacement.t.key];
+    const keys = [PORTAL_CORE_KEY, replacement.t.key];
     await h.ok(h.admin, 'PUT', base(namespace) + 'accounts/' + f.member.id + '/role-templates', { roleTemplateKeys: keys });
     await currentAuthority(h, namespace, f.member, [retained], keys);
     const session = (await h.ok(f.actor, 'GET', '/api/v1/web/session/')).value;

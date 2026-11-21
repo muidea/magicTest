@@ -1,5 +1,6 @@
 // Real CAS sources drive durable todos; no direct event or database injection.
 const { createRegistrationFixture, setRegistrationPolicy, submitRegistration, reviewRegistration } = require('./registration_cases.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 async function sourceTodos(h, actor, request, expectedStatus) {
   let matches = [];
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -71,7 +72,7 @@ async function ownership(h) {
     fixtures.push({ f, actor, request, todo });
   }
   const [a, b] = fixtures;
-  const member = await h.create(a.f.base + 'accounts/', { account: h.state.prefix + '-todo-member', displayName: '同租户普通成员', password: h.state.password, status: 2, roleTemplateKeys: ['portal-user'] }, 'account');
+  const member = await h.create(a.f.base + 'accounts/', { account: h.state.prefix + '-todo-member', displayName: '同租户普通成员', password: h.state.password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS }, 'account');
   const ordinary = await h.login(member.account, h.state.password, a.f.ns.name, h.state.password + 'M');
   await h.ok(ordinary, 'GET', '/system/context/?surface=portal');
   for (const route of ['/panel/todos/', '/panel/todos/?id=' + a.todo.id, a.f.reg + 'accounts/' + a.request.id]) {

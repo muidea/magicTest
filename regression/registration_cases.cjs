@@ -1,5 +1,6 @@
 // Public tenant registration, current controlled access profiles, original IDs.
 const handlers = {};
+const { PORTAL_BASIC_KEYS, portalBasicProfileSet } = require('./platform_profiles.cjs');
 const cas = n => '/cas/namespaces/' + n + '/';
 const publicPolicy = '/api/v1/cas/registration/policy/public/';
 const publicSubmit = '/api/v1/cas/registration/account/submit/';
@@ -17,10 +18,10 @@ async function fixture(h, suffix) {
   h.check('Dedicated registration tenant starts with exactly one bootstrap account', accountList.length === 1);
   const profiles = await h.ok(h.admin, 'GET', base + 'role-templates/?_pageSize=100');
   if (profiles.pagination?.hasMore || profiles.pagination?.total > profiles.values.length) throw new h.Blocked('Registration profile directory must be read completely');
-  const portal = profiles.values.find(p => p.key === 'portal-user' && p.status === 2 && p.systemManaged);
-  h.check('Registration consumes an existing controlled portal-user access profile', !!portal && portal.roleRefs.length > 0);
+  const portal = portalBasicProfileSet(profiles.values);
+  h.check('Registration consumes existing controlled portal-usage access profiles', portal.complete && portal.roleRefs.length > 0);
   const p = (await h.ok(h.admin, 'POST', reg + 'profiles/', { key: h.state.prefix + '-' + suffix,
-    name: '注册回归初始门户模板', description: '仅引用受控门户用户预设', accessProfileKeys: ['portal-user'], status: 2 })).value;
+    name: '注册回归初始门户模板', description: '仅引用受控门户用户预设', accessProfileKeys: PORTAL_BASIC_KEYS, status: 2 })).value;
   h.namespaceDependent(ns.id, reg + 'profiles/', p.id, 'registration-profile');
   const anon = await h.anonymous(ns.name, actor => waitForRegistrationIngress(h, ns, actor));
   return { ns, base, reg, p, portal, anon, bootstrap: accountList[0] };
@@ -72,7 +73,7 @@ async function submit(h, f, payload) {
   h.state.registrationIntents ||= [];
   h.state.registrationIntents.push({ namespace: f.ns.name, account: payload.account }); h.persist();
   const r = (await h.ok(f.anon, 'POST', publicSubmit, payload)).value;
-  h.check('Registration response binds immutable account and workflow identities', r.id > 0 && r.accountId > 0 && r.account === payload.account && r.profileKey === f.p.key && equal(r.accessProfileKeys, ['portal-user']));
+  h.check('Registration response binds immutable account and workflow identities', r.id > 0 && r.accountId > 0 && r.account === payload.account && r.profileKey === f.p.key && equal(r.accessProfileKeys, PORTAL_BASIC_KEYS));
   h.namespaceDependent(f.ns.id, f.reg + 'accounts/', r.id, 'registration');
   h.namespaceDependent(f.ns.id, f.base + 'accounts/', r.accountId, 'registered-account');
   return r;
@@ -94,7 +95,7 @@ function directoryValues(h, page) {
 
 async function approved(h, f, r) {
   const registration = (await h.ok(h.admin, 'GET', f.reg + 'accounts/' + r.id)).value;
-  h.check('Workflow owner confirms original approved registration and profile snapshot', registration.status === 'approved' && registration.accountId === r.accountId && registration.account === r.account && registration.profileKey === f.p.key && equal(registration.accessProfileKeys, ['portal-user']));
+  h.check('Workflow owner confirms original approved registration and profile snapshot', registration.status === 'approved' && registration.accountId === r.accountId && registration.account === r.account && registration.profileKey === f.p.key && equal(registration.accessProfileKeys, PORTAL_BASIC_KEYS));
   const account = (await h.ok(h.admin, 'GET', f.base + 'accounts/' + r.accountId)).value;
   h.check('Account owner confirms active original subject without human template assignments', account.id === r.accountId && account.account === r.account && account.status === 2 && (account.templateRefs || []).length === 0);
   const bindings = directoryValues(h, await h.ok(h.admin, 'GET', registrationBindingRoute(f.base, r.accountId)));
@@ -154,7 +155,7 @@ handlers['F002-002'] = async h => {
   h.check('Closed submission creates neither account nor registration', equal(before, await lists(h, f)));
   await policy(h, f);
   const pending = await submit(h, f, request(h, 'forged-review'));
-  const member = (await h.ok(h.admin, 'POST', f.base + 'accounts/', { account: h.state.prefix + '-review-member', displayName: '普通门户成员', password: h.state.password, email: '', description: '', roleTemplateKeys: ['portal-user'], status: 2 })).value;
+  const member = (await h.ok(h.admin, 'POST', f.base + 'accounts/', { account: h.state.prefix + '-review-member', displayName: '普通门户成员', password: h.state.password, email: '', description: '', roleTemplateKeys: PORTAL_BASIC_KEYS, status: 2 })).value;
   h.namespaceDependent(f.ns.id, f.base + 'accounts/', member.id, 'ordinary-reviewer');
   const actor = await h.login(member.account, h.state.password, f.ns.name, h.state.password + 'M');
   await h.ok(actor, 'GET', '/system/context/?surface=portal');

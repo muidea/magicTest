@@ -48,7 +48,7 @@ async function readFault(h, route, mode) {
 async function completeMembers(h) {
   const f = await createRegistrationFixture(h, 'memberpages'), groups = [], members = [];
   for (const suffix of ['first', 'second']) groups.push(await h.create(f.base + 'role-templates/', {
-    key: h.state.prefix + '-pages-' + suffix, name: '多页成员模板 ' + suffix, subjectType: 'account',
+    key: h.state.prefix + '-pages-' + suffix, name: '多页成员模板 ' + suffix, scene: 'usage', subjectType: 'account',
     roleRefs: structuredClone(f.portal.roleRefs), applicationAccess: [], status: 2,
   }, 'role-template'));
   for (let i = 0; i < 6; i++) members.push(await h.create(f.base + 'accounts/', {

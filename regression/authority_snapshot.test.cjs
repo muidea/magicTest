@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { sameAuthority, sameAccounts } = require('./authority_snapshot.cjs');
 const account = () => ({ id: 17, account: 'member', status: 2, authorityRevision: 4,
-  templateRefs: [{ key: 'portal-user', version: 1 }, { key: 'security-admin', version: 3 }],
+  templateRefs: [{ key: 'portal-usage-core', version: 1 }, { key: 'tenant-ops-accounts', version: 3 }],
   effectiveRoles: [{ module: 'cas', key: 'reader' }, { module: 'runner', key: 'editor' }],
   effectivePrivileges: [{ module: 'cas', uriPath: '/accounts/', value: 1 }, { module: 'runner', uriPath: '/models/', value: 3 }],
   orderedSteps: ['first', 'second'] });

@@ -7,8 +7,20 @@ test('documented subscriber declares its exact read role with ordinary functiona
   const { documentedReader } = require('./service_contract_cases.cjs'), authority = require('./application_authority_cases.cjs');
   const deploymentId = 'a'.repeat(32), actor = { identity: { account: 'ordinary-reader', namespace: 'panel' } }, events = [];
   const role = { module: '/applications/' + deploymentId, key: 'application-data-read' };
-  const ordinary = { key: 'portal-basic-user', systemManaged: true, subjectType: 'account', status: 2,
-    roleRefs: [{ module: '/modules/kernel/runner', key: 'portal-service-invoker' }, role] };
+  const ordinary = [
+    { key: 'portal-usage-core', systemManaged: true, subjectType: 'account', scene: 'usage', status: 2,
+      roleRefs: [{ module: '/modules/kernel/runner', key: 'portal-self-profile-viewer' }] },
+    { key: 'portal-usage-apps', systemManaged: true, subjectType: 'account', scene: 'usage', status: 2,
+      roleRefs: [{ module: '/modules/kernel/runner', key: 'portal-app-catalog-viewer' }] },
+    { key: 'portal-usage-services', systemManaged: true, subjectType: 'account', scene: 'usage', status: 2,
+      roleRefs: [{ module: '/modules/kernel/runner', key: 'portal-service-invoker' }, role] },
+  ];
+  const expectedRefs = [
+    { module: '/modules/kernel/runner', key: 'portal-self-profile-viewer' },
+    { module: '/modules/kernel/runner', key: 'portal-app-catalog-viewer' },
+    { module: '/modules/kernel/runner', key: 'portal-service-invoker' },
+    role,
+  ];
   let created;
   const member = { actor, value: { id: 7 }, resource: { kind: 'account' } };
   t.mock.method(authority, 'account', async (_, suffix) => { assert.equal(suffix, 'documented-reader'); events.push('account'); return member; });
@@ -16,11 +28,11 @@ test('documented subscriber declares its exact read role with ordinary functiona
     assert.equal(value, member); assert.equal(group, created); assert.deepEqual(access, [{ applicationUuid: deploymentId, accessLevel: 'viewer' }]); events.push('assign');
   });
   const h = { admin: {}, state: { prefix: 'original' }, check(label, condition) { assert.ok(condition, label); },
-    async directory(_, route) { assert.equal(route, '/cas/namespaces/panel/role-templates/'); return [ordinary]; },
+    async directory(_, route) { assert.equal(route, '/cas/namespaces/panel/role-templates/'); return ordinary; },
     async create(route, body, kind) { assert.equal(route, '/cas/namespaces/panel/role-templates/'); assert.equal(kind, 'role-template'); events.push('template'); created = body; return body; } };
   assert.equal(await documentedReader(h, { identity: { deploymentId } }), actor);
   assert.deepEqual(events, ['template', 'account', 'assign']);
-  assert.deepEqual(created.roleRefs, ordinary.roleRefs); assert.equal(created.subjectType, 'account');
+  assert.deepEqual(created.roleRefs, expectedRefs); assert.equal(created.subjectType, 'account'); assert.equal(created.scene, 'usage');
   assert.equal(created.roleRefs.some(r => /write|delete|manager|admin/.test(r.key)), false);
   h.directory = async () => [];
   await assert.rejects(documentedReader(h, { identity: { deploymentId } })); assert.deepEqual(events, ['template', 'account', 'assign']);

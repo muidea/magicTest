@@ -2,6 +2,7 @@
 const { isDeepStrictEqual: same } = require('node:util');
 const { fixture, cleanupPreviewRequest, requestCommand } = require('./delivery_cases.cjs');
 const { sanitize } = require('./evidence_sanitizer.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const requests = '/panel/application/deployment-requests/';
 const operations = '/panel/operations/namespaces/panel/application-deployment-operations/';
 const reviews = '/panel/operations/namespaces/panel/application-deployment-requests/';
@@ -282,10 +283,10 @@ async function reviewer(h) {
   const base = '/cas/namespaces/panel/', key = 'operations-application-deployment-reviewer';
   const roles = await h.directory(h.admin, base + 'roles/');
   h.check('Current owner registered human review role is available', roles.some(v => v.module === '/modules/kernel/runner' && v.key === key && v.humanAssignable && v.status === 2));
-  const template = await h.create(base + 'role-templates/', { key: h.state.prefix + '-reviewer', name: '并发审批人', subjectType: 'account',
+  const template = await h.create(base + 'role-templates/', { key: h.state.prefix + '-reviewer', name: '并发审批人', scene: 'operations', subjectType: 'account',
     roleRefs: [{ module: '/modules/kernel/runner', key }], applicationAccess: [], status: 2 }, 'role-template');
   const account = await h.create(base + 'accounts/', { account: h.state.prefix + '-reviewer', displayName: '独立审批人', password: h.state.password,
-    roleTemplateKeys: ['portal-basic-user', template.key], status: 2 }, 'account');
+    roleTemplateKeys: [...PORTAL_BASIC_KEYS, template.key], status: 2 }, 'account');
   const actor = await h.login(account.account, h.state.password, 'panel', h.state.password + 'R'); actor.id = account.id;
   const current = await read(h, base + 'accounts/' + account.id);
   h.check('Independent CAS confirms distinct current reviewer account and effective owner role', actor.identity.account !== h.admin.identity.account && current.effectiveRoles?.some(v => v.module === '/modules/kernel/runner' && v.key === key));

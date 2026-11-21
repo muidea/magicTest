@@ -5,6 +5,7 @@ const { isDeepStrictEqual: same } = require('node:util');
 const business = require('./business_cases.cjs');
 const pages = require('./page_runtime_cases.cjs');
 const { authoring: a } = require('./authoring_cases.cjs');
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 async function prepare(h, authored) {
   await a.library(h, authored.app);
   const entity = structuredClone(authored.model.entities[0]);
@@ -96,16 +97,18 @@ async function extraBuiltinBlocks(h) {
   const actor = await business.member(h, 'manager'), context = await business.runtime(h, f, 0, actor);
   const casBase = '/cas/namespaces/panel/';
   const templates = await h.directory(h.admin, casBase + 'role-templates/');
-  const ordinary = templates.find(t => t.key === 'portal-basic-user' && t.systemManaged && t.subjectType === 'account' && t.status === 2);
+  const ordinary = portalBasicProfileSet(templates);
+  h.check('Protected ordinary profiles are present for builtin observation fixture', ordinary.complete);
   const roleMod = '/applications/' + context.identity.deploymentId;
+  const obsRefs = obs.readers.map(r => ({ module: roleMod, key: r.role }));
   const group = await h.create(casBase + 'role-templates/', {
-    key: h.state.prefix + '-builtin-obs', name: '全量内置观察', subjectType: 'account', status: 2, applicationAccess: [],
-    roleRefs: [...clone(ordinary.roleRefs), ...obs.readers.map(r => ({ module: roleMod, key: r.role }))],
+    key: h.state.prefix + '-builtin-obs', name: '全量内置观察', scene: 'operations', subjectType: 'account', status: 2, applicationAccess: [],
+    roleRefs: obsRefs,
   }, 'role-template');
   const member = await authority.account(h, 'builtin-obs');
   member.resource.scenarioDefinitionId = f.application.id;
   member.resource.scenarioInstallationIds = f.installations.map(i => String(i.id)); h.persist();
-  await authority.assign(h, member, group, []);
+  await authority.assign(h, member, group, [], { expectedRoles: [...ordinary.roleRefs, ...obsRefs] });
   const rows = []; let primary;
   try {
     // 1. Concurrent creates exercise codeGenerator uniqueness, scriptInterpreter insert, masking on query/filter, operationlog & totalizator.

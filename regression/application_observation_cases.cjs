@@ -6,6 +6,7 @@ const business = require('./business_cases.cjs');
 const authority = require('./application_authority_cases.cjs');
 const metadata = require('./definition_metadata_cases.cjs');
 const { runtimeRead } = require('./owner_transport.cjs');
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 const readers = [
   { kind: 'operation-logs', permission: 'builtin-operation-logs.read', role: 'application-operation-logs-reader' },
   { kind: 'counters', permission: 'builtin-counters.read', role: 'application-counters-reader' },
@@ -83,12 +84,12 @@ async function observations(h) {
   const f = await pages.explicitFixture(h, undefined, undefined, { suffix: 'observation', requestPrefix: 'observation-', prepareAuthor: prepare });
   const manager = await business.member(h, 'manager'), context = await business.runtime(h, f, 0, manager), peer = await business.runtime(h, f, 1, manager);
   const base = '/cas/namespaces/panel/', templates = await h.directory(h.admin, base + 'role-templates/');
-  const ordinary = templates.find(t => t.key === 'portal-basic-user' && t.systemManaged && t.subjectType === 'account' && t.status === 2);
-  h.check('Protected ordinary template and frozen observer permissions are present', ordinary?.roleRefs?.length > 0 &&
+  const ordinary = portalBasicProfileSet(templates);
+  h.check('Protected ordinary templates and frozen observer permissions are present', ordinary.complete && ordinary.roleRefs.length > 0 &&
     readers.every(r => f.revision.application.authorization.permissions.some(p => p.key === r.permission && p.permission === 4)));
   const roles = await h.directory(h.admin, base + 'roles/'), module = '/applications/' + context.identity.deploymentId;
-  for (const reader of readers) h.check('CAS installs separately assignable fixed observation reader without write/delete privileges',
-    roles.some(r => r.module === module && r.key === reader.role && r.humanAssignable && r.status === 2 &&
+  for (const reader of readers) h.check('CAS installs separately assignable fixed observation reader in operations scene without write/delete privileges',
+    roles.some(r => r.module === module && r.key === reader.role && r.scene === 'operations' && r.humanAssignable && r.status === 2 &&
       r.privilege?.some(p => p.module === module && p.uriPath === '/apps/permissions/' + reader.permission && p.value === 4)));
   let primary;
   try {
@@ -96,12 +97,13 @@ async function observations(h) {
     await business.finishCleanup(h, [emitted], undefined);
     for (const reader of readers) h.check('Data manager receives no implicit independent ' + reader.kind + ' authority', denied(await read(h, manager, context, reader.kind)));
     for (const [index, reader] of readers.entries()) {
-      const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-observe-' + index, name: '独立应用观察角色', subjectType: 'account', status: 2,
-        applicationAccess: [], roleRefs: [...structuredClone(ordinary.roleRefs), { module, key: reader.role }] }, 'role-template');
+      const obsRole = { module, key: reader.role };
+      const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-observe-' + index, name: '独立应用观察角色', scene: 'operations', subjectType: 'account', status: 2,
+        applicationAccess: [], roleRefs: [obsRole] }, 'role-template');
       const member = await authority.account(h, 'observer-' + index);
       member.resource.scenarioDefinitionId = f.application.id;
       member.resource.scenarioInstallationIds = f.installations.map(i => String(i.id)); h.persist();
-      await authority.assign(h, member, group, []);
+      await authority.assign(h, member, group, [], { expectedRoles: [...ordinary.roleRefs, obsRole] });
       let revoked = false, epClientId, epCredId;
       try {
         const rows = await read(h, member.actor, context, reader.kind, true);
@@ -120,7 +122,7 @@ async function observations(h) {
         h.check('Observer-only account cannot read ordinary instance business data, even by guessed ID', denied(data), data);
 
         // Independent Endpoint OAuth token observation read + revocation.
-        const epTpl = await h.create(base + 'role-templates/', { key: h.state.prefix + '-ep-observe-' + index, name: '端点观察只读', subjectType: 'endpoint', status: 2,
+        const epTpl = await h.create(base + 'role-templates/', { key: h.state.prefix + '-ep-observe-' + index, name: '端点观察只读', scene: 'operations', subjectType: 'endpoint', status: 2,
           applicationAccess: [], roleRefs: [{ module, key: reader.role }] }, 'role-template');
         const ep = await h.create(base + 'endpoints/', { name: h.state.prefix + '-ep-obs-' + index, description: '独立观察Endpoint', status: 2,
           account: { id: member.value.id }, roleTemplateKeys: [epTpl.key], scope: 'magicrunner.usage.apps.data.read', startTime: Date.now() - 1000, expireTime: Date.now() + 3600000 }, 'endpoint');

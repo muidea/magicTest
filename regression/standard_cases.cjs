@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { sameAuthority, sameAccounts } = require('./authority_snapshot.cjs');
 const { negativeBrandWrite, negativeCreate } = require('./negative_mutations.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const handlers = {};
 const fixturesDir = h => h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression');
 const accountBase = h => '/cas/namespaces/' + h.state.fixtures.tenantA.name + '/accounts/';
@@ -102,12 +103,12 @@ handlers['F004-002'] = async h => {
   const targets = [];
   for (const n of [a, b]) {
     const collection = '/cas/namespaces/' + n.name + '/accounts/';
-    const target = await h.create(collection, { account: h.state.prefix + '-scope-' + n.name.slice(-1), displayName: '范围核对账号', password: h.state.password, email: '', description: '', status: 2, roleTemplateKeys: ['portal-user'] }, 'account');
+    const target = await h.create(collection, { account: h.state.prefix + '-scope-' + n.name.slice(-1), displayName: '范围核对账号', password: h.state.password, email: '', description: '', status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS }, 'account');
     const before = (await h.ok(h.admin, 'GET', collection + target.id)).value;
     targets.push({ n, collection, target, before });
   }
   for (const { n, collection, target, before } of targets) {
-    const payload = { account: before.account, displayName: '已核对管理范围', email: before.email || '', description: '常规回归账号管理范围', status: before.status, roleTemplateKeys: ['portal-user'] };
+    const payload = { account: before.account, displayName: '已核对管理范围', email: before.email || '', description: '常规回归账号管理范围', status: before.status, roleTemplateKeys: PORTAL_BASIC_KEYS };
     const response = await h.api(h.tenantAdmin, 'PUT', collection + target.id, payload);
     if (n.id === a.id) {
       h.check('Authorized namespace administrator can update own account resource', h.good(response), response);
@@ -123,7 +124,7 @@ handlers['F004-002'] = async h => {
   h.check('Account original namespace unchanged', session.homeNamespace === a.name);
 };
 handlers['F004-003'] = async h => {
-  const body = { account: h.need('user').account, displayName: 'Duplicate test', password: h.state.password, status: 2, roleTemplateKeys: ['portal-user'] };
+  const body = { account: h.need('user').account, displayName: 'Duplicate test', password: h.state.password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS };
   const before = await h.directory(h.admin, accountBase(h));
   for (const [index, payload] of [body, { ...body, account: '' }, { ...body, account: h.state.prefix + '-invalid', password: '' }].entries()) {
     const r = await h.api(h.admin, 'POST', accountBase(h), payload);
@@ -178,7 +179,7 @@ handlers['F011-003'] = async h => {
 handlers['F016-003'] = async h => {
   const m = await model(h), route = definitionBase + m.id + '/function-blocks', before = (await h.ok(h.admin, 'GET', route)).value;
   const cas = '/cas/namespaces/' + h.credentials.namespace + '/';
-  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-publisher', name: '回归只读应用作者', description: '复用应用发布负责人，仅读取应用库和模型草稿，不授予定义编辑权', subjectType: 'account', roleRefs: [{ module: '/modules/kernel/runner', key: 'management-application-publisher' }], applicationAccess: [], status: 2 }, 'role-template');
+  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-publisher', name: '回归只读应用作者', description: '复用应用发布负责人，仅读取应用库和模型草稿，不授予定义编辑权', scene: 'management', subjectType: 'account', roleRefs: [{ module: '/modules/kernel/runner', key: 'management-application-publisher' }], applicationAccess: [], status: 2 }, 'role-template');
   const account = await h.create(cas + 'accounts/', { account: h.state.prefix + '-reader', displayName: '回归应用库只读成员', password: h.state.password, status: 2, roleTemplateKeys: [template.key] }, 'account');
   const reader = await h.login(account.account, h.state.password, h.credentials.namespace, h.state.password + 'R');
   const readable = (await h.ok(reader, 'GET', route)).value;
@@ -286,7 +287,7 @@ handlers['F051-003'] = async h => {
     await same(h, h.admin, collection + c.id, c, 'Rejected writes leave category unchanged');
     await h.partial('DELIVERY-CATALOG-READER: complete current CAS catalogue lacks the source-declared Runner catalog reader. Require a paired candidate and formal Installer/CAS synchronization proof; do not create roles through ordinary HTTP or replay initialization.');
   }
-  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-catalog-reader', name: '回归分类只读成员', description: '复用owner声明的分类只读角色', subjectType: 'account', roleRefs: [{ module: readerRole.module, key: readerRole.key }], applicationAccess: [], status: 2 }, 'role-template');
+  const template = await h.create(cas + 'role-templates/', { key: h.state.prefix + '-catalog-reader', name: '回归分类只读成员', description: '复用owner声明的分类只读角色', scene: 'management', subjectType: 'account', roleRefs: [{ module: readerRole.module, key: readerRole.key }], applicationAccess: [], status: 2 }, 'role-template');
   const account = await h.create(cas + 'accounts/', { account: h.state.prefix + '-catalog-reader', displayName: '回归分类只读成员', password: h.state.password, status: 2, roleTemplateKeys: [template.key] }, 'account');
   const reader = await h.login(account.account, h.state.password, h.credentials.namespace, h.state.password + 'C');
   const rows = (await h.ok(reader, 'GET', collection + '?_pageSize=100')).values;

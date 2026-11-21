@@ -2,6 +2,7 @@
 const { isDeepStrictEqual: same } = require('node:util');
 const business = require('./business_cases.cjs');
 const { fixture } = require('./delivery_cases.cjs');
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 function decodePage(value, context, pageSize, sourceKey = 'records') {
   if (!value || !same(value.identity, context.identity) || value.sourceKey !== sourceKey || value.pageDigest !== context.pageDigest ||
       value.value?.apiVersion !== 'magic.base-value-read/v1' || value.value.error || value.value.aggregate ||
@@ -266,10 +267,10 @@ async function readAuthority(h) {
     metadata.pages.dataSources.some(s => s.key === 'totals' && s.mode === 'aggregate') &&
     metadata.pages.dataSources.some(s => s.key === 'choices' && s.mode === 'options'));
   const authority = require('./application_authority_cases.cjs');
-  const ordinary = (await h.directory(h.admin, '/cas/namespaces/panel/role-templates/')).find(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2 && t.subjectType === 'account');
-  h.check('Page source test starts from ordinary functional roles only', ordinary?.roleRefs?.length > 0);
+  const ordinary = portalBasicProfileSet(await h.directory(h.admin, '/cas/namespaces/panel/role-templates/'));
+  h.check('Page source test starts from ordinary functional roles only', ordinary.complete && ordinary.roleRefs.length > 0);
   const access = [{ applicationUuid: context.identity.deploymentId, accessLevel: 'viewer' }];
-  const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-page-source-reader', name: '冻结页面读取范围', subjectType: 'account', status: 2, roleRefs: ordinary.roleRefs, applicationAccess: access }, 'role-template');
+  const group = await h.create('/cas/namespaces/panel/role-templates/', { key: h.state.prefix + '-page-source-reader', name: '冻结页面读取范围', scene: 'usage', subjectType: 'account', status: 2, roleRefs: ordinary.roleRefs, applicationAccess: access }, 'role-template');
   const member = await authority.account(h, 'page-source-reader'), actor = member.actor;
   let row, primary;
   try {

@@ -72,7 +72,7 @@ test('additional matrix templates and new original action rows remain protected 
 });
 test('unknown role assignment or retirement protects its exact template even after original rows were disposed', () => {
   const template = { kind: 'role-template', creation: { intended: { key: 'original' } } };
-  for (const command of [{ outcome: 'unknown', retiredTemplateKey: 'original' }, { outcome: 'unknown', body: { roleTemplateKeys: ['portal-basic-user', 'original'] } }]) {
+  for (const command of [{ outcome: 'unknown', retiredTemplateKey: 'original' }, { outcome: 'unknown', body: { roleTemplateKeys: ['portal-usage-core', 'original'] } }]) {
     const h = { state: { resources: [{ kind: 'account', phase: 'created', authorityCommands: [command] }] }, Blocked: Error };
     assert.throws(() => actions.guardCleanup(h, template), /retirement remains unresolved/);
     actions.guardCleanup(h, { kind: 'role-template', creation: { intended: { key: 'other' } } });

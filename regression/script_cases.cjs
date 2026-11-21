@@ -14,6 +14,7 @@ const parameters = [{ name: 'count', type: 'number', required: true }, { name: '
 const sample = () => ({ scriptContent: source, functionName: 'block.Handle', inputs: parameters,
   outputs: parameters, input: { count: 0, enabled: false }, timeout: 1000, mode: 'example' });
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 
 handlers['F017-001'] = async h => {
   const request = sample(), checked = (await h.ok(h.admin, 'POST', root + 'validate', request)).value;
@@ -108,17 +109,18 @@ async function instanceReadOnly(h) {
   const business = require('./business_cases.cjs'), authority = require('./application_authority_cases.cjs');
   const { isDeepStrictEqual: equal } = require('node:util'), f = await require('./delivery_cases.cjs').fixture(h);
   const base = '/cas/namespaces/panel/', templates = await h.directory(h.admin, base + 'role-templates/');
-  const ordinary = templates.find(t => t.key === 'portal-basic-user' && t.systemManaged && t.status === 2);
-  h.check('Existing ordinary functional profile is available for dedicated instance author', ordinary?.roleRefs?.length > 0);
-  const refs = structuredClone(ordinary.roleRefs), keys = ['management-application-manager', 'management-entity-manager', 'management-namespace-application-operator'];
+  const ordinary = portalBasicProfileSet(templates);
+  h.check('Existing ordinary functional profiles are available for dedicated instance author', ordinary.complete && ordinary.roleRefs.length > 0);
+  const mgmtRefs = [], keys = ['management-application-manager', 'management-entity-manager', 'management-namespace-application-operator'];
   for (const key of keys) {
     const ref = templates.flatMap(t => t.roleRefs || []).find(r => r.module === '/modules/kernel/runner' && r.key === key);
     h.check('Author fixture selects existing system functional role: ' + key, !!ref);
-    if (!refs.some(r => equal(r, ref))) refs.push(ref);
+    if (!mgmtRefs.some(r => equal(r, ref))) mgmtRefs.push(ref);
   }
   const scope = [{ applicationUuid: f.installations[0].deploymentId, accessLevel: 'viewer' }];
-  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-readonly-author', name: '仅实例A查看的脚本作者', subjectType: 'account', status: 2, roleRefs: refs, applicationAccess: scope }, 'role-template');
-  const m = await authority.account(h, 'debug-author'); await authority.assign(h, m, group, scope);
+  const authorGroup = await h.create(base + 'role-templates/', { key: h.state.prefix + '-readonly-author-mgmt', name: '脚本作者管理权限', scene: 'management', subjectType: 'account', status: 2, roleRefs: mgmtRefs, applicationAccess: [] }, 'role-template');
+  const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-readonly-author', name: '仅实例A查看的脚本作者', scene: 'usage', subjectType: 'account', status: 2, roleRefs: ordinary.roleRefs, applicationAccess: scope }, 'role-template');
+  const m = await authority.account(h, 'debug-author'); await authority.assign(h, m, group, scope, { extraTemplates: [authorGroup], expectedRoles: [...ordinary.roleRefs, ...mgmtRefs] });
   const manager = await business.member(h, 'manager'), contexts = [], rows = [];
   for (let i = 0; i < 2; i++) contexts.push(await business.runtime(h, f, i, manager));
   let primary;

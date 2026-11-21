@@ -6,6 +6,7 @@ const pages = require('./page_runtime_cases.cjs');
 const delivery = require('./model_delivery.cjs');
 const { authoring: a } = require('./authoring_cases.cjs');
 const { packageContent } = require('./owner_transport.cjs');
+const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const base = '/panel/application/definitions/';
 // Mirror only the public portable-export contract's exact identity fields.
 // Every business field, block, capability and write rule remains compared.
@@ -121,30 +122,42 @@ async function authorization(h) {
     await actions.prepare(h, authored);
     const app = (await h.ok(h.admin, 'GET', base + authored.app.id)).value;
     entityKey = authored.model.entities[0].pkgPath + '/' + authored.model.entities[0].name;
+    const authOpts = (await h.ok(h.admin, 'GET', '/panel/application/definitions/authorization-options')).value;
+    const humanBuiltin = (authOpts.roles || []).find(r => Array.isArray(r.subjectKinds) && r.subjectKinds.includes('human'));
+    const chosenBuiltin = humanBuiltin || authOpts.roles?.[0];
     const rejected = [
       { apiVersion: 'magic.application-authorization/v1', entityData: [] },
       { ...app.authorization, dataAccess: [{ entity: entityKey, operation: 'read' }] },
-      { ...app.authorization, roles: [{ key: 'ep.action', name: '禁Endpoint动作', subjectKinds: ['service'], entityActions: [{ entity: entityKey, action: 'acknowledge' }] }] },
-      { ...app.authorization, roles: [{ key: 'missing.action', name: '缺失动作', subjectKinds: ['human'], entityActions: [{ entity: entityKey, action: 'missing' }] }] },
+      { ...app.authorization, roles: [{ key: 'ep.action', name: '禁Endpoint动作', scene: 'usage', subjectKinds: ['service'], entityActions: [{ entity: entityKey, action: 'acknowledge' }] }] },
+      { ...app.authorization, roles: [{ key: 'missing.action', name: '缺失动作', scene: 'usage', subjectKinds: ['human'], entityActions: [{ entity: entityKey, action: 'missing' }] }] },
+      { ...app.authorization, roles: [{ key: 'missing.scene', name: '缺失场景', subjectKinds: ['human'], dataAccess: [{ operation: 'read' }] }] },
+      { ...app.authorization, roles: [{ key: 'ops.role', name: '运维角色', scene: 'operations', subjectKinds: ['human'], dataAccess: [{ operation: 'read' }] }],
+        templates: [{ key: 'mixed.scene.tpl', name: '跨场景模板', scene: 'usage', subjectType: 'account', roleKeys: ['ops.role'] }] },
+      ...(chosenBuiltin ? [{ ...app.authorization, builtinRoles: [{ module: chosenBuiltin.module, key: chosenBuiltin.key }],
+        roles: [{ key: 'ops.ext', name: '运维扩展', scene: 'operations', subjectKinds: ['human'], dataAccess: [{ operation: 'read' }] }],
+        templates: [{ key: 'ops.builtin.tpl', name: '非业务使用禁外部依赖', scene: 'operations', subjectType: 'account', roleKeys: ['ops.ext'], builtinRoles: [{ module: chosenBuiltin.module, key: chosenBuiltin.key }] }] }] : []),
     ];
     for (const badAuth of rejected) {
       const res = await h.api(h.admin, 'PUT', base + authored.app.id, meta.command(app, { authorization: badAuth }));
       h.check('Owner rejects old-ACL, endpoint action role or invalid authorization schema before publication', !h.good(res) && res.data?.error?.code === 4 && res.data.value == null, res);
       h.check('Rejected authorization preserves exact original draft', same((await h.ok(h.admin, 'GET', base + authored.app.id)).value, app));
     }
-    const authOpts = (await h.ok(h.admin, 'GET', '/panel/application/definitions/authorization-options')).value;
-    const humanBuiltin = (authOpts.roles || []).find(r => Array.isArray(r.subjectKinds) && r.subjectKinds.includes('human'));
-    const chosenBuiltin = humanBuiltin || authOpts.roles?.[0];
     customAuth = {
       apiVersion: 'magic.application-authorization/v1',
       dataAccess: structuredClone(app.authorization.dataAccess),
       entityActions: [{ entity: entityKey, action: 'acknowledge' }],
       builtinRoles: chosenBuiltin ? [{ module: chosenBuiltin.module, key: chosenBuiltin.key }] : [],
       permissions: [{ key: 'ext.audit', name: '扩展审计', permission: 4 }],
-      roles: [{ key: 'ext.approver', name: '扩展业务审批', subjectKinds: ['human'], dataAccess: [{ operation: 'read' }],
-        entityActions: [{ entity: entityKey, action: 'acknowledge' }], permissions: ['ext.audit'] }],
-      templates: [{ key: 'ext.member', name: '扩展动作模板', subjectType: 'account', roleKeys: ['ext.approver'],
-        ...(humanBuiltin ? { builtinRoles: [{ module: humanBuiltin.module, key: humanBuiltin.key }] } : {}) }],
+      roles: [
+        { key: 'ext.approver', name: '扩展业务审批', scene: 'usage', subjectKinds: ['human'], dataAccess: [{ operation: 'read' }],
+          entityActions: [{ entity: entityKey, action: 'acknowledge' }], permissions: ['ext.audit'] },
+        { key: 'ext.ops.auditor', name: '扩展运维审计', scene: 'operations', subjectKinds: ['human', 'service'], permissions: ['ext.audit'] },
+      ],
+      templates: [
+        { key: 'ext.member', name: '扩展动作模板', scene: 'usage', subjectType: 'account', roleKeys: ['ext.approver'],
+          ...(humanBuiltin ? { builtinRoles: [{ module: humanBuiltin.module, key: humanBuiltin.key }] } : {}) },
+        { key: 'ext.ops.member', name: '扩展运维模板', scene: 'operations', subjectType: 'account', roleKeys: ['ext.ops.auditor'] },
+      ],
     };
     await h.ok(h.admin, 'PUT', base + authored.app.id, meta.command(app, { authorization: customAuth }));
     authored.model = await a.draft(h, authored.app);
@@ -168,11 +181,13 @@ async function authorization(h) {
     const actionRoleKey = 'entity-action-' + crypto.createHash('sha256').update('/apps/entity-actions' + entityKey + '/acknowledge').digest('hex');
     for (let index = 0; index < f.installations.length; index++) {
       const i = f.installations[index], module = '/applications/' + i.deploymentId, scoped = roles.filter(v => v.module === module);
-      h.check('Independent CAS directory registers standard data/action roles and extension role/permission/template for exact installation',
-        ['application-data-read', 'application-data-write', 'application-data-delete', actionRoleKey, 'ext.approver']
+      h.check('Independent CAS directory registers standard data/action roles and multi-scene extension role/permission/template for exact installation',
+        ['application-data-read', 'application-data-write', 'application-data-delete', actionRoleKey, 'ext.approver', 'ext.ops.auditor']
           .every(key => scoped.filter(v => v.key === key && v.status === 2).length === 1) &&
-        scoped.some(v => v.key === 'ext.approver' && v.status === 2 && v.privilege?.some(p => p.module === module && p.uriPath === '/apps/permissions/ext.audit' && p.value === 4)) &&
-        roleTemplates.some(t => t.key === 'app-' + i.deploymentId + '-ext.member' && t.status === 2 && t.subjectType === 'account' && t.systemManaged === true), scoped);
+        scoped.some(v => v.key === 'ext.approver' && v.scene === 'usage' && v.status === 2 && v.privilege?.some(p => p.module === module && p.uriPath === '/apps/permissions/ext.audit' && p.value === 4)) &&
+        scoped.some(v => v.key === 'ext.ops.auditor' && v.scene === 'operations' && v.status === 2 && v.privilege?.some(p => p.module === module && p.uriPath === '/apps/permissions/ext.audit' && p.value === 4)) &&
+        roleTemplates.some(t => t.key === 'app-' + i.deploymentId + '-ext.member' && t.scene === 'usage' && t.status === 2 && t.subjectType === 'account' && t.systemManaged === true) &&
+        roleTemplates.some(t => t.key === 'app-' + i.deploymentId + '-ext.ops.member' && t.scene === 'operations' && t.status === 2 && t.subjectType === 'account' && t.systemManaged === true), scoped);
       const context = await business.runtime(h, f, index, manager);
       h.denied(await h.api(outsider, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + i.deploymentId), 'Formal registration does not grant an ordinary unassigned account runtime access');
       h.check('Registered installation remains the exact owner identity', context.identity.installationId === String(i.id));
@@ -182,7 +197,7 @@ async function authorization(h) {
     extAcc = await authority.account(h, 'authdelivery-ext');
     extAcc.resource.scenarioDefinitionId = f.application.id; h.persist();
     const extTplKey = 'app-' + f.installations[0].deploymentId + '-ext.member';
-    await h.ok(h.admin, 'PUT', '/cas/namespaces/panel/accounts/' + extAcc.value.id + '/role-templates', { roleTemplateKeys: ['portal-basic-user', extTplKey], applicationScopes: [] });
+    await h.ok(h.admin, 'PUT', '/cas/namespaces/panel/accounts/' + extAcc.value.id + '/role-templates', { roleTemplateKeys: [...PORTAL_BASIC_KEYS, extTplKey], applicationScopes: [] });
     extAssigned = true;
     h.denied(await h.api(extAcc.actor, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + f.installations[0].deploymentId),
       'Extension data/action role does not implicitly grant Portal runtime entry without a Panel access grant');
@@ -221,7 +236,7 @@ async function authorization(h) {
       if (cred?.resource?.phase === 'created') await graph.retireCredential(h, cred);
       if (sub?.resource?.phase === 'created') await graph.retire(h, sub);
       if (svc?.phase === 'created') await generated.cleanup(h, svc);
-      if (extAssigned) await h.api(h.admin, 'PUT', '/cas/namespaces/panel/accounts/' + extAcc.value.id + '/role-templates', { roleTemplateKeys: ['portal-basic-user'], applicationScopes: [] });
+      if (extAssigned) await h.api(h.admin, 'PUT', '/cas/namespaces/panel/accounts/' + extAcc.value.id + '/role-templates', { roleTemplateKeys: PORTAL_BASIC_KEYS, applicationScopes: [] });
       if (row) await business.finishCleanup(h, [row], primary);
     } finally { await pages.disposeExplicitFixture(h, f, primary); }
   }

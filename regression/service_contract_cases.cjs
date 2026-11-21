@@ -5,6 +5,7 @@ const graph = require('./service_graph.cjs');
 const generated = require('./generated_service_cases.cjs');
 const business = require('./business_cases.cjs');
 const { fixture } = require('./delivery_cases.cjs');
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 const schemaKeys = ['type','format','title','description','nullable','readOnly','writeOnly','required','minimum','maximum','minLength','maxLength','minItems','maxItems','pattern','default','enum'];
 const currentRoleRefusal = response => response.status === 401 && response.data?.error?.code === 5 && response.data.error.message === '当前角色未授予此资源权限' && response.data.value == null;
 function publicSchema(schema) {
@@ -149,14 +150,13 @@ async function invoke(actor, parsed, apiKey) {
 }
 async function documentedReader(h, context, suffix = 'documented-reader') {
   const authority = require('./application_authority_cases.cjs'), base = '/cas/namespaces/panel/';
-  const ordinary = (await h.directory(h.admin, base + 'role-templates/')).filter(t =>
-    t.key === 'portal-basic-user' && t.systemManaged && t.subjectType === 'account' && t.status === 2);
-  h.check('Documented subscriber uses one existing ordinary functional profile', ordinary.length === 1 && ordinary[0].roleRefs?.length > 0);
+  const ordinary = portalBasicProfileSet(await h.directory(h.admin, base + 'role-templates/'));
+  h.check('Documented subscriber uses existing ordinary functional profiles', ordinary.complete && ordinary.roleRefs.length > 0);
   const role = { module: '/applications/' + context.identity.deploymentId, key: 'application-data-read' };
-  const refs = [...new Map([...ordinary[0].roleRefs, role].map(ref => [JSON.stringify([ref.module, ref.key]), structuredClone(ref)])).values()];
+  const refs = [...new Map([...ordinary.roleRefs, role].map(ref => [JSON.stringify([ref.module, ref.key]), structuredClone(ref)])).values()];
   const access = [{ applicationUuid: context.identity.deploymentId, accessLevel: 'viewer' }];
   const group = await h.create(base + 'role-templates/', { key: h.state.prefix + '-' + suffix, name: '接口文档普通读取账号',
-    subjectType: 'account', status: 2, roleRefs: refs, applicationAccess: access }, 'role-template');
+    scene: 'usage', subjectType: 'account', status: 2, roleRefs: refs, applicationAccess: access }, 'role-template');
   const member = await authority.account(h, suffix);
   await authority.assign(h, member, group, access);
   return member.actor;
@@ -199,7 +199,7 @@ async function contracts(h) {
     });
     await generated.publish(h,r);
     const internal = {service:r.last.service,publication:r.last.publications[0],ownerIdentity:structuredClone(h.admin.identity)};
-    const template = await h.create('/cas/namespaces/panel/role-templates/',{key:h.state.prefix + '-documented-endpoint-read',name:'内部文档读取角色',subjectType:'endpoint',status:2,applicationAccess:[],roleRefs:[{module:'/applications/' + context.identity.deploymentId,key:'application-data-read'}]},'role-template');
+    const template = await h.create('/cas/namespaces/panel/role-templates/',{key:h.state.prefix + '-documented-endpoint-read',name:'内部文档读取角色',scene:'usage',subjectType:'endpoint',status:2,applicationAccess:[],roleRefs:[{module:'/applications/' + context.identity.deploymentId,key:'application-data-read'}]},'role-template');
     const subscription = await graph.subscribe(h,internal,reader); credential = await graph.credential(h,subscription,'internal-guide');
     const endpoint = (await h.ok(h.admin,'GET','/cas/namespaces/panel/endpoints/' + credential.value.endpointId)).value;
     const self = (await h.ok(reader,'GET','/api/v1/web/session/')).value;

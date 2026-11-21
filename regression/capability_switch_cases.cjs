@@ -3,6 +3,7 @@ const { isDeepStrictEqual: same } = require('node:util');
 const { authoring: author } = require('./authoring_cases.cjs');
 const delivery = require('./model_delivery.cjs');
 const review = require('./deployment_review_cases.cjs');
+const { portalBasicProfileSet } = require('./platform_profiles.cjs');
 const operations = ['query', 'get', 'create', 'update', 'delete'];
 const route = '/panel/hub/capabilitys/';
 function matrix(h, app) {
@@ -120,15 +121,15 @@ async function switches(h) {
     h.check('Installed capability catalogue exposes all five CRUD capabilities for full entity',
       fullCaps.length === 5 && ['create', 'query', 'get', 'update', 'delete'].every(k => !!byKind[k]), fullCaps);
 
-    const ordinary = (await h.directory(h.admin, casBase + 'role-templates/')).filter(t => t.key === 'portal-basic-user' && t.systemManaged && t.subjectType === 'account' && t.status === 2);
-    h.check('Capability switch caller uses built-in portal-basic-user functional profile', ordinary.length === 1 && ordinary[0].roleRefs?.length > 0);
+    const ordinary = portalBasicProfileSet(await h.directory(h.admin, casBase + 'role-templates/'));
+    h.check('Capability switch caller uses built-in portal-usage functional profiles', ordinary.complete && ordinary.roleRefs.length > 0);
     const dataRoles = ['read', 'write', 'delete'].map(k => ({ module: '/applications/' + r.installation.deploymentId, key: 'application-data-' + k }));
-    const accountRefs = [...new Map([...ordinary[0].roleRefs, ...dataRoles].map(ref => [JSON.stringify([ref.module, ref.key]), structuredClone(ref)])).values()];
+    const accountRefs = [...new Map([...ordinary.roleRefs, ...dataRoles].map(ref => [JSON.stringify([ref.module, ref.key]), structuredClone(ref)])).values()];
     const access1 = [{ applicationUuid: r.installation.deploymentId, accessLevel: 'manager' }];
-    const callerGroup = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-caller', name: '能力开关实调账号角色', subjectType: 'account', status: 2, roleRefs: accountRefs, applicationAccess: access1 }, 'role-template');
+    const callerGroup = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-caller', name: '能力开关实调账号角色', scene: 'usage', subjectType: 'account', status: 2, roleRefs: accountRefs, applicationAccess: access1 }, 'role-template');
     const caller = await authority.account(h, 'capswitch-caller');
     await authority.assign(h, caller, callerGroup, access1);
-    const epTpl1 = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-ep', name: '能力开关接口端点权限', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: dataRoles }, 'role-template');
+    const epTpl1 = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-ep', name: '能力开关接口端点权限', scene: 'usage', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: dataRoles }, 'role-template');
 
     const capIds1 = ['create', 'query', 'get', 'update', 'delete'].map(k => byKind[k].id);
     svc1 = generated.intent(h, h.state.prefix + '_capswitch_crud', capIds1, source);
@@ -198,9 +199,9 @@ async function switches(h) {
     h.check('Republished enabled-to-disabled transition removes every prior enabled pair from installed catalogue and exposes flipped pairs',
       catalogueMatches(next, r2.installation, owned2, h.admin.identity.namespace) && [...prevPairs].every(p => !nextPairs.has(p)) && owned2.length > 0, owned2);
 
-    const epTpl2 = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-ep2', name: '翻转载荷接口端点权限', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: ['read', 'write', 'delete'].map(k => ({ module: '/applications/' + r2.installation.deploymentId, key: 'application-data-' + k })) }, 'role-template');
+    const epTpl2 = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-ep2', name: '翻转载荷接口端点权限', scene: 'usage', subjectType: 'endpoint', status: 2, applicationAccess: [], roleRefs: ['read', 'write', 'delete'].map(k => ({ module: '/applications/' + r2.installation.deploymentId, key: 'application-data-' + k })) }, 'role-template');
     const access2 = [{ applicationUuid: r2.installation.deploymentId, accessLevel: 'manager' }];
-    const callerGroup2 = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-caller2', name: '翻转载荷账号角色', subjectType: 'account', status: 2, roleRefs: [...new Map([...ordinary[0].roleRefs, ...['read', 'write', 'delete'].map(k => ({ module: '/applications/' + r2.installation.deploymentId, key: 'application-data-' + k }))].map(ref => [JSON.stringify([ref.module, ref.key]), structuredClone(ref)])).values()], applicationAccess: access2 }, 'role-template');
+    const callerGroup2 = await h.create(casBase + 'role-templates/', { key: h.state.prefix + '-capswitch-caller2', name: '翻转载荷账号角色', scene: 'usage', subjectType: 'account', status: 2, roleRefs: [...new Map([...ordinary.roleRefs, ...['read', 'write', 'delete'].map(k => ({ module: '/applications/' + r2.installation.deploymentId, key: 'application-data-' + k }))].map(ref => [JSON.stringify([ref.module, ref.key]), structuredClone(ref)])).values()], applicationAccess: access2 }, 'role-template');
     const caller2 = await authority.account(h, 'capswitch-caller2');
     await authority.assign(h, caller2, callerGroup2, access2);
 

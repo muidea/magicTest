@@ -2,6 +2,12 @@
 // public commands/read models are used. Credential material stays private.
 const { isDeepStrictEqual: same } = require('node:util');
 const { sameAuthority } = require('./authority_snapshot.cjs');
+const {
+  PORTAL_CORE_KEY,
+  PORTAL_SERVICES_KEY,
+  PORTAL_SERVICE_ENDPOINT_KEY,
+  TENANT_OPS_ACCOUNTS_KEY,
+} = require('./platform_profiles.cjs');
 const handlers = {};
 const base = n => '/cas/namespaces/' + n + '/';
 const publicBase = n => '/api/v1/cas/namespaces/' + n + '/';
@@ -73,10 +79,13 @@ async function revoke(h, c) { const proof = await cleanup(h, c.resource); c.reso
 async function machine(h, suffix, editDescription) {
   const n = h.tenantAdmin.identity.namespace;
   await enableOAuth(h);
+  const templates = await h.directory(h.tenantAdmin, base(n) + 'role-templates/');
+  h.check('Namespace exposes protected Endpoint system-profile for service invocation',
+    templates.some(t => t.key === PORTAL_SERVICE_ENDPOINT_KEY && t.kind === 'system-profile' && t.scene === 'usage' && t.subjectType === 'endpoint' && t.systemManaged === true && t.status === 2), templates);
   const endpointTemplate = await h.createAs('tenantAdmin', base(n) + 'role-templates/', { key: h.state.prefix + '-' + suffix + '-machine', name: '受控机器账号读取',
-    description: '复用已登记服务调用角色；不创建角色定义', subjectType: 'endpoint', roleRefs: [{ module: '/modules/kernel/runner', key: 'portal-service-invoker' }], applicationAccess: [], status: 2 }, 'role-template');
+    description: '复用已登记服务调用角色；不创建角色定义', scene: 'usage', subjectType: 'endpoint', roleRefs: [{ module: '/modules/kernel/runner', key: 'portal-service-invoker' }], applicationAccess: [], status: 2 }, 'role-template');
   const account = await h.createAs('tenantAdmin', base(n) + 'accounts/', { account: h.state.prefix + '-' + suffix, displayName: '机器凭证回归账号', password: h.state.password,
-    status: 2, roleTemplateKeys: ['portal-user', 'tenant-security-admin'] }, 'account');
+    status: 2, roleTemplateKeys: [PORTAL_CORE_KEY, PORTAL_SERVICES_KEY, TENANT_OPS_ACCOUNTS_KEY] }, 'account');
   const payload = { name: h.state.prefix + '-' + suffix, description: '当前回归独立 Endpoint', status: 2, account: { id: account.id }, roleTemplateKeys: [endpointTemplate.key], scope: machineScope, startTime: Date.now() - 1000, expireTime: Date.now() + 3600000 };
   const endpoint = await h.createAs('tenantAdmin', base(n) + 'endpoints/', payload, 'endpoint');
   if (editDescription) {
@@ -228,11 +237,11 @@ handlers['F007-003'] = async h => {
 handlers['F004-001'] = async h => {
   const f = await machine(h, 'account-life'), route = base(f.n) + 'accounts/' + f.account.id;
   const firstLogin = await h.login(f.account.account, h.state.password, f.n, h.state.password + 'Q');
-  h.check('Account replacement preserves explicit current human template assignments', Array.isArray(f.account.templateRefs) && f.account.templateRefs.length === 2);
+  h.check('Account replacement preserves explicit current human template assignments', Array.isArray(f.account.templateRefs) && f.account.templateRefs.length === 3);
   await h.ok(h.tenantAdmin, 'PUT', route, { account: f.account.account, displayName: '已编辑回归账号', email: 'regression@example.invalid', description: '账号生命周期独立夹具', status: 2,
     roleTemplateKeys: f.account.templateRefs.map(t => t.key) });
   const saved = (await h.ok(h.tenantAdmin, 'GET', route)).value;
-  h.check('Account edit and current authority persist under same original identity', saved.id === f.account.id && saved.account === f.account.account && saved.displayName === '已编辑回归账号' && saved.email === 'regression@example.invalid' && saved.templateRefs?.some(t => t.key === 'tenant-security-admin'), saved);
+  h.check('Account edit and current authority persist under same original identity', saved.id === f.account.id && saved.account === f.account.account && saved.displayName === '已编辑回归账号' && saved.email === 'regression@example.invalid' && saved.templateRefs?.some(t => t.key === TENANT_OPS_ACCOUNTS_KEY), saved);
   // Full account replacement reapplies explicit authority. Establish positive
   // original-subject sessions/tokens after that command so its security fence
   // cannot be mistaken for the later password-reset result.
@@ -253,7 +262,7 @@ handlers['F004-001'] = async h => {
   await h.ok(h.tenantAdmin, 'PUT', route, { account: f.account.account, displayName: saved.displayName, email: saved.email, description: saved.description, status: 1,
     roleTemplateKeys: saved.templateRefs.map(t => t.key) });
   const disabled = (await h.ok(h.tenantAdmin, 'GET', route)).value;
-  h.check('Independent account read confirms disabled identity and retained role projection', disabled.id === f.account.id && disabled.status === 1 && disabled.templateRefs?.some(t => t.key === 'tenant-security-admin'), disabled);
+  h.check('Independent account read confirms disabled identity and retained role projection', disabled.id === f.account.id && disabled.status === 1 && disabled.templateRefs?.some(t => t.key === TENANT_OPS_ACCOUNTS_KEY), disabled);
   await h.rejectedLogin(f.account.account, fresh.password, f.n);
   const session = await h.api(fresh, 'GET', '/api/v1/web/session/');
   h.check('Disabling account retires its preexisting BFF session', session.status === 401 || session.data?.error?.code === 11, session);

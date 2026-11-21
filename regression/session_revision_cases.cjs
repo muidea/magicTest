@@ -2,6 +2,7 @@
 // compared after that independent positive check, never used to grant access.
 const { isDeepStrictEqual: same } = require('node:util');
 const oauth = require('./oauth_refresh_cases.cjs');
+const { PORTAL_CORE_KEY, TENANT_OPS_ACCOUNTS_KEY } = require('./platform_profiles.cjs');
 function claims(token) {
   const parts = token?.split('.');
   if (parts?.length !== 3) throw Error('Original issued JWT required');
@@ -12,7 +13,7 @@ function claims(token) {
 async function revisions(h) {
   const owner = h.tenantAdmin, namespace = owner.identity.namespace, collection = '/cas/namespaces/' + namespace + '/accounts/';
   const account = await h.createAs('tenantAdmin', collection, { account: h.state.prefix + '-revision-human', displayName: '权限修订独立账号',
-    password: h.state.password, status: 2, roleTemplateKeys: ['portal-user', 'tenant-security-admin'] }, 'account');
+    password: h.state.password, status: 2, roleTemplateKeys: [PORTAL_CORE_KEY, TENANT_OPS_ACCOUNTS_KEY] }, 'account');
   const resource = h.state.resources.find(r => r.kind === 'account' && r.id === account.id && r.collection === collection);
   const actor = await h.login(account.account, h.state.password, namespace), context = Object.create(h);
   context.user = actor;
@@ -20,7 +21,7 @@ async function revisions(h) {
   const before = await oauth.authorization(context, f, 'before-revision'), original = claims(before.access_token);
   h.check('Independently active original token binds precise new ordinary account and namespace', (await oauth.inspect(context, f, before.access_token, 'access_token')).active === true &&
     original.sub === 'account:' + account.id && original.namespace === namespace);
-  const changed = await require('./audit_cases.cjs').changeRoles(h, owner, resource, ['portal-user']);
+  const changed = await require('./audit_cases.cjs').changeRoles(h, owner, resource, [PORTAL_CORE_KEY]);
   h.check('Actual CAS role contraction advances this original account authority revision', changed.after.authorityRevision > changed.before.authorityRevision &&
     changed.after.authorityRevision > original.authority_revision && changed.after.effectiveRoles.length < changed.before.effectiveRoles.length);
   const stale = await oauth.inspect(context, f, before.access_token, 'access_token');
