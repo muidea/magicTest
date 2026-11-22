@@ -18,9 +18,9 @@ except ImportError:  # pragma: no cover - optional browser dependency.
     sync_playwright = None
 
 from cas import Cas
-from registration_test import RegistrationClient
+from registration_test import PORTAL_REGISTRATION_PROFILES, RegistrationClient
 from session import MagicSession
-from test_support import ALL_PERMISSION, CasE2EBase, STATUS_ENABLE, unique_name
+from test_support import CasE2EBase, STATUS_ENABLE, unique_name
 
 
 def _bool_env(name, default=True):
@@ -54,40 +54,25 @@ class PortalRegistrationBrowserTestCase(CasE2EBase):
 
     def _query_policy(self, namespace):
         response = self.panel_session.get(
-            f"/api/v1/cas/namespaces/{namespace}/registration/policys/"
+            f"/api/v1/cas/namespaces/{namespace}/registration/policies/"
         )
         if response is None or response.get("error") is not None:
             return None
         return response.get("value")
 
-    def _create_registration_role(self, role_module, role_key):
-        role = self.tenant_apps["role"].create_role(
-            {
-                "name": unique_name("ui_registration_role"),
-                "module": role_module,
-                "key": role_key,
-                "description": "portal registration ui role",
-                "group": "registration-ui",
-                "privilege": [
-                    {
-                        "module": "*",
-                        "uriPath": "*",
-                        "value": ALL_PERMISSION,
-                        "description": "portal registration ui all permission",
-                    }
-                ],
-                "status": STATUS_ENABLE,
-            }
-        )
-        self.assertIsNotNone(role, "创建 UI 注册测试角色失败")
-        self.cleanup_delete(self.tenant_apps["role"], role["id"], "delete_role")
-        return role
-
     def _prepare_registration_policy(self, registration):
         old_policy = self._query_policy(self.panel_namespace)
-        role_module = "registration-ui"
-        role_key = unique_name("portal_user")
-        role = self._create_registration_role(role_module, role_key)
+        templates = {
+            item.get("key"): item
+            for item in registration.list_role_templates(self.panel_namespace)
+            if item.get("key")
+        }
+        for required_key in PORTAL_REGISTRATION_PROFILES:
+            item = templates.get(required_key)
+            self.assertIsNotNone(item, f"缺少 UI 注册受控子模板: {required_key}")
+            self.assertEqual(item.get("scene"), "usage")
+            self.assertEqual(item.get("subjectType"), "account")
+            self.assertEqual(item.get("status"), STATUS_ENABLE)
 
         profile_key = unique_name("ui_profile")
         profile = registration.create_profile(
@@ -96,7 +81,7 @@ class PortalRegistrationBrowserTestCase(CasE2EBase):
                 "key": profile_key,
                 "name": "portal registration ui profile",
                 "description": "portal registration ui profile",
-                "roleRefs": [{"module": role_module, "roleKey": role_key}],
+                "accessProfileKeys": list(PORTAL_REGISTRATION_PROFILES),
                 "status": STATUS_ENABLE,
             },
         )

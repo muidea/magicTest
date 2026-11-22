@@ -6,7 +6,12 @@ const authorization = '/internal/modules/kernel/authorization';
 const ref = (module, key) => ({ module, key });
 const runnerRef = key => ref(runner, key);
 const casBase = n => '/cas/namespaces/' + n + '/';
-const { PORTAL_CORE_KEY, TENANT_OPS_AUDIT_METRICS_KEY } = require('./platform_profiles.cjs');
+const {
+  PORTAL_CORE_KEY,
+  PORTAL_APPS_KEY,
+  TENANT_OPS_AUDIT_METRICS_KEY,
+  validatePlatformSystemProfiles,
+} = require('./platform_profiles.cjs');
 const profile = PORTAL_CORE_KEY;
 const catalogCollection = '/panel/infra/catalogs/';
 const serviceCollection = '/panel/hub/services/';
@@ -76,6 +81,20 @@ handlers['F005-001'] = async h => {
   const n = h.need('tenantA').name, base = casBase(n);
   const roles = await h.ok(h.tenantAdmin, 'GET', base + 'roles/?_pageSize=100');
   if (roles.pagination?.hasMore || roles.pagination?.total > roles.values.length) throw new h.Blocked('Current role directory spans pages; complete role reader required before asserting catalogue consistency');
+  const tenantTemplates = await h.directory(h.tenantAdmin, base + 'role-templates/');
+  const tenantValidation = validatePlatformSystemProfiles(tenantTemplates, { namespaceClass: 'tenant' });
+  h.check('Tenant namespace exposes exact fine-grained 3-scene system-profile catalog without removed coarse keys', tenantValidation.ok, tenantValidation);
+  const defaultTemplates = await h.directory(h.admin, casBase(h.credentials.namespace) + 'role-templates/');
+  const defaultValidation = validatePlatformSystemProfiles(defaultTemplates, { namespaceClass: 'default' });
+  h.check('Default namespace exposes exact default + all fine-grained system-profile catalog including platform-ops-*', defaultValidation.ok, defaultValidation);
+  for (const scene of ['operations', 'management', 'usage']) {
+    const page = await h.ok(h.tenantAdmin, 'GET', base + 'role-templates/?scene=' + scene + '&_pageSize=100');
+    if (page.pagination?.hasMore || page.pagination?.total > (page.values || []).length) throw new h.Blocked('Scene-filtered role template directory spans pages');
+    const filtered = page.values || [];
+    h.check('Role-template scene query filter returns only ' + scene + ' entries',
+      filtered.length > 0 && filtered.every(x => x.scene === scene),
+      { scene, wrong: filtered.filter(x => x.scene !== scene).map(x => x.key) });
+  }
   const originalRole = runnerRef('management-service-manager'), editedRole = runnerRef('management-catalog-manager');
   for (const role of [originalRole, editedRole]) h.check('Role directory exposes exact enabled role ' + role.key,
     roles.values.some(x => x.module === role.module && x.key === role.key && x.status === 2));
@@ -88,8 +107,10 @@ handlers['F005-001'] = async h => {
   // Single-scene & immutable-scene & D4-2 A1 fences must reject invalid custom templates without mutating saved state.
   for (const [label, method, targetRoute, badPayload] of [
     ['missing scene', 'POST', base + 'role-templates/', { key: h.state.prefix + '-missing-scene', name: '缺场景', subjectType: 'account', roleRefs: [editedRole], applicationAccess: [], status: 2 }],
+    ['invalid scene value', 'POST', base + 'role-templates/', { key: h.state.prefix + '-bad-scene', name: '非法场景', scene: 'invalid', subjectType: 'account', roleRefs: [editedRole], applicationAccess: [], status: 2 }],
     ['mixed-scene roles', 'POST', base + 'role-templates/', { key: h.state.prefix + '-mixed-scene', name: '混场景', scene: 'management', subjectType: 'account', roleRefs: [ref(authorization, 'role-template-manager'), editedRole], applicationAccess: [], status: 2 }],
     ['non-usage applicationAccess', 'POST', base + 'role-templates/', { key: h.state.prefix + '-mgmt-app-access', name: '管理模板禁应用范围', scene: 'management', subjectType: 'account', roleRefs: [editedRole], applicationAccess: [{ applicationUuid: '*', accessLevel: 'viewer' }], status: 2 }],
+    ['endpoint applicationAccess', 'POST', base + 'role-templates/', { key: h.state.prefix + '-ep-app-access', name: '端点禁应用范围', scene: 'usage', subjectType: 'endpoint', roleRefs: [runnerRef('portal-service-invoker')], applicationAccess: [{ applicationUuid: '*', accessLevel: 'viewer' }], status: 2 }],
     ['immutable scene update', 'PUT', route, { ...updated, scene: 'operations' }],
   ]) {
     const res = await h.api(h.admin, method, targetRoute, badPayload);
@@ -110,6 +131,41 @@ handlers['F005-001'] = async h => {
   const after = (await h.ok(h.tenantAdmin, 'GET', catalogCollection + target.id)).value;
   h.check('Independent owner read proves edited template grants actual write', after.name === target.name + '-edited' && after.description === '模板分配后真实修改');
   h.denied(await h.api(actor, 'GET', serviceCollection), 'Replaced service role is not accidentally granted by template history');
+
+  const beforeUi = (await h.ok(h.admin, 'GET', route)).value;
+  const beforeUiKeys = (await h.directory(h.admin, base + 'role-templates/')).map(x => x.key).sort();
+  const page = h.tenantAdmin.page;
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(h.tenantAdmin.origin + '/panel/cas/access/?tab=templates', { waitUntil: 'networkidle' });
+    const createBtn = page.getByRole('button', { name: '新建模板' });
+    await createBtn.waitFor({ state: 'visible' });
+    for (const label of ['全部场景', '系统运维', '功能管理', '业务使用']) {
+      h.check('Template list exposes scene filter ' + label, await page.getByText(label, { exact: true }).first().isVisible());
+    }
+    await page.getByText('系统运维', { exact: true }).first().click();
+    await page.getByText('账号管理', { exact: true }).first().waitFor({ state: 'visible' });
+    await page.getByText('全部场景', { exact: true }).first().click();
+    await createBtn.click();
+    const modal = page.getByRole('dialog', { name: '新建权限模板' });
+    await modal.waitFor({ state: 'visible' });
+    await modal.getByText('授权场景', { exact: true }).waitFor({ state: 'visible' });
+    await modal.getByText('适用主体', { exact: true }).waitFor({ state: 'visible' });
+    if (h.screenshot) await h.screenshot(h.tenantAdmin, 'template-access-modal-1440');
+    await modal.getByRole('button', { name: /^取\s*消$/ }).click();
+    await modal.waitFor({ state: 'hidden' });
+    await exact(h, h.admin, route, beforeUi, 'Template modal cancel does not mutate existing template');
+    const afterUiKeys = (await h.directory(h.admin, base + 'role-templates/')).map(x => x.key).sort();
+    h.check('Template modal cancel creates no template residue', JSON.stringify(afterUiKeys) === JSON.stringify(beforeUiKeys), { beforeUiKeys, afterUiKeys });
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 900 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      h.check('Template page avoids horizontal overflow at ' + viewport.width + 'px',
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+      if (h.screenshot) await h.screenshot(h.tenantAdmin, 'template-access-' + viewport.width);
+    }
+  } finally {
+    await page.setViewportSize({ width: 1366, height: 768 });
+  }
 };
 
 handlers['F005-002'] = async h => {
@@ -153,33 +209,51 @@ handlers['F005-002'] = async h => {
 
 handlers['F005-003'] = async h => {
   const n = h.need('tenantA').name, base = casBase(n);
+  const opsRole = ref('/internal/modules/blocks/role', 'role-manager');
   const commonRole = runnerRef('management-catalog-manager'), uniqueRole = runnerRef('management-service-manager');
-  const first = await template(h, n, 'source-first', [commonRole, uniqueRole]);
-  const second = await template(h, n, 'source-second', [commonRole]);
-  const account = await member(h, n, 'sources-member', [profile, first.value.key, second.value.key]);
+  const opsTemplate = await template(h, n, 'source-ops', [opsRole], 'admin', 'operations');
+  const first = await template(h, n, 'source-first', [commonRole, uniqueRole], 'admin', 'management');
+  const second = await template(h, n, 'source-second', [commonRole], 'admin', 'management');
+  const initialKeys = [profile, PORTAL_APPS_KEY, opsTemplate.value.key, first.value.key, second.value.key];
+  const account = await member(h, n, 'sources-member', initialKeys);
   const actor = await h.login(account.account, h.state.password, n, h.state.password + 'S');
   const target = await catalog(h, 'source-target');
+  await h.ok(actor, 'GET', '/system/context/?surface=portal');
+  await h.ok(actor, 'GET', base + 'roles/?_pageSize=20');
   await h.ok(actor, 'GET', serviceCollection);
   await h.ok(actor, 'GET', catalogCollection + target.id);
   const templateBefore = (await h.ok(h.admin, 'GET', base + 'role-templates/' + first.value.id)).value;
   const refusal = await h.api(h.admin, 'DELETE', base + 'role-templates/' + first.value.id);
   h.check('CAS refuses deletion of an actually bound template', !h.good(refusal) && refusal.data?.error?.message === 'role template ' + first.value.key + ' is bound by subjects; unbind it before deletion', refusal);
   await exact(h, h.admin, base + 'role-templates/' + first.value.id, templateBefore, 'In-use delete refusal preserves original template');
-  await authority(h, n, account, [profile, first.value.key, second.value.key], [commonRole, uniqueRole]);
-  await h.ok(h.admin, 'PUT', base + 'accounts/' + account.id + '/role-templates', { roleTemplateKeys: [profile, second.value.key] });
-  await authority(h, n, account, [profile, second.value.key], [commonRole], [uniqueRole]);
+  await authority(h, n, account, initialKeys, [opsRole, commonRole, uniqueRole]);
+
+  const afterFirstRemovedKeys = [profile, PORTAL_APPS_KEY, opsTemplate.value.key, second.value.key];
+  await h.ok(h.admin, 'PUT', base + 'accounts/' + account.id + '/role-templates', { roleTemplateKeys: afterFirstRemovedKeys });
+  await authority(h, n, account, afterFirstRemovedKeys, [opsRole, commonRole], [uniqueRole]);
   await authenticated(h, actor, 'Source removal keeps the same original login valid');
   h.denied(await h.api(actor, 'GET', serviceCollection), 'Removed template unique service authority is no longer usable');
+  await h.ok(actor, 'GET', base + 'roles/?_pageSize=20');
   await h.ok(actor, 'PUT', catalogCollection + target.id, { name: target.name, description: '另一模板保持分类修改权', parent: null });
-  const beforeFinalRemoval = (await h.ok(h.tenantAdmin, 'GET', catalogCollection + target.id)).value;
-  h.check('Overlapping second template preserves actual category write', beforeFinalRemoval.description === '另一模板保持分类修改权');
+  const beforeOpsRemoval = (await h.ok(h.tenantAdmin, 'GET', catalogCollection + target.id)).value;
+  h.check('Overlapping second template and operations template preserve multi-scene union', beforeOpsRemoval.description === '另一模板保持分类修改权');
   await h.remove(base + 'role-templates/', first.value.id);
   await h.gone(base + 'role-templates/', first.value.id);
+
+  const afterOpsRemovedKeys = [profile, PORTAL_APPS_KEY, second.value.key];
+  await h.ok(h.admin, 'PUT', base + 'accounts/' + account.id + '/role-templates', { roleTemplateKeys: afterOpsRemovedKeys });
+  await authority(h, n, account, afterOpsRemovedKeys, [commonRole], [opsRole, uniqueRole]);
+  h.denied(await h.api(actor, 'GET', base + 'roles/?_pageSize=20'), 'Removing operations sub-template immediately revokes operations role');
+  await h.ok(actor, 'GET', '/system/context/?surface=portal');
+  await h.ok(actor, 'GET', catalogCollection + target.id);
+  await h.remove(base + 'role-templates/', opsTemplate.value.id);
+  await h.gone(base + 'role-templates/', opsTemplate.value.id);
+
   await h.ok(h.admin, 'PUT', base + 'accounts/' + account.id + '/role-templates', { roleTemplateKeys: [profile] });
-  await authority(h, n, account, [profile], [], [commonRole, uniqueRole]);
+  await authority(h, n, account, [profile], [], [opsRole, commonRole, uniqueRole]);
   await authenticated(h, actor, 'Final source removal changes authority, not authentication identity');
   h.denied(await h.api(actor, 'PUT', catalogCollection + target.id, { name: 'MUST NOT CHANGE', description: '', parent: null }), 'Final source removal denies category mutation on original session');
-  await exact(h, h.tenantAdmin, catalogCollection + target.id, beforeFinalRemoval, 'Owner proves refused post-revocation write did not persist');
+  await exact(h, h.tenantAdmin, catalogCollection + target.id, beforeOpsRemoval, 'Owner proves refused post-revocation write did not persist');
   await h.ok(actor, 'GET', '/system/context/?surface=portal');
 };
 

@@ -5,6 +5,19 @@ const net = require('node:net');
 const { isDeepStrictEqual: same } = require('node:util');
 const services = '/panel/hub/services/';
 const spoofIPs = ['198.51.100.201', '203.0.113.202', '192.0.2.203'];
+function stripPort(addr) {
+  if (typeof addr !== 'string') return '';
+  const trimmed = addr.trim();
+  if (trimmed.startsWith('[')) {
+    const idx = trimmed.indexOf(']:');
+    return idx > 1 ? trimmed.slice(1, idx) : trimmed;
+  }
+  const colon = trimmed.indexOf(':');
+  if (colon > 0 && trimmed.indexOf(':', colon + 1) === -1 && /^\d+$/.test(trimmed.slice(colon + 1))) {
+    return trimmed.slice(0, colon);
+  }
+  return trimmed;
+}
 function sourceHeaders(variant, foreign) {
   if (!['control', 'single', 'chain'].includes(variant) || !foreign || !/^[A-Za-z0-9_-]{1,128}$/.test(foreign.namespace) || !/^account:[1-9][0-9]{0,18}$/.test(foreign.subject)) throw Error('Finite source probe variant and original foreign identity required');
   if (variant === 'control') return {};
@@ -106,8 +119,76 @@ async function sourceAudit(h) {
   const all = await h.directory(h.admin, commands[0].query, { maxPages: 2 });
   h.check('Complete exact owner query preserves each original independent event once', all.length === 5 && commands.every(c => all.filter(r => r.eventId === c.audit.eventId).length === 1), all);
   for (const c of commands) verifyAudit(h, c, all.filter(r => r.eventId === c.audit.eventId), secrets);
+
+  // 1) CAS login security audit attribution (failed + succeeded login)
+  const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
+  const ns = h.tenantAdmin.identity.namespace, started = Date.now();
+  const auditAcct = await h.createAs('tenantAdmin', '/cas/namespaces/' + ns + '/accounts/', {
+    account: h.state.prefix + '-audit-login', displayName: '来源登录审计账号',
+    password: h.state.password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS,
+  }, 'account');
+  await h.rejectedLogin(auditAcct.account, h.state.password + '-wrong', ns);
+  const loginActor = await h.login(auditAcct.account, h.state.password, ns, h.state.password + 'L');
+  const loginSecrets = [...secrets, loginActor.password];
+  let casLoginEvents = [];
+  for (let attempt = 0; attempt < 15; attempt++) {
+    casLoginEvents = (await h.directory(h.tenantAdmin, '/cas/namespaces/' + ns + '/oauth/audit/'))
+      .filter(e => e.subject === 'account:' + auditAcct.id && e.createTime >= started - 2000);
+    if (casLoginEvents.some(e => e.eventType === 'login_failure') && casLoginEvents.some(e => e.eventType === 'login_success')) break;
+    if (attempt < 14) await new Promise(r => setTimeout(r, 1000));
+  }
+  const failEv = casLoginEvents.find(e => e.eventType === 'login_failure' && e.outcome === 'failure');
+  const okEv = casLoginEvents.find(e => e.eventType === 'login_success' && e.outcome === 'success');
+  const validCasAddr = e => {
+    const remoteHost = stripPort(e.remoteAddr);
+    let sourceAddr = '';
+    try { sourceAddr = JSON.parse(e.detailJson || '{}').sourceAddress || ''; } catch {}
+    const sourceHost = stripPort(sourceAddr);
+    return typeof e.remoteAddr === 'string' && net.isIP(remoteHost) > 0 &&
+      !['0.0.0.0', '::', '::ffff:0.0.0.0'].includes(remoteHost) &&
+      (!sourceAddr || (net.isIP(sourceHost) > 0 && !['0.0.0.0', '::', '::ffff:0.0.0.0'].includes(sourceHost))) &&
+      !spoofIPs.some(ip => e.remoteAddr.includes(ip) || sourceAddr.includes(ip));
+  };
+  h.check('CAS security audit records exact failed and succeeded login events with real source IP and zero secrets',
+    !!failEv && !!okEv &&
+    [failEv, okEv].every(e => e.namespace === ns && e.subject === 'account:' + auditAcct.id && validCasAddr(e)) &&
+    loginSecrets.filter(v => typeof v === 'string' && v.length >= 8).every(v => !JSON.stringify(casLoginEvents).includes(v)), casLoginEvents);
+
+  // 2) Gateway client-credential (ApiKey) attribution & non-secret audit check
+  const graph = require('./service_graph.cjs');
+  const sgf = await graph.fixture(h, 'audit_apikey');
+  const sgSub = await graph.subscribe(h, sgf, h.user);
+  const sgCred = await graph.credential(h, sgSub, 'audit-key');
+  try {
+    await graph.succeeds(h, h.user, sgf, { ...sgCred, scheme: 'ApiKey' });
+  } finally {
+    await graph.retireCredential(h, sgCred);
+    await graph.retire(h, sgSub);
+  }
+  const casAfterKey = await h.directory(h.tenantAdmin, '/cas/namespaces/' + ns + '/oauth/audit/?clientId=' + encodeURIComponent(sgCred.value.clientId));
+  const opTenant = await h.directory(h.tenantAdmin, '/panel/support/audit/operation', { maxPages: 2 });
+  h.check('Gateway ApiKey credential issuance/call never exposes plaintext secret in CAS or Panel audits',
+    !JSON.stringify(casAfterKey).includes(sgCred.apiKey) && !JSON.stringify(opTenant).includes(sgCred.apiKey));
+
+  // 3) Cross-tenant audit read isolation
+  const tenantCrossOps = await h.directory(h.tenantAdmin, commands[0].query, { maxPages: 2 });
+  h.check('Tenant admin cannot read platform operation audit events via explicit target/actor filters',
+    !tenantCrossOps.some(r => r.namespace === actor.identity.namespace || r.eventId === commands[0].audit.eventId), tenantCrossOps);
+  const peerAccess = await h.directory(h.otherTenantAdmin, '/panel/support/audit/access', { maxPages: 2 });
+  const peerOps = await h.directory(h.otherTenantAdmin, '/panel/support/audit/operation', { maxPages: 2 });
+  h.check('Other tenant admin cannot read target tenant security or operation audit logs',
+    !peerAccess.some(r => r.namespace === ns || r.subject === 'account:' + auditAcct.id) &&
+    !peerOps.some(r => r.namespace === actor.identity.namespace || r.namespace === ns), { peerAccess: peerAccess.length, peerOps: peerOps.length });
+  h.inaccessible(await h.api(h.tenantAdmin, 'GET', '/cas/namespaces/' + actor.identity.namespace + '/oauth/audit/'),
+    'Tenant admin cannot read platform CAS namespace OAuth audit');
+
   h.check('Original and foreign real sessions survive header forgeries', h.good(await h.api(actor, 'GET', '/api/v1/web/session/')) && h.good(await h.api(h.tenantAdmin, 'GET', '/api/v1/web/session/')));
-  await h.partial('Same-ingress platform/home operation-audit anti-spoof source and original-actor invariants only; real conditional writes, independent owner effects, peer preservation and exact audit events. Empirical controls are not an absolute source/socket oracle. Direct/trusted/invalid-forwarded chains, independent source networks, CAS login and Gateway security events, tenant audit read exposure and concurrency/restart recovery remain uncovered.');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F057-004',
+    classification: '[C]',
+    note: 'Multi-network direct vs trusted-proxy topologies, trusted-host DNS failure and restart recovery tracked in special [C]; same-ingress anti-spoof, CAS login / BFF operation / Gateway ApiKey attribution and tenant audit read isolation verified.',
+  });
 }
-sourceAudit.actors = ['tenantAdmin'];
+sourceAudit.actors = ['tenantAdmin', 'otherTenantAdmin', 'user'];
 module.exports = { handlers: { 'F057-004': sourceAudit }, sourceHeaders, mutationOnce, verifyAudit, mutate, compareSources };

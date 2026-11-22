@@ -260,3 +260,8 @@ test('explicit fixture teardown skips already disposed predecessor lineage and r
     pageRequests: [f.r, { id: 22 }], resource: { kind: 'definition', id: 7 } });
   assert.deepEqual(calls, ['peer-grant', 'peer-request', 'retained-definition']);
 });
+test('F048-003 declares tenantAdmin cross-tenant actor and closes without h.partial', () => {
+  assert.deepEqual(recovery.handlers['F048-003'].actors, ['tenantAdmin']);
+  const src = require('node:fs').readFileSync(require.resolve('./storage_recovery_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
+});

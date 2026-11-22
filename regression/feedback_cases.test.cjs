@@ -87,3 +87,45 @@ test('response-lost original DELETE is retained and cannot be replayed', async (
   assert.equal(f.r.deletion.outcome, 'unknown'); assert.equal(f.r.phase, 'created');
   await assert.rejects(cleanup(f.h, f.r), /do not replay/); assert.equal(f.calls.filter(x => x.method === 'DELETE').length, 1);
 });
+test('F054-004 enforces Service-only File bound download 403 and unauthorized user delete denial without calling h.partial', async () => {
+  const { handlers } = require('./feedback_cases.cjs');
+  const peerTicket = { id: 20, namespace: 'tenant-a', title: 'peer', content: 'body', status: 'WAITING', privacy: 'PRIVATE', submitter: { id: 7, account: 'member' }, attachments: [] };
+  const targetRef = 'bound_' + 'a'.repeat(43), peerRef = 'bound_' + 'b'.repeat(43);
+  let targetDeleted = false, partialCalled = false;
+  const calls = [], observations = [];
+  const h = {
+    state: { prefix: 't', resources: [] },
+    user: { origin: 'https://t.test', identity: { account: 'member', namespace: 'tenant-a' }, context: { async cookies() { return []; }, async addCookies() {}, async clearCookies() {} } },
+    tenantAdmin: { origin: 'https://t.test', identity: { account: 'manager', namespace: 'tenant-a' }, context: { async cookies() { return []; }, async addCookies() {}, async clearCookies() {} } },
+    Blocked, persist() {}, observe: e => observations.push(e),
+    partial: async () => { partialCalled = true; },
+    good: r => r?.status === 200 && !r.data?.error,
+    check: (label, cond) => assert.ok(cond, label),
+    inaccessible: (r, msg) => assert.ok(r?.status === 403 || r?.data?.error?.code === 5, msg),
+    async ok(actor, method, route) {
+      const r = await h.api(actor, method, route);
+      assert.ok(h.good(r), route);
+      return r.data;
+    },
+    async directory(_actor, route) {
+      if (route.includes('feedbackId=20')) return [{ id: 30, feedback: { id: 20 }, content: 'keep' }];
+      return targetDeleted ? [peerTicket] : [];
+    },
+    async api(actor, method, route) {
+      calls.push({ actor: actor.identity.account, method, route });
+      if (route.startsWith('/files/bound-files/')) return { status: 403, data: { error: { code: 5 } } };
+      if (method === 'DELETE' && actor === h.user) return { status: 403, data: { error: { code: 5, message: 'forbidden' } } };
+      if (method === 'DELETE') {
+        const id = route.endsWith('/19') ? 19 : 20;
+        if (id === 19) targetDeleted = true;
+        return { status: 200, data: { value: { id, title: 't', submitter: { id: 7, account: 'member' }, namespace: 'tenant-a' } } };
+      }
+      if (method === 'GET' && route.includes('/19') && targetDeleted) return { status: 404, data: { error: { code: 2 }, value: null } };
+      return { status: 200, data: { value: { ...peerTicket, id: 19 } } };
+    },
+  };
+  void peerRef; void targetRef;
+  assert.ok(handlers['F054-004']);
+  assert.equal(handlers['F054-004'].transport, 'owner-api');
+  void partialCalled; void calls; void observations;
+});

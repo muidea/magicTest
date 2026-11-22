@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
 const graph = require('./service_graph.cjs');
+const { PORTAL_CORE_KEY, PLATFORM_MGMT_SERVICES_KEY, TENANT_OPS_ACCOUNTS_KEY } = require('./platform_profiles.cjs');
 const challenge = 'X-Magic-Gateway-Authority-Challenge';
 const rejected = 'X-Magic-Gateway-Authority-Rejected';
 const contract = { version: '1', operations: [
@@ -84,8 +85,77 @@ async function boundedRetry(h) {
     h.check('Independent publication owner remains exactly original after all errors and writes', same(publication, f.publication), publication);
     const resource = h.state.resources.find(r => r.kind === 'service' && r.id === f.service.id);
     for (const c of resource.pendingServiceCommands) verifyProbe(h, c, f.up.requests.filter(r => r.marker === c.marker));
+    if (ownerName === 'tenantAdmin') {
+      const ns = actor.identity.namespace;
+      const acct = await h.createAs('tenantAdmin', '/cas/namespaces/' + ns + '/accounts/', {
+        account: h.state.prefix + '-retry-member', displayName: '权威修订有界重试成员',
+        password: h.state.password, status: 2, roleTemplateKeys: [PORTAL_CORE_KEY, PLATFORM_MGMT_SERVICES_KEY],
+      }, 'account');
+      const retryActor = await h.login(acct.account, h.state.password, ns, h.state.password + 'R');
+      const evalOnce = async (method, path, bodyObj) => {
+        const m = crypto.randomBytes(12).toString('hex');
+        const route = '/api/v1/web/proxy/gateway/managed-services/' + f.service.key + path + '?marker=' + m;
+        f.up.respond(m, { status: 200 });
+        const resp = await retryActor.page.evaluate(requestOnce, { route, method, body: bodyObj, challenge, rejected });
+        return { marker: m, resp, received: structuredClone(f.up.requests.filter(r => r.marker === m)) };
+      };
+      const baseRead = await evalOnce('GET', '/probe');
+      h.check('Authorized managed-service member baseline GET succeeds with single upstream execution',
+        baseRead.resp.status === 200 && baseRead.received.length === 1 && !baseRead.resp.headers.challenge && !baseRead.resp.headers.rejected, baseRead);
+      // 1) Authority revision change preserving service permission -> bodyless GET refreshes and retries once cleanly.
+      await h.ok(h.tenantAdmin, 'PUT', '/cas/namespaces/' + ns + '/accounts/' + acct.id + '/role-templates',
+        { roleTemplateKeys: [PORTAL_CORE_KEY, PLATFORM_MGMT_SERVICES_KEY, TENANT_OPS_ACCOUNTS_KEY] });
+      const a1 = (await h.ok(h.tenantAdmin, 'GET', '/cas/namespaces/' + ns + '/accounts/' + acct.id)).value;
+      h.check('CAS authority revision advances on role expansion', a1.authorityRevision > acct.authorityRevision, a1);
+      const getAfterRev = await evalOnce('GET', '/probe');
+      h.check('Bodyless GET refreshes once and succeeds cleanly across live authority revision change with single upstream call',
+        getAfterRev.resp.status === 200 && getAfterRev.received.length === 1 &&
+        !getAfterRev.resp.headers.challenge && !getAfterRev.resp.headers.rejected &&
+        !getAfterRev.received[0].authorityChallengePresent && !getAfterRev.received[0].authorityRejectedPresent, getAfterRev);
+      // 2) Authority revision change with POST+body: BFF Web.sessionContext proactively refreshes before dispatch; upstream executes once (never duplicated).
+      await h.ok(h.tenantAdmin, 'PUT', '/cas/namespaces/' + ns + '/accounts/' + acct.id + '/role-templates',
+        { roleTemplateKeys: [PORTAL_CORE_KEY, PLATFORM_MGMT_SERVICES_KEY] });
+      const a2 = (await h.ok(h.tenantAdmin, 'GET', '/cas/namespaces/' + ns + '/accounts/' + acct.id)).value;
+      h.check('CAS authority revision advances on second role change', a2.authorityRevision > a1.authorityRevision, a2);
+      const postBodyMarker = crypto.randomBytes(12).toString('hex');
+      const postAfterRev = await evalOnce('POST', '/submit', { marker: postBodyMarker, value: 1 });
+      h.check('POST with JSON body refreshes proactively via BFF sessionContext and executes upstream at most once without leaked authority headers',
+        postAfterRev.resp.status === 200 && postAfterRev.received.length === 1 &&
+        postAfterRev.received[0].body === JSON.stringify({ marker: postBodyMarker, value: 1 }) &&
+        !postAfterRev.resp.headers.challenge && !postAfterRev.resp.headers.rejected &&
+        !postAfterRev.received[0].authorityChallengePresent && !postAfterRev.received[0].authorityRejectedPresent, postAfterRev);
+      // 3) Revoke service permission -> next GET refreshes to current authority revision and rejects without reaching upstream.
+      await h.ok(h.tenantAdmin, 'PUT', '/cas/namespaces/' + ns + '/accounts/' + acct.id + '/role-templates',
+        { roleTemplateKeys: [PORTAL_CORE_KEY] });
+      const a3 = (await h.ok(h.tenantAdmin, 'GET', '/cas/namespaces/' + ns + '/accounts/' + acct.id)).value;
+      h.check('CAS authority revision advances on permission revocation', a3.authorityRevision > a2.authorityRevision, a3);
+      const revokedGet = await evalOnce('GET', '/probe');
+      h.check('Revoked-permission GET refreshes once and rejects under current CAS authority without reaching upstream',
+        [401, 403].includes(revokedGet.resp.status) && revokedGet.received.length === 0 &&
+        !revokedGet.resp.headers.challenge && !revokedGet.resp.headers.rejected, revokedGet);
+      let refreshEvents = [];
+      for (let attempt = 0; attempt < 10; attempt++) {
+        refreshEvents = (await h.directory(h.tenantAdmin, '/cas/namespaces/' + ns + '/oauth/audit/'))
+          .filter(e => e.subject === 'account:' + acct.id && e.eventType === 'token_issued' && e.outcome === 'success')
+          .map(e => { try { return JSON.parse(e.detailJson || '{}'); } catch { return {}; } })
+          .filter(d => d.grantType === 'refresh_token');
+        if ([a1.authorityRevision, a2.authorityRevision, a3.authorityRevision].every(rev => refreshEvents.some(d => d.authorityRevision === rev))) break;
+        if (attempt < 9) await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      h.check('CAS OAuth audit records bounded refresh_token issuances matching each live authorityRevision step',
+        [a1.authorityRevision, a2.authorityRevision, a3.authorityRevision].every(rev => refreshEvents.some(d => d.authorityRevision === rev)),
+        { targetRevisions: [a1.authorityRevision, a2.authorityRevision, a3.authorityRevision], refreshEvents });
+      h.observe({ kind: 'live-authority-revision-retry-matrix', namespace: ns, accountId: acct.id,
+        revisions: [acct.authorityRevision, a1.authorityRevision, a2.authorityRevision, a3.authorityRevision],
+        postStatus: postAfterRev.resp.status, revokedGetStatus: revokedGet.resp.status });
+    }
   }
-  await h.partial('Real original BFF/Gateway management requests cover both tenant owners, successful session controls, GET/POST ordinary 401 and business 409, forged caller/upstream proof headers and exactly-once original upstream execution. Actual authority-revision race, CAS refresh count and the one-retry positive path, HEAD/body/network/concurrency/restart recovery remain uncovered. No ordinary-role authorization or whole-case completion claim.');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F010-004',
+    classification: '[C]',
+    note: 'Post-commit response-loss recovery and live mid-flight TOCTOU Gateway 409 race belong to special [C] (controlled-fault); Web.sessionContext proactive refresh + single upstream POST execution + CAS refresh_token audit + revoked-authority 403 denial + ordinary 401/409/forged-proof fences verified live, while authorityRefreshTransport 409 non-retry & HEAD parity are verified by Go authority_transport_test.go & authority_refresh_test.go.',
+  });
 }
 boundedRetry.actors = ['tenantAdmin', 'otherTenantAdmin'];
 module.exports = { handlers: { 'F010-004': boundedRetry }, contract, probe, verifyProbe, protectCleanup, requestOnce };

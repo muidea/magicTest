@@ -2,7 +2,14 @@
 const crypto = require('node:crypto');
 const { isDeepStrictEqual: same } = require('node:util');
 const { fileTransfer } = require('./owner_transport.cjs');
-const { PORTAL_CORE_KEY, PORTAL_SELF_FILES_KEY } = require('./platform_profiles.cjs');
+const {
+  PORTAL_CORE_KEY,
+  PORTAL_SELF_FILES_KEY,
+  PLATFORM_MGMT_FILES_VIEWER_KEY,
+  PLATFORM_MGMT_FILES_EDITOR_KEY,
+  PLATFORM_MGMT_FILES_MANAGER_KEY,
+  validatePlatformSystemProfiles,
+} = require('./platform_profiles.cjs');
 const handlers = {}, self = '/files/self/files/', managed = '/files/';
 const hash = b => 'sha256:' + crypto.createHash('sha256').update(b).digest('hex');
 const validID = id => Number.isSafeInteger(id) && id > 0;
@@ -114,6 +121,53 @@ handlers['F049-001'] = async h => {
   const retained = await fileTransfer(h.tenantAdmin, 'GET', privateFile.download, undefined, h.observe);
   h.check('Deleting original shared file preserves independent private file', retained.status === 200 && hash(retained.data.bytes || Buffer.alloc(0)) === privateFile.expectedDigest);
   await cleanup(h, privateFile);
+
+  const ns = h.tenantAdmin.identity.namespace;
+  const templates = await h.directory(h.tenantAdmin, '/cas/namespaces/' + ns + '/role-templates/');
+  const profileCheck = validatePlatformSystemProfiles(templates, { namespaceClass: 'tenant', requireMagicFile: true });
+  h.check('Namespace projects all four magicFile fine-grained system-profiles alongside platform core profiles', profileCheck.ok, profileCheck);
+
+  const seed = await createFile(h, 'tenantAdmin', 'private');
+  const viewerAcc = await h.createAs('tenantAdmin', '/cas/namespaces/' + ns + '/accounts/', { account: h.state.prefix + '-file-viewer', displayName: '文件只读', password: h.state.password, status: 2, roleTemplateKeys: [PORTAL_CORE_KEY, PLATFORM_MGMT_FILES_VIEWER_KEY] }, 'account');
+  const editorAcc = await h.createAs('tenantAdmin', '/cas/namespaces/' + ns + '/accounts/', { account: h.state.prefix + '-file-editor', displayName: '文件编辑', password: h.state.password, status: 2, roleTemplateKeys: [PORTAL_CORE_KEY, PLATFORM_MGMT_FILES_EDITOR_KEY] }, 'account');
+  const managerAcc = await h.createAs('tenantAdmin', '/cas/namespaces/' + ns + '/accounts/', { account: h.state.prefix + '-file-manager', displayName: '文件管理', password: h.state.password, status: 2, roleTemplateKeys: [PORTAL_CORE_KEY, PLATFORM_MGMT_FILES_MANAGER_KEY] }, 'account');
+  const viewer = await h.login(viewerAcc.account, h.state.password, ns, h.state.password + 'V');
+  const editor = await h.login(editorAcc.account, h.state.password, ns, h.state.password + 'E');
+  const manager = await h.login(managerAcc.account, h.state.password, ns, h.state.password + 'M');
+
+  const viewerDownload = await fileTransfer(viewer, 'GET', seed.download, undefined, h.observe);
+  h.check('file-viewer reads managed file bytes with exact digest', viewerDownload.status === 200 && hash(viewerDownload.data?.bytes || Buffer.alloc(0)) === seed.expectedDigest);
+  h.check('file-viewer reads managed file metadata', h.good(await h.api(viewer, 'GET', seed.view)));
+  const viewerUpload = await fileTransfer(viewer, 'POST', managed + 'upload/?' + new URLSearchParams({ 'key-name': 'file', filePath: h.state.prefix + '/v-denied', fileSource: h.state.prefix + '-v', fileScope: h.state.prefix + '-v' }), { name: 'denied.bin', bytes: Buffer.from('x') }, h.observe);
+  h.check('file-viewer cannot upload managed file', !h.good(viewerUpload) && viewerUpload.status === 403, viewerUpload);
+  h.denied(await h.api(viewer, 'DELETE', idRoute(seed)), 'file-viewer cannot delete managed file');
+
+  const editorDownload = await fileTransfer(editor, 'GET', seed.download, undefined, h.observe);
+  h.check('file-editor reads managed file bytes with exact digest', editorDownload.status === 200 && hash(editorDownload.data?.bytes || Buffer.alloc(0)) === seed.expectedDigest);
+  h.denied(await h.api(editor, 'DELETE', idRoute(seed)), 'file-editor cannot delete managed file');
+
+  h._fileMatrixEditor = editor;
+  const editorFile = await createFile(h, '_fileMatrixEditor', 'private');
+  delete h._fileMatrixEditor;
+  h.denied(await h.api(editor, 'DELETE', idRoute(editorFile)), 'file-editor cannot delete its own managed upload');
+  const managerDel = await h.api(manager, 'DELETE', idRoute(editorFile));
+  h.check('file-manager deletes managed file uploaded by editor', h.good(managerDel) && matches(managerDel.data?.value, editorFile), managerDel);
+  h.check('Deleted editor file ID is absent from independent owner read', absent(await h.api(manager, 'GET', idRoute(editorFile))));
+  editorFile.deletion = { outcome: 'acknowledged', response: managerDel };
+  editorFile.phase = 'deleted';
+  h.persist();
+
+  h._fileMatrixManager = manager;
+  const managerFile = await createFile(h, '_fileMatrixManager', 'private');
+  const mgrDelSelf = await h.api(manager, 'DELETE', idRoute(managerFile));
+  delete h._fileMatrixManager;
+  h.check('file-manager uploads and deletes managed file completely', h.good(mgrDelSelf) && matches(mgrDelSelf.data?.value, managerFile), mgrDelSelf);
+  h.check('Deleted manager file ID is absent from independent owner read', absent(await h.api(manager, 'GET', idRoute(managerFile))));
+  managerFile.deletion = { outcome: 'acknowledged', response: mgrDelSelf };
+  managerFile.phase = 'deleted';
+  h.persist();
+
+  await cleanup(h, seed);
 };
 handlers['F049-002'] = async h => {
   const r = await createFile(h, 'user', 'self');

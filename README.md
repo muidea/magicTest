@@ -4,7 +4,7 @@ Node.js浏览器工具统一使用用户级Playwright `1.65.0`（入口为`~/.lo
 
 平台基本功能以交付可重复执行的完整场景、逐条用例及配套脚本为目标，统一要求见[平台全量功能回归说明](~/dataspace/magicPlatform/docs/technical/platform-functional-regression.md)，两个模拟应用单列。正式回归材料只描述当前功能、环境准备、操作断言、清理和执行方式，不包含过去的临时阶段记录。
 
-[资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找71类功能、245条必需用例的候选脚本和缺口；清单存在不代表完整脚本套件已经交付。默认常规回归（`standard`）执行正向功能、交互与非破坏性验证（184个分项，覆盖66类功能；包含不产生破坏性的权限隔离、分页聚合及合法输入/引用保护拒绝），破坏性与故障异常测试（`abnormal`，28个分项，覆盖24类功能）与条件专项（`special`，53个分项，覆盖31类功能）各自单列并单独触发；全量共179条仅`standard`、13条仅`abnormal`、33条仅`special`、5条`standard+special`混合、15条`abnormal+special`混合，完整目录仍为245条／265个分项。需独立嵌套 Docker 守护进程的11项非正常业务/部署运维与故障注入用例（`F057-005`、`F059-002`、`F060-001/002`、`F061-001/002/003`、`F062-001/003`、`F063-001/002`）归入条件专项待办项（`isolated-daemon`），后续使用单独环境执行，不作为正常功能验收；其余故障注入、中断、损坏制品、并发冲突与全局策略破坏等测试归入`abnormal`，通过 `platform-abnormal` 独立回归。
+[资产清单](~/codespace/magicTest/regression/inventory.json)是开发整理资料，保留有效用例编号，按14个主场景查找71类功能、245条必需用例的候选脚本和缺口；清单存在不代表完整脚本套件已经交付。默认常规回归（`standard`）执行正向功能、交互与非破坏性验证（184个分项，覆盖66类功能；包含不产生破坏性的权限隔离、分页聚合及合法输入/引用保护拒绝），破坏性与故障异常测试（`abnormal`，28个分项，覆盖24类功能）与条件专项（`special`，75个分项，覆盖36类功能）各自单列并单独触发；全量共162条仅`standard`、8条仅`abnormal`、33条仅`special`、22条`standard+special`混合、20条`abnormal+special`混合，完整目录仍为245条／287个分项。需独立嵌套 Docker 守护进程的11项非正常业务/部署运维与故障注入用例（`F057-005`、`F059-002`、`F060-001/002`、`F061-001/002/003`、`F062-001/003`、`F063-001/002`）归入条件专项待办项（`isolated-daemon`），后续使用单独环境执行，不作为正常功能验收；其余故障注入、中断、损坏制品、并发冲突与全局策略破坏等测试归入`abnormal`，通过 `platform-abnormal` 独立回归。
 
 ```sh
 cd ~/codespace/magicTest
@@ -51,7 +51,7 @@ MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json pyth
 
 同一HTTPS origin的常规执行串行进行。编排工具从预检到清理／报告持有本机排他锁，重复启动在业务操作前明确拒绝；不同用例的独立租户仍可能共享平台OAuth客户端，不能据此并发启动整组夹具。直接调用子执行器须由调用方保障同环境互斥；锁不协调其他机器或平台管理操作。
 
-[注册执行器](~/codespace/magicTest/regression/registration_cases.cjs)通过真实匿名租户Host调用公开申请入口，管理策略路径为`policies`；管理代理不能替代匿名正例。[会话策略执行器](~/codespace/magicTest/regression/session_cases.cjs)保存平台及租户策略，独立读取BFF新旧会话身份和实际到期时间，并条件恢复平台原策略；自然到期仍按专项处理。[脚本执行器](~/codespace/magicTest/regression/script_cases.cjs)核对格式化、样例输出／日志、诊断及正式库保存回读；F017-002 另核对作者调试1—3000ms（0默认3000）的边界、超时和传输取消，运行绑定1—30000ms独立验证。浏览器取消不直接证明服务端已停止。[通知执行器](~/codespace/magicTest/regression/notification_cases.cjs)核对真实门户详情、受众与租户范围、下线／删除及读取失败后的旧缓存保护。各模块登记不表示用例已经通过。
+[注册执行器](~/codespace/magicTest/regression/registration_cases.cjs)通过真实匿名租户Host调用公开申请入口，管理策略路径为`policies`，并通过[授权快照比较](~/codespace/magicTest/regression/authority_snapshot.cjs)的 `sameAccounts` 按无序集合核对账号 `templateRefs`；管理代理不能替代匿名正例。[会话策略执行器](~/codespace/magicTest/regression/session_cases.cjs)保存平台及租户策略，独立读取BFF新旧会话身份和实际到期时间，并条件恢复平台原策略；自然到期仍按专项处理。[脚本执行器](~/codespace/magicTest/regression/script_cases.cjs)核对格式化、样例输出／日志、诊断及正式库保存回读；F017-002 核对作者调试1—3000ms（0默认3000）的边界、超时与浏览器传输取消，后端真实取消执行结合 `magicBase`/`magicRunner` Go 单测验证（运行绑定1—30000ms独立验证，依赖受控服务端停机注入证明同一原调试请求停执行的 `[C]` 分支拆入 `special`）。[通知执行器](~/codespace/magicTest/regression/notification_cases.cjs)核对真实门户详情、受众与租户范围、下线／删除及读取失败后的旧缓存保护。各模块登记不表示用例已经通过。
 
 注册账号的 `templateRefs` 只表示人工模板来源，不能用它断言注册来源的初始授权。执行器另通过公开 `subject-role-bindings` 集合读取原账号的绑定，核对注册来源、来源键、有效状态及精确角色集合，并保留实际登录和管理权限拒绝验证。目录仅在 `values:null` 且明确 `total:0` 时按空集读取；缺失或不完整结果保持受阻。
 
@@ -538,7 +538,7 @@ python3 run_tests.py --preset load-aging
 
 包清理 F031-002/003 接受正式HTTP409/code21未完成申请拒绝。若旧工具留下原申请，只能通过 `--resume-tracked-cleanup` 配合 `--package-refusal-proofs`，核对原cleanup／case的SHA、原journal、账号、拒绝及历史／当前ZIP和原申请，再正式取消与cleanup；不重发原包DELETE，保留原失败。
 
-安装申请及审批由[交付决策执行器](~/codespace/magicTest/regression/deployment_review_cases.cjs)验证同意图重复确认、独立实例申请、原请求撤回、两名不同审批人的同版本并发，以及真实running期间的撤回／清理拒绝。只有实际观察到目标执行窗口才算通过；独立读取申请与任务跨过完成时刻时先确认终态。新模型实例通过正式destroy卸载并读取Schema回收；成功交付和卸载回执按owner合同保留。原失败可沿 `--resume-tracked-cleanup` 核对原命令及原资源后处置，不重放审批或卸载。
+安装申请及审批由[交付决策执行器](~/codespace/magicTest/regression/deployment_review_cases.cjs)验证同意图重复确认、独立实例申请、原请求撤回、两名不同审批人的同版本并发，在 `F030-002` `standard` 分支核对 pending 审批拒绝/撤回、部署中取消、已通过任务（`deployment-operations`）与申请（`deployment-requests`）双路径 cleanup 拒绝，以及已取消/终止后的 cleanup 确认与 peer 保持；依赖受控故障注入的原调度/恢复竞态 `[C]` 分支拆入 `special`。新模型实例通过正式destroy卸载并读取Schema回收；成功交付和卸载回执按owner合同保留。原失败可沿 `--resume-tracked-cleanup` 核对原命令及原资源后处置，不重放审批或卸载。
 
 内置包权限与申请准入由[原生提供方执行器](~/codespace/magicTest/regression/native_provider_access_cases.cjs)核对默认空间和运维权限的双门禁、普通作者原生预检正控、Base/Gateway真实包的读取／申请／删除拒绝、非法目标空间和模型包摘要。HTTP401只有同时命中精确code5权限文案并通过独立会话确认时才属于目标拒绝；一般认证失败不能充当通过。缺少已有内置镜像或配置配套时保持部分验证，不构建产品镜像补造前提。
 
@@ -619,9 +619,9 @@ F027-001 由 `~/codespace/magicTest/regression/installation_request_cases.cjs` �
 
 [应用观察执行器](~/codespace/magicTest/regression/application_observation_cases.cjs)核对独立日志/累加器只读声明、安装CAS角色、真实账号授权和撤权；空结果只证明读取授权，不证明块生产了数据。[内置执行器](~/codespace/magicTest/regression/builtin_execution_cases.cjs)核对已安装解释器insert输出真实落库，[运行身份执行器](~/codespace/magicTest/regression/runtime_identity_cases.cjs)核对活跃人类无法冒充机器快照读取。未知写入或角色替换会保留原定义、主体、授权与安装，不重放或猜测拆除。
 
-授权补充入口：[Endpoint当前角色及账号上限](~/codespace/magicTest/regression/endpoint_authority_cases.cjs)覆盖独立同账号双Endpoint真实读取、单独撤权、账号收缩的CAS禁用/原Key失效及恢复账号不复活Key；[授权声明数量边界](~/codespace/magicTest/regression/authorization_capacity_cases.cjs)覆盖三类扩展63/64及逐维65拒绝和原定义条件收缩。两项仍为partial：机器写删/账号禁用、安装规模及JWT/加密会话完整字节预算等分支未完成。
+授权补充入口：[Endpoint当前角色及账号上限](~/codespace/magicTest/regression/endpoint_authority_cases.cjs)覆盖独立同账号双Endpoint真实读取、单独撤权、账号收缩的CAS禁用/原Key失效及恢复账号不复活Key；[授权声明数量边界](~/codespace/magicTest/regression/authorization_capacity_cases.cjs)已覆盖 `F010-005` 三类扩展63/64及逐维65拒绝、`dataAccess` 3/4、`model-draft` 4×64=256 `entityActions` 及单实体65/应用257拒绝与条件收缩，以及25档案（45有效角色、424权限）下 RS256 Access JWT（27259B / Claims 19999B）与 BFF Cookie `<4096B` 预算及刷新族注销；极端长链与压测 `[C]` 归 `special`。
 
-[保留存储恢复执行器](~/codespace/magicTest/regression/storage_recovery_cases.cjs)补充 F048-003：原业务完整行与peer、正式撤权及retain、恢复点/Schema独立回读、第三allocate独立分配，再按原instanceKey与资源版本恢复。核对前驱claimed至精确继任、CAS恢复意图、原撤权不复活；显式新grant后证明同原行、旧安装fence拒绝及新实例隔离。继任可靠删除单独保存新身份回执，不覆盖原create身份；正式destroy和Schema回收后，前驱以原点已消费且精确继任已销毁关联处置，不二次卸载前驱。未确认的原写保留所有关联资源；主动成员保持、过期选择/并发竞争、响应丢失恢复、跨租户与在途矩阵未覆盖，整例partial。此阶段仅补源码和browser-free工具检查，平台实际执行留后。
+[保留存储恢复执行器](~/codespace/magicTest/regression/storage_recovery_cases.cjs)覆盖 F048-003 的 `abnormal` 异常分支：原业务完整行与peer、正式撤权及retain、恢复点/Schema独立回读、第三allocate独立分配、未撤权 `tenantAdmin` 与已撤权成员围栏、跨租户 `storage-options` 与 restore 拒绝、过期 `expectedResourceVersion` 审批拒绝与立即取消清理、同绑定双领拒绝，再按原instanceKey与资源版本恢复。核对前驱claimed至精确继任、CAS恢复意图、原撤权不复活；显式新grant后证明同原行、旧安装fence拒绝及新实例隔离。继任可靠删除单独保存新身份回执，不覆盖原create身份；正式destroy和Schema回收后，前驱以原点已消费且精确继任已销毁关联处置，不二次卸载前驱。未确认的原写保留所有关联资源；在途恢复丢响应 `[C]` 已拆入 `special`。
 
 [部署任务状态执行器](~/codespace/magicTest/regression/deployment_task_state_cases.cjs)补充 F029-003：真实成功模型、预期原生exit23失败、同原任务正式终止后cancelled三态，核对原任务动作、尝试与错误、三宽度表单输入保持及真实owner手动刷新。负例使用原条件版本，精确区分目标状态/版本拒绝与鉴权、传输或无关冲突；完整请求/任务/安装目录及原主体保持后才确认无写。意外UI命令在转发前持久记录，未知结果保留原任务与关联源包，即使运行资源已终止也不猜测删除历史。普通任务不要求运行交接合同的allowedActions字段；等待/执行窗口、实际允许重试、额度耗尽/授权/Schema诊断及迟到响应切任务仍缺，整例partial，Live留后。
 
@@ -653,15 +653,15 @@ F027-001 由 `~/codespace/magicTest/regression/installation_request_cases.cjs` �
 
 冷快照子集使用正式 backup／verify／restore 与私有有限文件，包含 services 和两个应用目录。核对完整原清单／摘要、归档权限、现存目标拒绝、同根恢复的全部原内容／数字 owner，以及被替换状态保留。夹具字节不冒充真实数据库、秘密身份或持久 owner 回执。镜像发现子集使用正式双原生安装，完整原样 helper 与独立 Compose／native manifest 集合、实际本地 image ID 配对，确认原 owner／卷／无关核心保持后正式 retain 卸载。四例均 partial：完整初始化／业务与待投递恢复、真实全组件 update 与回执、完整 development reset 尚缺，源码检查不代表 Live。
 
-[权限重试执行器](~/codespace/magicTest/regression/authority_retry_cases.cjs)补充 F010-004 的真实管理链路反例：正式发布双租户受控外部服务，原会话通过 BFF／Gateway 发送 GET／POST，核对普通401、业务409和伪造内部证明头均仅执行原上游一次，响应与请求的内部头应被剥离；前后成功请求证明会话仍可用，服务及发布由owner独立回读。写前持久化原actor／origin／服务／marker／正文，未知不重发并保护服务、发布和父租户。真实权限修订、CAS刷新次数与至多一次重试正例、HEAD／带正文GET／网络错误及并发恢复仍缺，整例保持partial；工具替身和本地HTTP不能替代Live。
+[权限重试执行器](~/codespace/magicTest/regression/authority_retry_cases.cjs)覆盖 F010-004 的 `abnormal` 异常分支：正式发布双租户受控外部服务，原会话通过 BFF／Gateway 发送 GET／POST，核对普通401、业务409和伪造内部证明头均仅执行原上游一次并剥离内部头；配对验证 `authorityRevision` 变更下 BFF `sessionContext` 主动刷新与 `POST` 一次执行、CAS `refresh_token` 审计与撤权后 `GET 403`（上游0次调用），并结合 Go TOCTOU `409` 非重放单测，前后成功请求证明会话可用，服务及发布由owner独立回读。写前持久化原actor／origin／服务／marker／正文，未知不重发并保护服务、发布和父租户。并发 TOCTOU 故障注入与丢响应恢复 `[C]` 已拆入 `special`；工具替身和本地HTTP不能替代Live。
 
-[来源审计执行器](~/codespace/magicTest/regression/audit_source_cases.cjs)补充 F057-004 的单入口防伪造子集：原平台home会话交替发送三次正常请求与两次伪造转发／租户／actor头的条件服务更新，逐次核对原owner内容和旁路服务保持，再关联唯一的新审计event、原主体、目标租户及来源地址。正常请求的实测地址只用于比较不变量，不作为独立socket或完整可信代理链的正确性证明；控制来源发生变化时保持受阻，不把漂移归因为伪造。写前保存原版本／正文／headers，响应或审计未知不重发，原服务和父租户保持。真实双来源、直连／trusted／invalid链、CAS登录及Gateway安全事件和并发恢复仍缺；整例partial，离线工具检查不替代Live。审计服务夹具使用独立的 audit_source 标识，不与来源治理用例共用资源身份；原同名创建受保护时，不重复 POST 或复用其他场景资源。
+[来源审计执行器](~/codespace/magicTest/regression/audit_source_cases.cjs)覆盖 F057-004 的 `abnormal` 异常分支：原平台home会话交替发送三次正常请求与两次伪造转发／租户／actor头的条件服务更新，对比 Panel／Gateway／CAS 跨入口与伪造头剥离，逐次核对原owner内容、旁路服务保持、真实非占位 `remoteAddr`/`sourceAddress` 与唯一新操作审计event；配对验证 CAS 失败／成功登录审计、Gateway ApiKey 调用审计（无密钥泄漏）及跨租户 `access`/`operation`/`oauth` 审计隔离。正常请求的实测地址只用于比较不变量，控制来源发生变化时保持受阻，不把漂移归因为伪造；`trusted-proxy` 与直连 socket 可信链 `[C]` 归入 `special`，离线工具检查不替代Live。审计服务夹具使用独立的 audit_source 标识，不与来源治理用例共用资源身份；原同名创建受保护时，不重复 POST 或复用其他场景资源。
 
-[运行控制执行器](~/codespace/magicTest/regression/runtime_control_cases.cjs)补充 F035-004／F035-006，均为部分覆盖。前者仅在独立交付部署更新现存默认策略的原目标，以原版本条件更新，核对旧版本／错误kind拒绝；全部策略、registry配置和原安装冻结事实独立保持。合法新修订保留，不倒退回填，不创建无公开删除的策略；未知命令保留原台账，绝不重发或猜测回滚。实际默认解析及双Base／Gateway交接、排空／撤权／恢复仍需补充。
+[运行控制执行器](~/codespace/magicTest/regression/runtime_control_cases.cjs)补充 F035-004／F035-006。前者仅在独立交付部署更新现存默认策略的原目标，以原版本条件更新，核对旧版本／错误kind拒绝；全部策略、registry配置和原安装冻结事实独立保持。合法新修订保留，不倒退回填，不创建无公开删除的策略；未知命令保留原台账，绝不重发或猜测回滚；实际默认解析及双Base／Gateway交接、排空／撤权／恢复仍属 `special`。
 
 F035-006使用[机器只读传输](~/codespace/magicTest/regression/runtime_machine_transport.cjs)，常规私有配置可增加 `runtimeSnapshotConfig` 文件路径；该文件只允许 `origin`、`instanceId`、`incarnation`、`endpointId`、`clientId`、`tokenFile` 六字段。origin为运维明确配置的原Panel机器HTTP／HTTPS入口，不假定公共Traefik暴露机器接口；Gateway与CAS凭据身份必须由独立registry读取确认。配置与token文件必须在仓外、当前UID拥有、无group／other权限的普通文件，禁止符号链接。token使用原部署流程签发的短期Bearer，工具不生成、刷新或撤销机器身份；过期或缺入口按真实条件失败／受阻。令牌不归档，输入只记录配置摘要。HTTPS保持证书校验；HTTP仅用于运维配置的隔离转发入口。
 
-机器只执行 `/api/v1/panel/runtime-execution/snapshot/` GET及三种有限query拒绝探针，无Cookie、无跳转、无重试，15秒整个请求预算。完整JSON响应信封body按16MiB流式限额计数；8192字节配置和65536字节token文件上限是工具输入预算，不是产品合同。快照核对原机器／有效租约、完整标记、独立双安装已知行及真实普通主体业务集合读取，运行双方时钟应同步。已知行与完整标记不能证明所有assignment；实际Gateway Apply／持久history／route-receipt及完整容量、字节与重启边界仍开放。测试本机socket通过仅证明工具门禁，不代表平台通过。
+机器只执行 `/api/v1/panel/runtime-execution/snapshot/` GET及三种有限query拒绝与跨人类会话拒绝，无Cookie、无跳转、无重试，15秒整个请求预算。完整JSON响应信封body按16MiB流式限额计数；8192字节配置和65536字节token文件上限是工具输入预算，不是产品合同。快照核对原机器／有效租约、完整标记、`panel`/`tenantA`/`tenantB` 全活跃 `running` 模型实例1:1对账、已知行及普通主体业务集合读取，配对部署/销毁期间 `snapshot.version` 单调递增与状态转 `revoked` 验证（运行双方时钟应同步）。`Apply`、Base快照、完整容量压测与故障恢复 `[C]` 归入 `special`；测试本机socket通过仅证明工具门禁，不代表平台通过。
 
 
 [文件受管引用执行器](~/codespace/magicTest/regression/bound_reference_cases.cjs)补充 F049-004 的现有单消费者合同：人类会话经 `/files/self/files/upload-references/` 完成私有上传，核对直调 Service-only `/files/upload-references/:uploadRef/consume` 与 `/files/bound-files/` 路由返回 403 边界隔离；由认证后的 Panel 所有者接口（功能块源码绑定与模型包导入）执行实际服务端消费、原摘要/purpose 校验、单一合法 consumer 绑定、外 consumer/错摘要/错 purpose 拒绝、不可变包字节读取与独立 peer 保持。先持久记录原命令，未知不重发；当前不存在多合法引用增减公开合同，共享最后引用与并发释放仍开放，整例保持partial。

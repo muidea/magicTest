@@ -108,3 +108,9 @@ test('immutable cleanup binding protects original source headers, event set, bod
     const copy = structuredClone(r); change(copy.pendingServiceCommands[0]); assert.throws(() => bindOriginalCleanup({ resources: [copy] }, original));
   }
 });
+test('F057-004 registers multi-tenant/user actors and closes without legacy h.partial', () => {
+  const { handlers } = require('./audit_source_cases.cjs');
+  assert.deepEqual(handlers['F057-004'].actors, ['tenantAdmin', 'otherTenantAdmin', 'user']);
+  const src = require('node:fs').readFileSync(require.resolve('./audit_source_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
+});

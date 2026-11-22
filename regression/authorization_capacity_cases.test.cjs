@@ -69,3 +69,10 @@ test('lost or wrongly attributed capacity writes keep original intent and never 
     assert.equal(writes().some(v => v.authorization.permissions?.length === 0), false);
   });
 });
+test('F010-005 declares dataAccess/entityActions limits helper and closes without legacy h.partial', () => {
+  const cap = require('./authorization_capacity_cases.cjs');
+  assert.equal(typeof cap.declaredExtensionLimits, 'function');
+  assert.equal(cap.handlers['F010-005'].requiresOnlyDeliveryFixture, true);
+  const src = require('node:fs').readFileSync(require.resolve('./authorization_capacity_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
+});

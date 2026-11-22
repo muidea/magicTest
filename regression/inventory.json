@@ -1574,6 +1574,20 @@
       "path": "~/codespace/magicTest/regression/test_audit_admission_lock.py",
       "layer": "tool",
       "limitation": "仓外临时原文件真实flock与子进程反例：inode/模式/UID、部分输入deadline、未知release；不访问平台运行文件。"
+    },
+    {
+      "id": "platform-profiles",
+      "path": "~/codespace/magicTest/regression/platform_profiles.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "定义与校验三场景26个（不含magicFile时22个）细粒度平台system-profile目录、条件文件子模板与去重角色集合，排除已移除宽泛旧Key；静态共享模块与目录校验不代替Live端到端通过。"
+    },
+    {
+      "id": "platform-profiles-tests",
+      "path": "~/codespace/magicTest/regression/platform_profiles.test.cjs",
+      "layer": "tool",
+      "target": "platform-standard",
+      "limitation": "离线单元测试default/tenant命名空间分类、条件magicFile四档齐备或部分缺档拒绝、applicationAccess漂移与旧Key排除；不连接Live平台。"
     }
   ],
   "scenarios": [
@@ -1634,7 +1648,9 @@
         "platform-endpoint-authority",
         "platform-authorization-capacity",
         "platform-authority-retry",
-        "platform-authority-retry-tests"
+        "platform-authority-retry-tests",
+        "platform-profiles",
+        "platform-profiles-tests"
       ]
     },
     {
@@ -2012,9 +2028,10 @@
       "assetIds": [
         "registration-api",
         "registration-browser",
-        "platform-standard-registration"
+        "platform-standard-registration",
+        "platform-profiles"
       ],
-      "finding": "已补当前公开合同断言；匿名入口与较长租户Host路由覆盖存在实测缺口，未关闭；旧认证／policys历史脚本不能直接代替。"
+      "finding": "已按accessProfileKeys引用细粒度portal-usage-*子模板及/registration/policies/同步；匿名入口与较长租户Host路由及Live执行待验，保持partial。"
     },
     {
       "caseId": "F011-001",
@@ -2077,25 +2094,29 @@
       "caseId": "F005-001",
       "status": "partial",
       "assetIds": [
-        "platform-standard-identity"
+        "platform-standard-identity",
+        "platform-profiles",
+        "platform-profiles-tests"
       ],
-      "finding": "已补当前合同逐步执行器；登记本身不构成稳定全量资格，须核对当轮逐项结果、同候选重复执行和owner清理。"
+      "finding": "已同步default/tenant细粒度三场景system-profile校验、scene筛选、单场景与applicationAccess门禁及1440/1024/390px模板页面检查；Live整例执行待验，保持partial。"
     },
     {
       "caseId": "F005-002",
       "status": "partial",
       "assetIds": [
-        "platform-standard-identity"
+        "platform-standard-identity",
+        "platform-profiles"
       ],
-      "finding": "已补当前合同逐步执行器；登记本身不构成稳定全量资格，须核对当轮逐项结果、同候选重复执行和owner清理。"
+      "finding": "已按operations/management细粒度子模板边界更新委派上限逐步执行器；登记本身不构成稳定全量资格，Live实测与清理待验，保持partial。"
     },
     {
       "caseId": "F005-003",
       "status": "partial",
       "assetIds": [
-        "platform-standard-identity"
+        "platform-standard-identity",
+        "platform-profiles"
       ],
-      "finding": "已补当前合同逐步执行器；登记本身不构成稳定全量资格，须核对当轮逐项结果、同候选重复执行和owner清理。"
+      "finding": "已扩展覆盖operations+management+usage三场景多子模板并集、单来源撤权精确收敛与在用引用拒绝；完整Live与owner清理待验，保持partial。"
     },
     {
       "caseId": "F002-002",
@@ -2103,7 +2124,7 @@
       "assetIds": [
         "platform-standard-registration"
       ],
-      "finding": "已补当前公开合同断言；匿名入口与较长租户Host路由覆盖存在实测缺口，未关闭；旧认证／policys历史脚本不能直接代替。"
+      "finding": "standard常规分支（匿名入口申请、批准/驳回、伪造审核拒绝与请求/账号不变，registration_cases.cjs引入authority_snapshot.cjs sameAccounts无序比对templateRefs并配对5/5单测）已于Live standard-v2-recheck 20261121T152813Z-b66fae90 passed（allCleaned: true）；较长租户Host路由矩阵仍在F002-004单列覆盖（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F002-003",
@@ -2117,9 +2138,10 @@
       "caseId": "F002-004",
       "status": "partial",
       "assetIds": [
-        "platform-standard-registration"
+        "platform-standard-registration",
+        "platform-profiles"
       ],
-      "finding": "已补当前公开合同断言；匿名入口与较长租户Host路由覆盖存在实测缺口，未关闭；旧认证／policys历史脚本不能直接代替。"
+      "finding": "已按受控account系统档案、拒绝endpoint保护模板及非受保护system-profile自定义模板、域名门禁及验证码不可用门禁同步公开合同；匿名入口与Live实测待验，保持partial。"
     },
     {
       "caseId": "F056-001",
@@ -2167,7 +2189,7 @@
       "assetIds": [
         "platform-standard-script"
       ],
-      "finding": "已实现子集：非法语法/入口/输入/输出、1—3000ms预算、真实长循环超时、其他请求继续及禁goroutine/init/全局变量。 常规仍缺：浏览器AbortError仅证明传输取消；缺同一原调试请求已在服务端停止执行的独立证据。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "abnormal分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true），并结合magicBase/magicRunner后端真实取消执行Go单测通过；需受控服务端注入停机竞态证明同一原调试请求已停执行的[C]分支已拆入special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F037-003",
@@ -2345,9 +2367,10 @@
       "caseId": "F007-001",
       "status": "partial",
       "assetIds": [
-        "platform-standard-cas-identity"
+        "platform-standard-cas-identity",
+        "platform-profiles"
       ],
-      "finding": "已补身份/凭据生命周期或拒绝门禁取证，仍需正式服务发布、订阅和同租户真实调用正例，不能用CAS audience拒绝替代服务隔离；保持partial。"
+      "finding": "已补portal-usage-service-endpoint保护系统模板绑定/解绑、account模板拒绑与身份/凭据生命周期取证；仍需Live同租户服务调用正例与清理，保持partial。"
     },
     {
       "caseId": "F007-002",
@@ -2670,9 +2693,10 @@
       "caseId": "F049-001",
       "status": "partial",
       "assetIds": [
-        "platform-ordinary-file"
+        "platform-ordinary-file",
+        "platform-profiles"
       ],
-      "finding": "补原始二进制、公开匿名与私有owner、同租户peer/外租户metadata/token/download范围和原文件清理；工具/注册不计Live通过。"
+      "finding": "已扩展magicFile四档条件系统档案校验与file-viewer/file-editor/file-manager三级读写删边界及追踪清理；工具/注册不计Live通过，保持partial。"
     },
     {
       "caseId": "F049-002",
@@ -2696,7 +2720,7 @@
       "assetIds": [
         "platform-retention-boundaries"
       ],
-      "finding": "双策略16个越界负例、永久保留及清理参数上下界、条件并发、UI读取失败与缩短取消；正数天数最大值须隔离日志owner，不清理共享历史。"
+      "finding": "abnormal异常分支（双策略16个越界负例、永久保留及清理参数上下界、条件并发、UI读取失败、缩短取消与isolated=false转交）已于Live 20261121T152952Z-25c94112 passed（allCleaned: true）；正数retentionDays=1/36500清理边界依赖isolated-daemon已归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F062-002",
@@ -2986,7 +3010,7 @@
       "assetIds": [
         "platform-deployment-review"
       ],
-      "finding": "隔离20261109T011436Z-a9fed811四项定向全部通过，前后候选/健康一致且当前资源清理全部确认；包括真实running期间撤回/清理拒绝。早期工具失败原件保留，原资源均正式处置；整轮资格仍开放。"
+      "finding": "standard常规分支（pending审批拒绝/撤回、部署中取消、已通过deployment-operations与deployment-requests双路径cleanup拒绝及已取消/终止cleanup确认与peer保持）已于Live standard-v2 20261121T125021Z-944e6907 passed（allCleaned: true）；依赖受控故障注入的原调度/恢复竞态[C]已拆入special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F025-002",
@@ -3288,7 +3312,7 @@
         "platform-feedback",
         "platform-feedback-tests"
       ],
-      "finding": "已实现子集：工单/消息正式删除，双入口附件不可读，新发上传拒绝，相同字节但独立fileRef的另一工单完整保持。 常规仍缺：缺同一引用多消费者的正式支持语义与共享保持；缺File owner独立引用释放/终结证明。 范围：File清理中断、已派发上传迟到及原引用恢复属于special；本次standard仅核对正常释放与共享保持。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "abnormal异常分支（工单/消息正式删除、attachments/bound-files双入口与下载直调403隔离、未授权用户删除peer拒绝及peer与同字节独立fileRef工单保持）已按v1初始单消费者合同于Live 20261121T152952Z-25c94112 passed（allCleaned: true）；共享多消费者/故障恢复[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F019-001",
@@ -3429,7 +3453,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：同应用双实例A/B的实际关联拒绝及原宿主/目标/peer完整不变。 常规仍缺：缺另一应用实例的关联反例；缺真实另一租户同包实例的关联反例。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "standard常规分支（同应用双实例A/B与跨租户同包实例关联拒绝、原宿主/目标/peer完整不变；model_input_cases.cjs补齐PUT accounts/:id/role-templates显式下发applicationScopes）已于Live standard-recheck 20261121T052629Z-cbb4993a与standard-v2 20261121T125021Z-944e6907 passed（allCleaned: true）；跨不同应用定义的额外关联反例仍单列留待扩展（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F014-003",
@@ -3537,7 +3561,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：真实角色收窄、旧JWT在线inactive、新授权采用当前修订及原刷新族正式撤销。 常规仍缺：缺按实际配置触发租户/来源限流；缺关闭来源限流后的密码锁定及真实阻断期限恢复、伪造转发头反例。 范围：本例execution仅standard；不能因含自然阻断期限就擅自移到special。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "abnormal异常分支（真实角色收窄、旧JWT在线inactive、新授权采用当前修订、原刷新族撤销、坏凭据401与5次失败后同账号第6次正确密码锁定+CAS登录审计及另一账号正常登录隔离）已于Live 20261121T152952Z-25c94112 passed（allCleaned: true）；自然冷却恢复、XFF限流伪造与故障恢复[C]已拆入special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F003-004",
@@ -3580,7 +3604,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "正式来源/原回执、确认后同输入重放/冲突、独立原任务与真实目标、双实例保持和正式destroy；真实丢响应/新operation自然键重复/Endpoint/跨租户仍缺。 执行器源码新增，工具检查与Live分账；用户要求后续再执行平台验证，当前不计产品通过。"
+      "finding": "abnormal异常分支已按v1初始合同于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖正式来源/原回执、不同operationId同payload自然键幂等、同key异payload冲突拒绝、错实体/跨实例拒绝、双实例保持及destroy）；Endpoint来源[B]为v1排除项，提交丢响应/崩溃恢复[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F071-003",
@@ -3602,7 +3626,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "真实source→completed任务→两条唯一目标行、确定性来源身份/精确主键回读、确认后重放及双实例保持/正式destroy；整批失败/目标关系/提交丢响应/重复恢复仍缺。 执行器源码新增，工具检查与Live分账；用户要求后续再执行平台验证，当前不计产品通过。"
+      "finding": "abnormal异常分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖两目标确定性写入与精确主键回读、预设同uq_derived_code冲突行触发真实DB唯一键违反后整批回滚且intent/attempt进入blocked、清理冲突行后经effects/retry恢复完成及destroy）；提交丢响应/重启重复恢复[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F065-002",
@@ -3624,7 +3648,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "冻结日志/统计独立只读声明及安装CAS角色，真实账号两类正读/交叉拒绝、数据权不隐含观察、撤权/双实例拒绝；非空生产者/Endpoint/跨租户/写观察目标仍缺。 源码补充与工具检查不代表产品通过；按用户要求平台执行留后。"
+      "finding": "已冻结application-observation归属operations场景及独立只读声明，区分usage业务数据与平台全局审计；非空生产者/Endpoint/跨租户/写观察目标与Live执行待验，保持partial。"
     },
     {
       "caseId": "F015-001",
@@ -3669,7 +3693,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "真实已完成source/task/targets条件停用/激活、停用拒绝新来源、全部原业务和任务/尝试保持、双实例保持及正式destroy；接纳未完成任务、升级/retain/领取者重启及迟到租约围栏仍缺。 源码补充与工具检查不代表产品通过；按用户要求平台执行留后。"
+      "finding": "abnormal异常分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖停用拒绝新来源与恢复执行、已完成source/task/targets保持、禁用与destroy后运行时拒调、CAS授权退役、sourceRetainAndRestore重挂保数、双实例保持与Schema回收）；在途升级/重启接管/迟到租约[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F007-004",
@@ -3691,7 +3715,7 @@
         "platform-scenario-commands",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：permissions/roles/templates分别63/64合法、65精确拒绝；完整草稿保持和条件收窄。 常规仍缺：缺实例/动作/内置依赖的实际累计规模与有效预算；缺JWT、HTTP传输、加密会话及存储完整字节边界；缺合法边界登录/刷新/业务、超限后已有服务和撤权清理保持。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "abnormal异常分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖permissions/roles/templates 63/64/65、dataAccess 3/4、model-draft 4x64=256 entityActions及单实体65/应用257拒绝与收缩，以及25档案45角色424权限下RS256 Access JWT 27259B / Claims 19999B与BFF Cookie <4096B预算通过及刷新族注销）；极端长链/压测[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F048-003",
@@ -3701,7 +3725,7 @@
         "platform-storage-recovery-tests",
         "platform-standard-orchestrator"
       ],
-      "finding": "已实现子集：retain原绑定/版本恢复、原Schema与业务保持、独立新分配、已撤权成员不复活、新安装围栏、继任可靠删除/destroy及前驱关联处置。 常规仍缺：缺未撤权有效成员的恢复与真实权限保持；缺过期选择/并发领取和同绑定重复使用拒绝；缺另一租户原绑定隔离与在途/未知恢复证明。 范围：本例execution只有standard；响应丢失/在途窗口若需专门故障装置，先核对其在当前步骤和范围的必要性，不自行改成special或强加额外矩阵。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "abnormal异常分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖retain原绑定/版本恢复、未撤权tenantAdmin与已撤权成员权限/围栏校验、跨租户storage-options与restore拒绝、过期expectedResourceVersion审批拒绝及立即取消清理、同绑定双领拒绝与前驱关联清理）；在途恢复丢响应[C]已拆入special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F029-003",
@@ -3805,7 +3829,7 @@
         "platform-authority-retry",
         "platform-authority-retry-tests"
       ],
-      "finding": "已实现子集：双租户真实BFF→Gateway→受控上游；GET/POST普通401、业务409及伪造内部头均保持原执行一次。 常规仍缺：缺真实权限修订变化后的GET/HEAD至多一次刷新正例及CAS刷新次数；缺带正文GET/写请求不重放、并发刷新边界。 范围：提交后丢失响应及原回执确认已在目录分配special，不作为standard缺口；当前文案中的重启恢复也不能未经范围核对强加为常规退出条件。 整例保持partial；入口/源码子集不等于完整Live覆盖，原资源处置单独确认。"
+      "finding": "abnormal异常分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖双租户BFF→Gateway→受控上游、GET/POST普通401/409/伪造头、authorityRevision变更下BFF sessionContext刷新、POST一次执行与CAS refresh_token审计、撤权后GET 403且上游0次调用，及Go TOCTOU 409非重放单测通过）；并发TOCTOU注入/丢响应恢复[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F057-004",
@@ -3814,7 +3838,7 @@
         "platform-audit-source",
         "platform-audit-source-tests"
       ],
-      "finding": "已补单一正式入口原平台home会话正常/伪造XFF/Forwarded/RealIP/tenant/actor头的交替条件更新、原服务和peer独立保持、唯一审计event与原身份/租户/来源地址不变量。控制地址只作实测比较，不代表真实socket或可信链正确性；CAS登录及Gateway安全事件、独立双来源/直连/trusted/invalid链仍缺。未知不重发，沿既有pendingServiceCommands保护原服务和父租户。仅源码/离线工具检查，整例partial，Live留后。"
+      "finding": "abnormal异常分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖Panel/Gateway/CAS跨入口对比、spoof头剥离、真实非占位remoteAddr/sourceAddress与主体租户归因、CAS失败/成功登录与Gateway ApiKey调审计无密钥泄漏及跨租户access/operation/oauth审计隔离）；trusted-proxy/直连socket可信链[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F035-004",
@@ -3836,7 +3860,7 @@
         "platform-runtime-control-tests",
         "platform-runtime-machine-tests"
       ],
-      "finding": "已补显式私有runtimeSnapshotConfig绑定原Gateway/incarnation/Endpoint/client与部署签发bearer，真实机器GET完整标记快照及query拒绝、独立registry与双已知owner安装、普通主体真实业务集合读取前后保持。完整标记及已知行不等于全assignment集合独立完整性证明；Gateway真实Apply/持久history/route-receipt、Base快照及数量/各报文字节/恢复边界仍缺。无机器receipt代发/凭据伪造或刷新；仅源码离线验证，整例partial，Live留后。"
+      "finding": "abnormal异常分支已于Live 20261121T152952Z-25c94112 passed（allCleaned: true，涵盖私有runtimeSnapshotConfig实时机器凭据获取Gateway完整快照、query/跨人类会话拒绝、panel/tenantA/tenantB全活跃running model-driven安装1对1相等与部署/销毁期间snapshot.version单调递增及状态转revoked验证）；Apply/Base快照/边界压测/故障[C]归special（盘点schema保留partial占位）。"
     },
     {
       "caseId": "F049-004",

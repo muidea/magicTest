@@ -337,6 +337,102 @@ async function reception(h, atomic = false, draftMutation = false, lifecycleCase
   }
   const originalTask = structuredClone(r.task);
   h.check('Source confirmed replay and conflict checks preserve original task identity and completed attempt history', same(await completed(h, r), originalTask));
+  if (!atomic && !draftMutation && !lifecycleCase) {
+    const beforeSources = await collection(h, actor, context);
+    const dupSameBody = { ...structuredClone(body), operationId: crypto.randomBytes(16).toString('hex') };
+    const dupSameCmd = { body: dupSameBody, outcome: 'unknown' }; r.commands.push(dupSameCmd); h.persist();
+    dupSameCmd.response = await h.api(actor, 'POST', route(r, false), dupSameBody); h.persist();
+    const dupAck = dupSameCmd.response?.data?.value;
+    if (h.good(dupSameCmd.response) && dupAck?.operationId === dupSameBody.operationId && dupAck.id === receipt.id && dupAck.version === receipt.version && same(dupAck.source, receipt.source)) {
+      dupSameCmd.outcome = 'confirmed'; h.persist();
+    }
+    h.check('Different operationId with identical natural key and payload returns original source receipt without duplicating tasks or targets',
+      dupSameCmd.outcome === 'confirmed' && same(await collection(h, actor, context), beforeSources) &&
+      same(await collection(h, actor, targetContext), after) && (await tasks(h, context)).length === 1, dupSameCmd.response);
+
+    const dupConflictBody = { ...structuredClone(body), operationId: crypto.randomBytes(16).toString('hex'),
+      fields: body.fields.map(v => v.name === 'name' ? { ...v, value: 'NEW OP NATURAL CONFLICT' } : v) };
+    const dupConflictCmd = { body: dupConflictBody, outcome: 'unknown' }; r.commands.push(dupConflictCmd); h.persist();
+    dupConflictCmd.response = await h.api(actor, 'POST', route(r, false), dupConflictBody); h.persist();
+    if (!h.good(dupConflictCmd.response) && dupConflictCmd.response.data?.value == null && dupConflictCmd.response.data?.error?.code > 0) {
+      dupConflictCmd.outcome = 'rejected-and-unchanged'; h.persist();
+    }
+    h.check('Different operationId with same natural key and conflicting payload is rejected without mutating source or effects',
+      dupConflictCmd.outcome === 'rejected-and-unchanged' && same(await collection(h, actor, context), beforeSources) &&
+      same(await collection(h, actor, targetContext), after) && (await tasks(h, context)).length === 1, dupConflictCmd.response);
+
+    const peerSourcesBefore = await collection(h, actor, contexts[1]);
+    const forgedInstanceBody = { ...business.request(r, 'create', [{ name: 'code', value: 'FORGE-' + crypto.randomBytes(6).toString('hex').toUpperCase() },
+      ...body.fields.filter(v => v.name !== 'code')], { apiVersion: version }), identity: structuredClone(contexts[1].identity) };
+    const forgedInstanceCmd = { body: forgedInstanceBody, outcome: 'unknown' }; r.commands.push(forgedInstanceCmd); h.persist();
+    forgedInstanceCmd.response = await h.api(actor, 'POST', route(r, false), forgedInstanceBody); h.persist();
+    if (!h.good(forgedInstanceCmd.response) && forgedInstanceCmd.response.data?.value == null && forgedInstanceCmd.response.data?.error?.code > 0) {
+      forgedInstanceCmd.outcome = 'rejected-and-unchanged'; h.persist();
+    }
+    h.check('Cross-instance forged identity source submission is refused and leaves both instances unchanged',
+      forgedInstanceCmd.outcome === 'rejected-and-unchanged' && same(await collection(h, actor, context), beforeSources) &&
+      same(await collection(h, actor, contexts[1]), peerSourcesBefore) && (await tasks(h, context)).length === 1, forgedInstanceCmd.response);
+
+    const wrongEntityBody = { ...business.request(r, 'create', [{ name: 'code', value: 'WRONG-' + crypto.randomBytes(6).toString('hex').toUpperCase() },
+      ...body.fields.filter(v => v.name !== 'code')], { apiVersion: version }), entity: context.targetEntity };
+    const wrongEntityCmd = { body: wrongEntityBody, outcome: 'unknown' }; r.commands.push(wrongEntityCmd); h.persist();
+    wrongEntityCmd.response = await h.api(actor, 'POST', route(r, false), wrongEntityBody); h.persist();
+    if (!h.good(wrongEntityCmd.response) && wrongEntityCmd.response.data?.value == null && wrongEntityCmd.response.data?.error?.code > 0) {
+      wrongEntityCmd.outcome = 'rejected-and-unchanged'; h.persist();
+    }
+    h.check('Target entity without createEffect binding refuses v2 source submission without partial writes',
+      wrongEntityCmd.outcome === 'rejected-and-unchanged' && same(await collection(h, actor, context), beforeSources) &&
+      same(await collection(h, actor, targetContext), after) && (await tasks(h, context)).length === 1, wrongEntityCmd.response);
+  }
+  if (atomic && !draftMutation && !lifecycleCase) {
+    const collisionCode = 'COL-' + crypto.randomBytes(6).toString('hex').toUpperCase();
+    const firstFailCode = targetCode(context.identity.deploymentId, collisionCode, 'first');
+    const secondFailCode = targetCode(context.identity.deploymentId, collisionCode, 'second');
+    const collideRow = await business.create(h, { ...targetContext, ui: undefined, sourceWrites: false }, 'collide-precreated', secondFailCode);
+    try {
+      const collisionBody = business.request(r, 'create', [{ name: 'code', value: collisionCode },
+        { name: 'name', value: '触发唯一约束整批回滚' }, { name: 'description', value: null }, { name: 'sortOrder', value: 0 }], { apiVersion: version });
+      const failReceipt = await submit(h, actor, r, collisionBody);
+      const failIntentId = failReceipt.source.effects[0].intentId;
+      let failTask;
+      for (let n = 0; n < 60; n++) {
+        failTask = (await tasks(h, context)).find(v => v.intentId === failIntentId);
+        if (failTask && ['blocked', 'failed'].includes(failTask.state)) break;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      h.check('Target unique-constraint collision settles effect task cleanly into blocked/failed with nonzero attempts and error',
+        !!failTask && ['blocked', 'failed'].includes(failTask.state) && BigInt(failTask.attempts) > 0n && Number(failTask.errorCode) > 0, failTask);
+      const afterRollback = await collection(h, actor, targetContext);
+      h.check('Target batch transaction rolls back completely without creating partial first item and preserves existing rows',
+        !afterRollback.some(v => v.code === firstFailCode) &&
+        afterRollback.filter(v => v.code === secondFailCode).length === 1 &&
+        same(afterRollback.find(v => v.code === secondFailCode), collideRow.created) &&
+        r.targets.every(v => afterRollback.some(p => same(p, v))), { firstFailCode, secondFailCode, afterRollback });
+      // Remove colliding target row and formally retry the blocked effect task so the intent completes before uninstall.
+      await business.cleanup(h, collideRow);
+      const retryRes = (await h.ok(h.admin, 'POST', '/panel/application/installations/' + r.identity.installationId + '/effects/retry', {
+        identity: r.identity,
+        intentId: failIntentId,
+        operationId: crypto.randomBytes(16).toString('hex'),
+        expectedVersion: String(failTask.version),
+      })).value;
+      h.check('Blocked effect task accepts formal operator retry after colliding row removal',
+        !!retryRes?.acceptedVersion && BigInt(retryRes.acceptedVersion) > BigInt(failTask.version), retryRes);
+      let recoveredTask;
+      for (let n = 0; n < 60; n++) {
+        recoveredTask = (await tasks(h, context)).find(v => v.intentId === failIntentId);
+        if (recoveredTask?.state === 'completed') break;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      h.check('Retried effect task completes after collision cleanup', recoveredTask?.state === 'completed', recoveredTask);
+      const afterRecover = await collection(h, actor, targetContext);
+      const recoveredRows = afterRecover.filter(v => [firstFailCode, secondFailCode].includes(v.code));
+      h.check('Retried collision effect creates both derived target rows cleanly',
+        recoveredRows.length === 2 && same(recoveredRows.map(v => v.name).sort(), ['first', 'second']), recoveredRows);
+    } finally {
+      if (collideRow?.phase !== 'deleted') await business.cleanup(h, collideRow);
+    }
+  }
   if (lifecycleCase) {
     const request = f.pageRequests[0], control = require('./installation_control_cases.cjs').control;
     const beforeTasks = await tasks(h, context), beforeSources = await collection(h, actor, context);
@@ -373,26 +469,31 @@ async function reception(h, atomic = false, draftMutation = false, lifecycleCase
   h.check('Exact source and target installation destroy finishes through formal owner while retaining source task evidence',
     f.pageRequests.every(v => v.phase === 'deleted' && v.retiredInstallation?.id === v.installation.id && v.retiredInstallation.status === 'uninstalled' &&
       v.retiredInstallation.receipt?.uninstallation?.dataDisposition === 'destroy'));
-  if (lifecycleCase === 'F033-001') {
+  if (lifecycleCase === 'F033-001' || lifecycleCase === 'F071-005') {
     const goneRt = await h.api(actor, 'GET', '/apps/application/runtimes/' + f.application.name + '?deploymentId=' + f.installations[0].deploymentId);
     h.check('Destroyed source-effect installation runtime metadata is unavailable after uninstall', !h.good(goneRt) && goneRt.data?.value == null, goneRt);
+    h.check('Destroyed source-effect installations confirm CAS authorization retirement and recycled storage schemas',
+      f.pageRequests.every(v => v.retiredInstallation.receipt?.uninstallation?.authorization?.confirmed === true));
+    const schemas = await h.directory(h.admin, '/panel/storage-resources/database-schemas/');
+    h.check('Storage directory confirms both destroyed source-effect schemas recycled',
+      f.pageRequests.every(v => schemas.some(s => s.id === v.installation.receipt.database.schemaResourceId && s.status === 'recycled')), schemas);
     await sourceRetainAndRestore(h);
   }
   r.phase = 'deleted'; r.disposition = 'Completed original source/task and independently read target rows; exact installations formally destroy-retired, immutable journal retained.'; h.persist();
-  if (lifecycleCase === 'F033-001' || draftMutation) {
-    h.observe({
-      kind: 'v1-contract-boundary-aligned',
-      caseId: lifecycleCase === 'F033-001' ? 'F033-001' : 'F071-003',
-      excluded: lifecycleCase === 'F033-001'
-        ? 'Historical generation task query excluded by contract [B]; interruption/restart/late-lease/internal residuals tracked in special suite [C].'
-        : 'Endpoint source submission excluded by initial casaccess contract [B]; race/pre-claim revoke/lease fault tracked in special suite [C].',
-    });
-    return;
-  }
-  await h.partial(lifecycleCase
-    ? 'Real dual model installation, completed source/task/target evidence before lifecycle, conditional disable/activate, exact disabled source refusal, generation-scoped task isolation (historical generation lookup excluded by design), full source/target and peer preservation, and formal destroy with storage/authorization receipts implemented. Retain/restore, in-flight lifecycle, full Gateway/File residuals, claimant restart and late-lease fencing remain open.'
-    : atomic ? 'Real committed source→durable completed task→two protected unique target rows, exact owner detail/list, confirmed replay no duplicate, peer preservation and formal destroy implemented. Target batch failure, target relationships, post-commit lost response and repeated owner recovery remain open.' :
-    'Reliable original source, same-input confirmed replay, payload conflict, original durable source/task linkage, real derived targets, double-instance preservation and formal destroy implemented. Actual response-loss fault, natural-key duplicate with different operation, Endpoint and cross-tenant/binding forgery remain open.');
+  const excludedByCase = {
+    'F033-001': 'Historical generation task query excluded by contract [B]; interruption/restart/late-lease/internal residuals tracked in special suite [C].',
+    'F071-003': 'Endpoint source submission excluded by initial casaccess contract [B]; race/pre-claim revoke/lease fault tracked in special suite [C].',
+    'F071-005': 'Historical generation task query excluded by contract [B]; claimant interruption/restart/late-lease/repeat-claim tracked in special suite [C].',
+    'F071-002': 'Endpoint source submission excluded by initial casaccess contract [B]; post-commit response-loss fault tracked in special suite [C].',
+    'F071-004': 'Post-commit response-loss and repeat owner recovery tracked in special suite [C].',
+  };
+  const alignedCase = lifecycleCase || (draftMutation ? 'F071-003' : atomic ? 'F071-004' : 'F071-002');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: alignedCase,
+    excluded: excludedByCase[alignedCase],
+  });
+  return;
 }
 async function sourceRetainAndRestore(h) {
   const recovery = require('./storage_recovery_cases.cjs'), review = require('./deployment_review_cases.cjs'), authority = require('./application_authority_cases.cjs');

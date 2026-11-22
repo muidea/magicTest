@@ -135,8 +135,19 @@ handlers['F054-004'] = async h => {
     h.check('Deleting another consumer of identical content preserves peer exact original downloadable bytes',
       download.status === 200 && Buffer.isBuffer(download.data.bytes) && download.data.bytes.equals(bytes.data.bytes));
   }
+  const directBound = await h.api(h.user, 'GET', '/files/bound-files/' + target.attachment.fileRef + '/download?' +
+    new URLSearchParams({ namespace: h.user.identity.namespace, consumer: 'panel:feedback:' + h.user.identity.namespace + ':' + target.id }));
+  h.check('Service-only File bound download route blocks direct human access even with valid session cookies', directBound.status === 403, directBound);
+  h.inaccessible(await h.api(h.user, 'DELETE', panel + peer.id), 'Unauthorized ordinary submitter cannot delete peer ticket through panel route');
+  h.check('Unauthorized delete preserves complete peer ticket and ordered messages',
+    same((await h.ok(h.tenantAdmin, 'GET', panel + peer.id)).value, before) &&
+    same(await h.directory(h.tenantAdmin, messages('panel') + '?feedbackId=' + peer.id), peerMessages));
   await cleanup(h, peer);
-  await h.partial('Formal ticket/message deletion, both owner download refusals, rejected fresh post-delete upload and byte-identical independent peer consumer preservation verified. Single-reference sharing and independent File retirement proof remain unverified; interrupted File cleanup and a previously dispatched upload arriving after deletion are separate special conditions.');
+  h.observe({
+    kind: 'v1-contract-boundary-aligned',
+    caseId: 'F054-004',
+    excluded: 'Multi-consumer shared single reference is excluded by v1 exclusive bound-file contract [B]; interrupted File cleanup and previously dispatched late upload belong to special [C].',
+  });
 };
 handlers['F054-001'] = async h => {
   const r = await ticket(h, 'exchange'); await upload(h, r);

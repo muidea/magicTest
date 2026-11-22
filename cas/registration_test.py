@@ -3,12 +3,18 @@ import unittest
 from cas import Cas
 from session import MagicSession
 from test_support import (
-    ALL_PERMISSION,
     CasE2EBase,
     STATUS_ENABLE,
     UNSET,
     unique_name,
 )
+
+
+PORTAL_REGISTRATION_PROFILES = [
+    "portal-usage-core",
+    "portal-usage-apps",
+    "portal-usage-services",
+]
 
 
 class RegistrationClient:
@@ -26,6 +32,15 @@ class RegistrationClient:
         if response is None or response.get("error") is not None:
             raise AssertionError(f"{message}: {response}")
         return response.get("values") or []
+
+    def list_role_templates(self, namespace):
+        return self._values(
+            self.session.get(
+                f"/api/v1/cas/namespaces/{namespace}/role-templates/",
+                {"_pageSize": 100},
+            ),
+            "查询权限模板列表失败",
+        )
 
     def create_profile(self, namespace, payload):
         return self._value(
@@ -47,7 +62,7 @@ class RegistrationClient:
     def update_policy(self, namespace, payload):
         return self._value(
             self.session.put(
-                f"/api/v1/cas/namespaces/{namespace}/registration/policys/",
+                f"/api/v1/cas/namespaces/{namespace}/registration/policies/",
                 payload,
             ),
             "更新注册策略失败",
@@ -126,53 +141,22 @@ class PortalAccessClient:
 
 
 class RegistrationScenarioTestCase(CasE2EBase):
-    @staticmethod
-    def _account_role_ids(account):
-        if not isinstance(account, dict):
-            return []
-
-        role = account.get("role")
-        if isinstance(role, dict) and role.get("id") is not None:
-            return [role["id"]]
-
-        role_list = account.get("roles") or []
-        ret = []
-        for item in role_list:
-            if isinstance(item, dict) and item.get("id") is not None:
-                ret.append(item["id"])
-        return ret
-
-    def _create_registration_role(self, role_module, role_key):
-        role = self.tenant_apps["role"].create_role(
-            {
-                "name": unique_name("registration_role"),
-                "module": role_module,
-                "key": role_key,
-                "description": "registration e2e role",
-                "group": "registration-e2e",
-                "privilege": [
-                    {
-                        "module": "*",
-                        "uriPath": "*",
-                        "value": ALL_PERMISSION,
-                        "description": "registration e2e all permission",
-                    }
-                ],
-                "status": STATUS_ENABLE,
-            }
-        )
-        self.assertIsNotNone(role, "创建注册模板引用角色失败")
-        self.cleanup_delete(self.tenant_apps["role"], role["id"], "delete_role")
-        return role
-
     def test_public_registration_requires_approval_then_login_after_approve(self):
         self.tenant = self.create_namespace(scope=UNSET)
         self.tenant_apps = self.bind_namespace_apps(self.tenant["name"])
         registration = RegistrationClient(self.tenant_apps["session"])
 
-        role_module = "registration-e2e"
-        role_key = unique_name("portal_user")
-        role = self._create_registration_role(role_module, role_key)
+        templates = {
+            item.get("key"): item
+            for item in registration.list_role_templates(self.tenant["name"])
+            if item.get("key")
+        }
+        for required_key in PORTAL_REGISTRATION_PROFILES:
+            item = templates.get(required_key)
+            self.assertIsNotNone(item, f"缺少受控注册子模板: {required_key}")
+            self.assertEqual(item.get("scene"), "usage")
+            self.assertEqual(item.get("subjectType"), "account")
+            self.assertEqual(item.get("status"), STATUS_ENABLE)
 
         profile_key = unique_name("profile")
         profile = registration.create_profile(
@@ -181,7 +165,7 @@ class RegistrationScenarioTestCase(CasE2EBase):
                 "key": profile_key,
                 "name": "registration e2e profile",
                 "description": "registration e2e profile",
-                "roleRefs": [{"module": role_module, "roleKey": role_key}],
+                "accessProfileKeys": list(PORTAL_REGISTRATION_PROFILES),
                 "status": STATUS_ENABLE,
             },
         )
@@ -280,7 +264,20 @@ class RegistrationScenarioTestCase(CasE2EBase):
         accounts = self.tenant_apps["account"].filter_account({"account": account_name})
         self.assertIsNotNone(accounts, "查询注册账号失败")
         self.assertEqual(len(accounts), 1)
-        self.assertIn(role["id"], self._account_role_ids(accounts[0]))
+        effective_keys = {
+            r.get("key")
+            for r in (accounts[0].get("effectiveRoles") or [])
+            if isinstance(r, dict)
+        }
+        self.assertTrue(
+            {
+                "portal-app-catalog-viewer",
+                "portal-service-catalog-viewer",
+                "portal-service-invoker",
+            }.issubset(effective_keys),
+            f"注册账号缺少受控门户初始角色: {accounts[0]}",
+        )
+        self.assertEqual(accounts[0].get("templateRefs") or [], [])
         self.cleanup_delete(
             self.tenant_apps["account"], accounts[0]["id"], "delete_account"
         )

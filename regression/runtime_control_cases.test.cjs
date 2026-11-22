@@ -90,5 +90,8 @@ test('future/fractional/stale leases, partial snapshots, wrong rows and over-bud
 });
 test('two runtime-control cases register as public-owner subsets and do not call machine transport without explicit private inputs', async () => {
   assert.deepEqual(Object.keys(handlers), ['F035-004', 'F035-006']); assert.equal(handlers['F035-006'].transport, 'owner-api');
+  assert.deepEqual(handlers['F035-006'].actors, ['tenantAdmin', 'otherTenantAdmin']);
   await assert.rejects(handlers['F035-006']({ Blocked: Error }), /private|Private/);
+  const src = require('node:fs').readFileSync(require.resolve('./runtime_control_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
 });

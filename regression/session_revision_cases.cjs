@@ -1,8 +1,9 @@
 // Online CAS validation is the authority. Decoded JWT fields below are only
 // compared after that independent positive check, never used to grant access.
 const { isDeepStrictEqual: same } = require('node:util');
+const crypto = require('node:crypto');
 const oauth = require('./oauth_refresh_cases.cjs');
-const { PORTAL_CORE_KEY, TENANT_OPS_ACCOUNTS_KEY } = require('./platform_profiles.cjs');
+const { PORTAL_CORE_KEY, PORTAL_BASIC_KEYS, TENANT_OPS_ACCOUNTS_KEY } = require('./platform_profiles.cjs');
 function claims(token) {
   const parts = token?.split('.');
   if (parts?.length !== 3) throw Error('Original issued JWT required');
@@ -37,7 +38,41 @@ async function revisions(h) {
     h.check('Formal exact original family revocation acknowledged', reply.status === 200);
     h.check('Independent owner confirms original family inactive', !(await oauth.inspect(context, f, pair.refresh_token)).active);
   }
-  await h.partial('Dedicated human current-role contraction, old JWT online invalidation, new code grant using exact current authority revision and original-family retirement implemented. Configured tenant/source rate limits, disabled-limit password lockout and natural block expiry remain open; no offline JWT revocation claim.');
+  // 1) Ordinary 401 client authentication failure is distinct from online revision invalidation (active: false).
+  const badSecret = await h.protocol(actor, 'POST', '/api/v1/cas/oauth/introspect', {
+    client_id: f.owner.value.clientId, client_secret: 'wrong-' + crypto.randomBytes(8).toString('hex'),
+    namespace: namespace, client_namespace: namespace, token: current.access_token, token_type_hint: 'access_token',
+  });
+  h.check('Bad OAuth client secret yields ordinary 401, distinct from stale authority revision active:false',
+    badSecret.status === 401, badSecret);
+
+  // 2) Isolated per-account password lockout after 5 failed attempts without affecting other accounts.
+  const lockAcct = await h.createAs('tenantAdmin', collection, { account: h.state.prefix + '-lockout-human',
+    displayName: '五次失败锁定校验账号', password: h.state.password, status: 2, roleTemplateKeys: PORTAL_BASIC_KEYS }, 'account');
+  const lockBefore = Date.now();
+  for (let i = 1; i <= 5; i++) {
+    await h.rejectedLogin(lockAcct.account, h.state.password + '-wrong-' + i, namespace);
+  }
+  // 6th attempt uses the CORRECT password — must still be rejected as locked out!
+  await h.rejectedLogin(lockAcct.account, h.state.password, namespace);
+  let auditRows = [];
+  for (let attempt = 0; attempt < 15; attempt++) {
+    auditRows = (await h.directory(owner, '/cas/namespaces/' + namespace + '/oauth/audit/'))
+      .filter(r => r.subject === 'account:' + lockAcct.id && r.createTime >= lockBefore - 2000 && r.eventType === 'login_failure');
+    if (auditRows.some(r => JSON.stringify(r).includes('account locked'))) break;
+    if (attempt < 14) await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  h.check('Locked account rejects valid 6th login and records explicit account locked audit failure',
+    auditRows.some(r => r.outcome === 'failure' && JSON.stringify(r).includes('account locked')), auditRows);
+  const unrelatedLogin = await h.login(account.account, actor.password, namespace);
+  h.check('Unrelated account login succeeds without tripping source rate limiter', h.good(await h.api(unrelatedLogin, 'GET', '/api/v1/web/session/')));
+
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F010-003',
+    classification: '[C]',
+    note: 'Configured source-IP login rate limit threshold, CAS restart with oauth.loginRate.enabled=false and natural block expiry require isolated-daemon + natural-time tracked in special [C]; authority revision invalidation, ordinary 401 distinction and isolated 5-attempt per-account lockout verified.',
+  });
 }
 revisions.actors = ['tenantAdmin', 'user']; revisions.transport = 'owner-api';
 module.exports = { handlers: { 'F010-003': revisions }, claims };

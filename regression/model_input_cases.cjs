@@ -348,6 +348,10 @@ async function tenantIsolationCheck(h, f, actor, host, target, peer, targetKey) 
       account: h.state.prefix + '-iso-member', displayName: '跨租户成员', password: h.state.password,
       status: 2, roleTemplateKeys: [...PORTAL_BASIC_KEYS, tTemplate.key],
     }, 'account');
+    await h.ok(h.tenantAdmin, 'PUT', tplPrefix + 'accounts/' + tAccount.id + '/role-templates', {
+      roleTemplateKeys: [...PORTAL_BASIC_KEYS, tTemplate.key],
+      applicationScopes: [{ templateKey: tTemplate.key, applicationAccess: [{ applicationUuid: tInstall.deploymentId, accessLevel: 'manager' }] }],
+    });
     tMember = await h.login(tAccount.account, h.state.password, ns, h.state.password + '-tm');
     const tSession = (await h.ok(tMember, 'GET', '/api/v1/web/session/')).value;
     tMember.subject = tSession.homeNamespace + '/account:' + tAccount.id;

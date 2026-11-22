@@ -130,3 +130,7 @@ test('effect fixture keeps original input unchanged, separately names target and
   assert.equal(source.writeRules.appendOnly, true); assert.deepEqual(target.blockInfo, []);
   assert.equal(target.fields[0].spec.constraint, 'req,max=64');
 });
+test('all source-effect handlers close without legacy h.partial calls', () => {
+  const src = require('node:fs').readFileSync(require.resolve('./source_effect_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
+});

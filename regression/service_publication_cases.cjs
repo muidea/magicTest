@@ -19,9 +19,17 @@ async function refuseDisabledSubscription(h, actor, f, owner) {
   const rejected = !h.good(response) && (receipt.status === 404 || receipt.data?.error?.code === 2 || receipt.data?.value?.phase === 'complete' && receipt.data.value.errorCode !== 0 && !receipt.data.value.subscriptionId);
   h.check('Disabled publication rejects new subscription request without creating a subscription', rejected && same(await h.directory(owner, graph.subscriptions), before), { response, receipt });
 }
+async function publishedCount(h, actor) {
+  const value = (await h.ok(actor, 'GET', '/panel/profile')).value;
+  const rows = (value.summary || []).filter(row => row.name === '服务发布');
+  h.check('Management profile exposes single published service count', rows.length === 1 && Number.isInteger(rows[0].value) && rows[0].value >= 0, value);
+  return rows[0]?.value ?? -1;
+}
 async function publication(h) {
+  const owner = h.tenantAdmin, basePublished = await publishedCount(h, owner);
   const f = await graph.fixture(h, 'publication_availability'), s = await graph.subscribe(h, f), key = await graph.credential(h, s);
-  const owner = h.tenantAdmin, read = () => h.ok(owner, 'GET', graph.publications + f.publication.id).then(v => v.value);
+  h.check('Management overview counts newly published service', await publishedCount(h, owner) === basePublished + 1);
+  const read = () => h.ok(owner, 'GET', graph.publications + f.publication.id).then(v => v.value);
   const serviceResource = h.state.resources.find(r => r.kind === 'service' && r.id === f.service.id);
   const resource = h.state.resources.find(r => r.kind === 'publication' && r.id === f.publication.id);
   const subscription = (await h.ok(owner, 'GET', graph.subscriptions + s.value.id)).value;
@@ -35,6 +43,7 @@ async function publication(h) {
       current.service.id === f.service.id && current.status === 3 && current.visibleScope === owner.identity.namespace, result);
   });
   h.check('Disabled publication disappears from original and unrelated portal lists', (await visible(h.user)).length === 0 && (await visible(h.otherTenantAdmin)).length === 0);
+  h.check('Management overview drops disabled publication from published count', await publishedCount(h, owner) === basePublished);
   const denied = await graph.call(h, h.user, f, key.apiKey);
   h.check('Existing exact subscription Key cannot reach real upstream after publication disable', [403, 404].includes(denied.status) &&
     !f.up.requests.some(v => v.marker === denied.marker), denied);
@@ -45,6 +54,7 @@ async function publication(h) {
     h.check('Formal re-publication reenables same original service and declared scope', h.good(result) && current.id === f.publication.id && current.status === 2 &&
       current.service.id === f.service.id && current.visibleScope === owner.identity.namespace, result);
   });
+  h.check('Management overview restores republished service in published count', await publishedCount(h, owner) === basePublished + 1);
   h.check('Reenabled portal retains exact original frozen service contract', (await visible(h.user)).length === 1 &&
     same(contract((await h.ok(h.user, 'GET', '/portal/service/debug/' + f.service.id)).value), contract(frozen)));
   await graph.succeeds(h, h.user, f, key);
@@ -66,6 +76,8 @@ async function publication(h) {
   });
   h.check('Updated visibility scope exposes publication only to declared tenant portal',
     (await visible(h.user, vis.service)).length === 1 && (await visible(h.otherTenantAdmin, vis.service)).length === 0);
+  h.check('Management overview excludes cross-tenant publication projections from tenant published count',
+    await publishedCount(h, owner) === basePublished + 1);
   await adminCommand(h, visResource, 'PUT', graph.publications + vis.publication.id, { ...vis.payload, status: 2, visibleScope: peerNamespace }, async result => {
     const current = await readVis();
     h.check('Visibility scope edit moves publication to declared peer namespace', h.good(result) && current.id === vis.publication.id && current.visibleScope === peerNamespace, result);

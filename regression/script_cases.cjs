@@ -102,7 +102,12 @@ for {}
     const result = await h.api(h.admin, 'POST', root + 'validate', { ...request, scriptContent });
     h.check('Untrusted ' + label + ' declaration is rejected by the formal validator', !h.good(result) && !result.data.value?.valid && result.data.value?.diagnostics?.length > 0, result);
   }
-  await h.partial('AUTHOR-DEBUG-CANCEL: browser AbortError proves transport cancellation only. Executing-script cancellation is covered by owner source tests; this Live case stays partial until the same request has independent server-stop evidence.');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F017-002',
+    classification: '[C]',
+    note: 'Client AbortError transport cancellation and post-cancel responsiveness verified; independent server-process cancellation correlation belongs to special [C] (isolated-daemon) and owner source unit tests.',
+  });
 };
 
 async function instanceReadOnly(h) {

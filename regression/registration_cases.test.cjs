@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { directoryValues, registrationAuthority } = require('./registration_cases.cjs');
+const { directoryValues, registrationAuthority, sameLists } = require('./registration_cases.cjs');
 const h = { Blocked: Error };
 
 test('new registration ingress waits only on read-only 404 and confirms exact enabled original owner', async () => {
@@ -51,4 +51,27 @@ test('missing or incomplete registration identity rows never become an empty dir
     { values: [], pagination: { total: 1 } },
     { values: [], pagination: { total: 0, hasMore: true } },
   ]) assert.throws(() => directoryValues(h, page), /requires complete reader/);
+});
+
+test('sameLists treats CAS templateRefs as unordered sets while rejecting state or membership drift', () => {
+  const refA = { id: 1, key: 'portal-usage-core' };
+  const refB = { id: 2, key: 'portal-usage-apps' };
+  const before = {
+    accounts: [{ id: 10, account: 'member', updateTime: 100, templateRefs: [refA, refB], effectiveRoles: [{ module: 'm', key: 'r1' }] }],
+    registrations: [{ id: 20, status: 'pending' }],
+  };
+  const reordered = {
+    accounts: [{ id: 10, account: 'member', updateTime: 100, templateRefs: [refB, refA], effectiveRoles: [{ module: 'm', key: 'r1' }] }],
+    registrations: [{ id: 20, status: 'pending' }],
+  };
+  assert.equal(sameLists(before, reordered), true);
+  for (const mutate of [
+    x => x.accounts[0].updateTime++,
+    x => x.accounts[0].templateRefs.pop(),
+    x => x.registrations[0].status = 'approved',
+  ]) {
+    const copy = structuredClone(before);
+    mutate(copy);
+    assert.equal(sameLists(before, copy), false);
+  }
 });

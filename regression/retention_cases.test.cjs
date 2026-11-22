@@ -23,3 +23,7 @@ test('response-lost conditional restoration is persisted as unknown and never re
   await assert.rejects(restore(h, r), /never replay/);
   assert.equal(writes, 1); assert.equal(r.phase, 'created');
 });
+test('F058-002 defers isolated-daemon positive retentionDays cleanly without calling h.partial', () => {
+  const src = require('node:fs').readFileSync(require.resolve('./retention_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
+});

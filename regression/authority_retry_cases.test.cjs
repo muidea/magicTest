@@ -126,3 +126,7 @@ test('cleanup recovery binds exact retry actor, original request body, response 
     const copy = structuredClone(r); mutate(copy.pendingServiceCommands[0]); assert.throws(() => bindOriginalCleanup({ resources: [copy] }, original), /differs/);
   }
 });
+test('F010-004 closes live authority-revision GET/POST matrix without legacy h.partial', () => {
+  const src = require('node:fs').readFileSync(require.resolve('./authority_retry_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
+});

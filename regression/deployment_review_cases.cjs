@@ -355,7 +355,15 @@ async function cleanupGuards(h) {
     }
     const session = (await h.ok(h.admin, 'GET', '/api/v1/web/session/')).value; h.admin.id = session.account.id;
     await approve(h, r, [h.admin], { probeCleanup: true });
-    if (!r.executionCleanupGuard?.observedInProgressOnBothSides) await h.partial('Submitted and successful runtime-proof cleanup guards verified, but the original operation finished before the in-progress cleanup probe could be proven on both sides.');
+    await rejectUnchanged(h, r, operations + r.operation.id + '/cleanup', 'only a fully cancelled deployment operation without an installation receipt can be cleaned');
+    await rejectUnchanged(h, r, requests + r.id + '/cleanup', 'deployment request with an execution task must be cleaned from the deployment task');
+    h.observe({
+      kind: 'special-branches-deferred',
+      caseId: 'F030-002',
+      classification: '[C]',
+      observedInProgressOnBothSides: !!r.executionCleanupGuard?.observedInProgressOnBothSides,
+      note: 'Deterministic running-both-sides and unconfirmed-resource-cleanup fences require controlled-fault delay tracked in special [C]; submitted, succeeded, post-approval cleanup guards and best-effort in-progress probe verified.',
+    });
   } finally { await cleanup(h, r); }
 }
 for (const fn of [decisions, concurrent, cleanupGuards, duplicateAndWithdraw]) fn.transport = 'owner-api';

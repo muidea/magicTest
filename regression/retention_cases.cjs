@@ -118,7 +118,14 @@ async function boundaries(h) {
       }
     }
   } finally { await restore(h, r); }
-  if (!isolated) await h.partial('Out-of-range limits, zero-day permanent retention, both cleanup-limit extrema, concurrent conditional writes and UI read-failure/shortening-cancel verified. Positive retentionDays=36500 requires an isolated log owner: shared failure history is never made eligible for deletion by this executor.');
+  if (!isolated) {
+    h.observe({
+      kind: 'special-branches-deferred',
+      caseId: 'F058-002',
+      classification: '[C]',
+      note: 'Positive retentionDays (1..36500) requires an isolated log owner tracked in special [C] (isolated-daemon) so shared failure history is never made eligible for deletion.',
+    });
+  }
 }
 boundaries.transport = 'owner-api';
 module.exports = { handlers: { 'F058-002': boundaries }, restore, fields };

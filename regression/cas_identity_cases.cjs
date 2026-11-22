@@ -165,6 +165,16 @@ handlers['F007-001'] = async h => {
   const f = await machine(h, 'endpoint-life', '已编辑 Endpoint 描述');
   const fact = await endpointFact(h, f, 2);
   h.check('Endpoint edit persists without replacing original identity', fact.description === '已编辑 Endpoint 描述');
+  const badBind = await h.api(h.tenantAdmin, 'PUT', base(f.n) + 'endpoints/' + f.endpoint.id + '/role-templates', { roleTemplateKeys: [PORTAL_CORE_KEY] });
+  h.check('Endpoint rejects account-only role template binding', !h.good(badBind), badBind);
+  await h.ok(h.tenantAdmin, 'PUT', base(f.n) + 'endpoints/' + f.endpoint.id + '/role-templates', { roleTemplateKeys: [f.payload.roleTemplateKeys[0], PORTAL_SERVICE_ENDPOINT_KEY] });
+  const boundRead = (await h.ok(h.tenantAdmin, 'GET', base(f.n) + 'endpoints/' + f.endpoint.id)).value;
+  h.check('Endpoint persists bound endpoint system-profile alongside custom endpoint template',
+    boundRead.templateRefs?.some(t => t.key === PORTAL_SERVICE_ENDPOINT_KEY) && boundRead.templateRefs?.some(t => t.key === f.payload.roleTemplateKeys[0]), boundRead);
+  await h.ok(h.tenantAdmin, 'PUT', base(f.n) + 'endpoints/' + f.endpoint.id + '/role-templates', { roleTemplateKeys: [f.payload.roleTemplateKeys[0]] });
+  const restoredRead = (await h.ok(h.tenantAdmin, 'GET', base(f.n) + 'endpoints/' + f.endpoint.id)).value;
+  h.check('Endpoint cleanly unbinds endpoint system-profile while retaining custom template',
+    !restoredRead.templateRefs?.some(t => t.key === PORTAL_SERVICE_ENDPOINT_KEY) && restoredRead.templateRefs?.some(t => t.key === f.payload.roleTemplateKeys[0]), restoredRead);
   const live = await subscribedMachine(h, f, 'endpoint_live');
   const originalToken = await accepted(h, f);
   const beforeUnbound = live.service.up.requests.length;

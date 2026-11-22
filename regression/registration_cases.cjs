@@ -1,11 +1,17 @@
 // Public tenant registration, current controlled access profiles, original IDs.
 const handlers = {};
-const { PORTAL_BASIC_KEYS, portalBasicProfileSet } = require('./platform_profiles.cjs');
+const {
+  PORTAL_BASIC_KEYS,
+  PORTAL_SERVICE_ENDPOINT_KEY,
+  portalBasicProfileSet,
+} = require('./platform_profiles.cjs');
+const { sameAuthority, sameAccounts } = require('./authority_snapshot.cjs');
 const cas = n => '/cas/namespaces/' + n + '/';
 const publicPolicy = '/api/v1/cas/registration/policy/public/';
 const publicSubmit = '/api/v1/cas/registration/account/submit/';
 const roles = list => (list || []).map(r => r.module + ':' + r.key).sort();
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const sameLists = (a, b) => sameAccounts(a.accounts, b.accounts) && equal(a.registrations, b.registrations);
 const policyFields = ['enabled', 'defaultProfileKey', 'requireApproval', 'allowedEmailDomains', 'captchaEnabled', 'status'];
 const policyValue = x => Object.fromEntries(policyFields.map(k => [k, x[k]]));
 
@@ -152,7 +158,7 @@ handlers['F002-002'] = async h => {
   const before = await lists(h, f);
   const denied = await h.api(f.anon, 'POST', publicSubmit, request(h, 'closed'));
   h.check('Disabled registration rejects at exact policy gate', !h.good(denied) && denied.data?.error?.message === 'registration is disabled', denied);
-  h.check('Closed submission creates neither account nor registration', equal(before, await lists(h, f)));
+  h.check('Closed submission creates neither account nor registration', sameLists(before, await lists(h, f)));
   await policy(h, f);
   const pending = await submit(h, f, request(h, 'forged-review'));
   const member = (await h.ok(h.admin, 'POST', f.base + 'accounts/', { account: h.state.prefix + '-review-member', displayName: '普通门户成员', password: h.state.password, email: '', description: '', roleTemplateKeys: PORTAL_BASIC_KEYS, status: 2 })).value;
@@ -161,7 +167,7 @@ handlers['F002-002'] = async h => {
   await h.ok(actor, 'GET', '/system/context/?surface=portal');
   const original = await lists(h, f);
   for (const action of ['approve', 'reject']) h.denied(await h.api(actor, 'PUT', f.reg + 'account/' + action + '/' + pending.id, { approvalMessage: 'MUST NOT REVIEW' }), 'Ordinary same-tenant member cannot ' + action + ' registration');
-  h.check('Forged reviews leave exact requests and subjects unchanged', equal(original, await lists(h, f)));
+  h.check('Forged reviews leave exact requests and subjects unchanged', sameLists(original, await lists(h, f)));
   await review(h, f, pending, 'reject');
 };
 
@@ -172,7 +178,7 @@ handlers['F002-003'] = async h => {
   const before = await lists(h, f);
   const duplicate = await h.api(f.anon, 'POST', publicSubmit, payload);
   h.check('Duplicate applicant returns explicit identity-unavailable error', !h.good(duplicate) && duplicate.data?.error?.message === 'account registration is unavailable', duplicate);
-  h.check('Duplicate submit preserves exact original pending account and request', equal(before, await lists(h, f)));
+  h.check('Duplicate submit preserves exact original pending account and request', sameLists(before, await lists(h, f)));
   const localAdmin = await h.login(f.bootstrap.account, h.state.password, f.ns.name, h.state.password + 'A');
   const path = f.reg + 'account/approve/' + original.id;
   const responses = await Promise.all([h.api(h.admin, 'PUT', path, { approvalMessage: 'platform reviewer' }), h.api(localAdmin, 'PUT', path, { approvalMessage: 'tenant reviewer' })]);
@@ -184,7 +190,7 @@ handlers['F002-003'] = async h => {
   const repeated = await review(h, f, original, 'approve', localAdmin);
   h.check('Sequential repeated approval returns original durable result unchanged', equal(repeated, registration));
   const accountAfter = (await h.ok(h.admin, 'GET', f.base + 'accounts/' + original.accountId)).value;
-  h.check('Repeated review cannot add another binding or alter current authority', equal(accountAfter, account));
+  h.check('Repeated review cannot add another binding or alter current authority', sameAuthority(accountAfter, account));
   const after = await lists(h, f);
   h.check('Owner directories contain one original request and one account for applicant', after.registrations.filter(r => r.account === original.account).length === 1 && after.accounts.filter(a => a.account === original.account).length === 1);
 };
@@ -192,10 +198,29 @@ handlers['F002-003'] = async h => {
 handlers['F002-004'] = async h => {
   const f = await fixture(h, 'regpolicy');
   const initial = await policy(h, f, { requireApproval: false, allowedEmailDomains: ['example.test'] });
+  const customTpl = (await h.ok(h.admin, 'POST', f.base + 'role-templates/', {
+    key: h.state.prefix + '-custom-reg-probe',
+    name: '自定义注册探针',
+    description: '非 system-profile 不可用于公开注册',
+    scene: 'usage',
+    subjectType: 'account',
+    roleRefs: [{ module: '/modules/kernel/runner', key: 'portal-app-catalog-viewer' }],
+    applicationAccess: [],
+    status: 2,
+  })).value;
+  h.namespaceDependent(f.ns.id, f.base + 'role-templates/', customTpl.id, 'registration-probe-template');
+  for (const [label, badKeys, expectedMessage] of [
+    ['endpoint system-profile', [PORTAL_SERVICE_ENDPOINT_KEY], 'role template ' + PORTAL_SERVICE_ENDPOINT_KEY + ' is not a account template'],
+    ['custom non-system-profile template', [customTpl.key], 'registration requires protected system access profiles'],
+  ]) {
+    const rejected = await h.api(h.admin, 'POST', f.reg + 'profiles/', { key: h.state.prefix + '-bad-' + badKeys[0], name: '非法注册档案', description: '拒绝受限模板用于公开注册', accessProfileKeys: badKeys, status: 2 });
+    if (h.good(rejected) && rejected.data?.value?.id) h.namespaceDependent(f.ns.id, f.reg + 'profiles/', rejected.data.value.id, 'unexpected-registration-profile');
+    h.check('Registration profile rejects ' + label, !h.good(rejected) && rejected.data?.value == null && rejected.data?.error?.message === expectedMessage, rejected);
+  }
   const before = await lists(h, f);
   const refused = await h.api(f.anon, 'POST', publicSubmit, request(h, 'wrong-domain', 'outside.test'));
   h.check('Nonmatching email is rejected at exact domain gate', !h.good(refused) && refused.data?.error?.message === 'email domain is not allowed', refused);
-  h.check('Email domain refusal creates no applicant resources', equal(before, await lists(h, f)));
+  h.check('Email domain refusal creates no applicant resources', sameLists(before, await lists(h, f)));
   const allowed = await submit(h, f, request(h, 'allowed-domain'));
   await approved(h, f, allowed);
   const captcha = await h.api(h.admin, 'PUT', f.reg + 'policies/', { ...policyValue(initial), captchaEnabled: true });
@@ -205,5 +230,5 @@ handlers['F002-004'] = async h => {
   h.check('Public policy does not advertise unavailable CAPTCHA', equal(policyValue((await h.ok(f.anon, 'GET', publicPolicy)).value), policyValue(initial)));
 };
 for (const handler of Object.values(handlers)) handler.actors = ['user', 'tenantAdmin', 'otherTenantAdmin'];
-module.exports = { handlers, directoryValues, registrationAuthority, registrationBindingRoute, waitForRegistrationIngress,
+module.exports = { handlers, directoryValues, registrationAuthority, registrationBindingRoute, waitForRegistrationIngress, sameLists,
   createRegistrationFixture: fixture, setRegistrationPolicy: policy, submitRegistration: submit, reviewRegistration: review };

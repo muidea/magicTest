@@ -172,3 +172,69 @@ test('removed model source history needs exact original package deletion and unc
     else assert.equal(r.sourceRemovalHistoryProof, undefined);
   }
 });
+test('cleanupGuards checks submitted, fixture succeeded, post-approval succeeded guards and defers fault-timed running proof without partial', async t => {
+  const delivery = require('./delivery_cases.cjs');
+  const savedFixture = delivery.fixture;
+  delivery.fixture = async () => ({ package: { id: 3, artifactDigest: 'digest' }, application: { id: 1 }, deploymentRequests: [{ id: 5 }] });
+  delete require.cache[require.resolve('./deployment_review_cases.cjs')];
+  const review = require('./deployment_review_cases.cjs');
+  t.after(() => { delivery.fixture = savedFixture; delete require.cache[require.resolve('./deployment_review_cases.cjs')]; });
+  const admin = { identity: { account: 'admin', namespace: 'panel' }, origin: 'https://panel.test' };
+  const fixtureReq = { id: 5, version: 1, operationId: 50, deploymentId: 'dep-5', status: 'succeeded' };
+  const fixtureOp = { id: 50, requestId: 5, packageId: 3, deploymentId: 'dep-5', planDigest: 'plan-5', status: 'succeeded', version: 2 };
+  let newReq = { id: 9, version: 1, status: 'submitted', packageId: 3, deploymentId: 'dep-9', namespace: 'panel', planDigest: 'plan-9' };
+  const newOp = { id: 90, requestId: 9, packageId: 3, deploymentId: 'dep-9', planDigest: 'plan-9', status: 'succeeded', version: 3 };
+  const newInst = { id: 91, deploymentId: 'dep-9', sourceDigest: 'digest', status: 'ready', updateTime: 10, deploymentVersion: 1,
+    applicationKey: 'app', receipt: { uninstallation: { authorization: { confirmed: true }, dataDisposition: 'destroy', finishedAt: 5, recoveryStatus: 'recycled' }, database: { provisioningMode: 'allocate', bindingId: 1, schemaResourceId: 2 } } };
+  let destroyed = false, partialCalled = false; const observations = [], cleanupCalls = [];
+  const h = { admin, state: { resources: [], prefix: 't' }, Blocked: Error, persist() {},
+    observe: ev => observations.push(ev), partial: async () => { partialCalled = true; },
+    good: x => x?.status === 200 && !x.data?.error, check: (m, c) => assert.ok(c, m),
+    async create(_route, intended) {
+      const val = structuredClone(newReq);
+      h.state.resources.push({ kind: 'deployment-review-request', id: 9, creation: { ownershipConfirmed: true, outcome: 'accepted', actorIdentity: admin.identity, origin: admin.origin, intended } });
+      return val;
+    },
+    async directory(_a, route) {
+      if (route.includes('application-deployment-operations')) return newReq.operationId ? [fixtureOp, newOp] : [fixtureOp];
+      if (route.includes('installations')) return destroyed ? [] : [newInst];
+      if (route.includes('database-schemas')) return [{ id: 2, status: 'recycled' }];
+      return [fixtureReq, newReq];
+    },
+    async ok(_a, _m, route) {
+      if (route === '/api/v1/web/session/') return { value: { account: { id: 1 } } };
+      if (route.endsWith('/runtime-options')) return { values: [{ id: 'base1', kind: 'base' }, { id: 'gw1', kind: 'gateway' }] };
+      if (route === '/panel/application/deployment-requests/5') return { value: fixtureReq };
+      if (route === '/panel/application/deployment-requests/9') return { value: newReq };
+      if (route === '/panel/operations/namespaces/panel/application-deployment-operations/50') return { value: fixtureOp };
+      if (route === '/panel/operations/namespaces/panel/application-deployment-operations/90') return { value: newOp };
+      if (route === '/panel/application/installations/91') return { value: destroyed ? { ...newInst, status: 'uninstalled', updateTime: 11 } : newInst };
+      if (route.includes('/model-packages/')) return { value: { id: 3 } };
+      throw Error('unexpected ok ' + route);
+    },
+    async api(_a, _m, route) {
+      if (route.endsWith('/cleanup')) {
+        cleanupCalls.push(route);
+        const msg = route.includes('deployment-requests') ? 'deployment request with an execution task must be cleaned from the deployment task' : 'only a fully cancelled deployment operation without an installation receipt can be cleaned';
+        return { status: 409, data: { error: { code: 21, message: msg }, value: null } };
+      }
+      if (route.endsWith('/approve')) {
+        newReq = { ...newReq, status: 'succeeded', operationId: 90, reviewedBy: { accountId: 1, namespace: 'panel' },
+          runtimePlacement: { executionInstanceId: 'base1', gatewayInstanceId: 'gw1' },
+          resolvedRuntimePlacement: { execution: { instanceId: 'base1' }, gateway: { instanceId: 'gw1' } } };
+        return { status: 200, data: { value: newReq } };
+      }
+      if (route.endsWith('/uninstall')) {
+        destroyed = true;
+        return { status: 200, data: { value: { ...newInst, status: 'uninstalled', updateTime: 11 } } };
+      }
+      throw Error('unexpected api ' + route);
+    } };
+  const r = await review.handlers['F030-002'](h);
+  void r;
+  assert.equal(partialCalled, false);
+  assert.ok(observations.some(o => o.kind === 'special-branches-deferred' && o.caseId === 'F030-002'));
+  assert.ok(cleanupCalls.includes('/panel/application/deployment-requests/9/cleanup'));
+  assert.ok(cleanupCalls.includes('/panel/operations/namespaces/panel/application-deployment-operations/90/cleanup'));
+  assert.ok(cleanupCalls.includes('/panel/operations/namespaces/panel/application-deployment-operations/50/cleanup'));
+});

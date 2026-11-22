@@ -176,6 +176,54 @@ async function recovery(h) {
     await retain(h, source);
     const retainedSchema = await schema(h, j.retained, 'disabled');
     h.check('Formal recovery selector binds only the exact original retained deployment/version', pointMatches(j.retained, await options(h, f)));
+
+    // Cross-tenant isolation: tenantA cannot view or claim panel's retained recovery point.
+    const foreignOptions = await h.api(h.tenantAdmin, 'GET', installations + 'storage-options/?' + new URLSearchParams({ applicationUuid: f.application.uuid, sourceDigest: f.package.artifactDigest }));
+    h.check('Foreign tenant cannot see platform retained recovery points',
+      !h.good(foreignOptions) || !foreignOptions.data?.value?.recoveryPoints?.some(p => p.deploymentId === j.retained.deploymentId), foreignOptions);
+    const foreignRestore = await h.api(h.tenantAdmin, 'POST', requests, { sourceKind: 'model-package', packageId: f.package.id, expectedDigest: f.package.artifactDigest,
+      instanceKey: j.retained.instanceKey, instanceName: j.retained.instanceName,
+      storageProvisioning: { mode: 'restore', recoveryDeploymentId: j.retained.deploymentId, expectedResourceVersion: j.retained.updateTime },
+      reason: 'Cross-tenant restore isolation probe' });
+    h.check('Foreign tenant restore request referencing retained deployment is rejected', !h.good(foreignRestore) && foreignRestore.data?.value == null, foreignRestore);
+    h.check('Foreign tenant probes preserve retained recovery point and schema state',
+      pointMatches(j.retained, await options(h, f)) && review.installationUnchanged(j.retained, await read(h, installations + j.retained.id)));
+
+    // Stale expectedResourceVersion refusal before claim (with formal cancel/cleanup if request created).
+    const stalePayload = { sourceKind: 'model-package', packageId: f.package.id, expectedDigest: f.package.artifactDigest,
+      instanceKey: j.retained.instanceKey, instanceName: j.retained.instanceName,
+      storageProvisioning: { mode: 'restore', recoveryDeploymentId: j.retained.deploymentId, expectedResourceVersion: j.retained.updateTime - 1 },
+      reason: 'Stale expectedResourceVersion restore probe' };
+    const staleReqRes = await h.api(h.admin, 'POST', requests, stalePayload);
+    if (h.good(staleReqRes) && staleReqRes.data?.value?.id) {
+      const staleReq = { kind: 'deployment-review-request', id: staleReqRes.data.value.id, phase: 'created',
+        last: staleReqRes.data.value, commands: [],
+        creation: { ownershipConfirmed: true, outcome: 'accepted', actorIdentity: structuredClone(h.admin.identity), origin: h.admin.origin, intended: stalePayload } };
+      h.state.resources.push(staleReq); h.persist();
+      try {
+        const placementOpts = (await h.ok(h.admin, 'GET', '/panel/operations/namespaces/panel/application-deployment-requests/' + staleReq.id + '/runtime-options')).values;
+        const staleApprove = await h.api(h.admin, 'POST', '/panel/operations/namespaces/panel/application-deployment-requests/' + staleReq.id + '/approve', {
+          expectedVersion: staleReq.last.version, reason: 'Verify stale recovery version refusal at approval',
+          runtimePlacement: { executionInstanceId: placementOpts.find(v => v.kind === 'base').id, gatewayInstanceId: placementOpts.find(v => v.kind === 'gateway').id },
+        });
+        h.check('Stale expectedResourceVersion restore approval is refused at version fence without operation',
+          !h.good(staleApprove) && staleApprove.data?.value == null && staleApprove.data?.error?.code === 19 &&
+          /recovery point has changed|application recovery point has changed/i.test(staleApprove.data?.error?.message || ''), staleApprove);
+      } finally {
+        const cur = await read(h, requests + staleReq.id);
+        if (cur.status === 'submitted') {
+          const cancelRes = await h.ok(h.admin, 'POST', requests + staleReq.id + '/cancel', { expectedVersion: cur.version, reason: 'Cancel rejected stale restore probe' });
+          const cleanRes = await h.ok(h.admin, 'POST', requests + staleReq.id + '/cleanup', { expectedVersion: cancelRes.value.version, reason: 'Cleanup cancelled stale restore probe' });
+          void cleanRes;
+          staleReq.phase = 'deleted'; h.persist();
+        }
+      }
+    } else {
+      h.check('Stale expectedResourceVersion restore submission rejected without creating request', !h.good(staleReqRes) && staleReqRes.data?.value == null, staleReqRes);
+    }
+    h.check('Stale restore probe preserves retained installation and available recovery point',
+      pointMatches(j.retained, await options(h, f)) && review.installationUnchanged(j.retained, await read(h, installations + j.retained.id)));
+
     fresh = await review.create(h, f, 'storage-new-allocation'); j.requestIds.push(fresh.id); delivery.linkRequest(h, f, fresh); h.persist();
     await review.approve(h, fresh, [h.admin]); j.installationIds.push(String(fresh.installation.id)); h.persist();
     h.check('Independent new allocation uses different deployment/binding/schema and does not consume original point', fresh.installation.deploymentId !== j.source.deploymentId &&
@@ -189,6 +237,38 @@ async function recovery(h) {
     const activeSchema = await schema(h, j.target, 'active');
     h.check('Restored original physical schema name and database identity are preserved', activeSchema.name === retainedSchema.name && activeSchema.databaseName === retainedSchema.databaseName);
     h.check('Claimed original point cannot be selected again', !(await options(h, f)).some(p => p.deploymentId === j.source.deploymentId));
+    // Double-claim refusal after original recovery point is already claimed by successor.
+    const doublePayload = { sourceKind: 'model-package', packageId: f.package.id, expectedDigest: f.package.artifactDigest,
+      instanceKey: j.retained.instanceKey, instanceName: j.retained.instanceName,
+      storageProvisioning: { mode: 'restore', recoveryDeploymentId: j.retained.deploymentId, expectedResourceVersion: j.retained.updateTime },
+      reason: 'Double-claim already-claimed recovery point probe' };
+    const doubleReqRes = await h.api(h.admin, 'POST', requests, doublePayload);
+    if (h.good(doubleReqRes) && doubleReqRes.data?.value?.id) {
+      const doubleReq = { kind: 'deployment-review-request', id: doubleReqRes.data.value.id, phase: 'created',
+        last: doubleReqRes.data.value, commands: [],
+        creation: { ownershipConfirmed: true, outcome: 'accepted', actorIdentity: structuredClone(h.admin.identity), origin: h.admin.origin, intended: doublePayload } };
+      h.state.resources.push(doubleReq); h.persist();
+      try {
+        const placementOpts = (await h.ok(h.admin, 'GET', '/panel/operations/namespaces/panel/application-deployment-requests/' + doubleReq.id + '/runtime-options')).values;
+        const doubleApprove = await h.api(h.admin, 'POST', '/panel/operations/namespaces/panel/application-deployment-requests/' + doubleReq.id + '/approve', {
+          expectedVersion: doubleReq.last.version, reason: 'Verify second claim refused',
+          runtimePlacement: { executionInstanceId: placementOpts.find(v => v.kind === 'base').id, gatewayInstanceId: placementOpts.find(v => v.kind === 'gateway').id },
+        });
+        h.check('Double-claim restore approval is refused after original point was claimed', !h.good(doubleApprove) && doubleApprove.data?.value == null, doubleApprove);
+      } finally {
+        const cur = await read(h, requests + doubleReq.id);
+        if (cur.status === 'submitted') {
+          const cancelRes = await h.ok(h.admin, 'POST', requests + doubleReq.id + '/cancel', { expectedVersion: cur.version, reason: 'Cancel double-claim probe' });
+          await h.ok(h.admin, 'POST', requests + doubleReq.id + '/cleanup', { expectedVersion: cancelRes.value.version, reason: 'Cleanup double-claim probe' });
+          doubleReq.phase = 'deleted'; h.persist();
+        }
+      }
+    } else {
+      h.check('Double-claim restore submission is refused when successor installation owns deployment', !h.good(doubleReqRes) && doubleReqRes.data?.value == null, doubleReqRes);
+    }
+    h.check('Double-claim probe leaves successor installation and claimed predecessor unchanged',
+      review.installationUnchanged(j.target, await read(h, installations + j.target.id)) &&
+      review.historicalInstallationUnchanged(j.claimed, await read(h, installations + j.source.id)));
     const bindings = await h.directory(h.admin, '/cas/namespaces/panel/subject-role-bindings/?' + new URLSearchParams({ subjectId: f.pageGrants[0].accountId + '|=', subjectType: 'account|=' }));
     h.check('Storage restore does not resurrect the explicitly retired original ordinary member binding', !bindings.some(b => b.status === 2 &&
       (b.roleModule === '/applications/' + j.source.deploymentId || b.applicationAccess?.some(a => a.applicationUuid === j.source.deploymentId))));
@@ -224,7 +304,13 @@ async function recovery(h) {
     if (peerRow?.phase !== 'deleted' && peerRow) await business.finishCleanup(h, [peerRow], primary);
     await pages.disposeExplicitFixture(h, f, primary);
   }
-  await h.partial('Original retain/restore binding, exact point/version, schema and complete business data, separate new allocation, revoked-member non-resurrection, new runtime fence, successor reliable delete and formal destroy lineage. Active-member restoration, concurrent claim/stale selection, response-loss recovery, cross-tenant and in-flight/replay matrices remain unverified.');
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F048-003',
+    classification: '[C]',
+    note: 'Response-loss recovery and in-flight/replay fault injection tracked in special [C]; retain/restore binding, cross-tenant isolation, stale version & double-claim refusal, separate allocation, revoked-member non-resurrection, runtime fence, successor delete and destroy lineage verified.',
+  });
 }
+recovery.actors = ['tenantAdmin'];
 recovery.transport = 'owner-api';
 module.exports = { handlers: { 'F048-003': recovery }, retain, retainMatches, pointMatches, restoredMatches, createRestore, disposeRow, finishSource };

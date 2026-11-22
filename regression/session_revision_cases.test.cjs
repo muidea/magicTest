@@ -7,3 +7,7 @@ test('revision comparison rejects unsafe or nonhuman original JWT projections an
   for (const value of [{ sub: 'endpoint:1', authority_revision: 2 }, { sub: 'account:1', authority_revision: -1 }, { sub: 'account:1' }, { sub: 'account:1', authority_revision: 9007199254740992 }]) assert.throws(() => claims(token(value)));
   assert.throws(() => claims('not-a-token'));
 });
+test('F010-003 closes without legacy h.partial calls', () => {
+  const src = require('node:fs').readFileSync(require.resolve('./session_revision_cases.cjs'), 'utf8');
+  assert.equal(src.includes('h.partial('), false);
+});

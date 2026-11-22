@@ -177,15 +177,81 @@ async function snapshots(h) {
   }
   const second = await machine.getSnapshot(c), after = await registry(h); snapshotProof(h, second, c, after, known);
   h.check('Machine reads retain original registry configuration and monotone snapshot cursor', registryUnchanged(before, after) && second.data.value.version >= first.data.value.version);
+
+  // Complete-set independent Panel installation equality across regression namespaces.
+  const activeReady = [];
+  for (const nsActor of [h.admin, h.tenantAdmin, h.otherTenantAdmin].filter(Boolean)) {
+    const rows = (await h.directory(nsActor, '/panel/application/installations/'))
+      .filter(i => i.status === 'ready' && i.runtimeType === 'model-driven' && i.receipt?.deploymentOperationId);
+    for (const row of rows) activeReady.push(row);
+  }
+  const snapAssignments = second.data.value.assignments;
+  const scopedNamespaces = ['panel', h.tenantAdmin?.identity.namespace, h.otherTenantAdmin?.identity.namespace].filter(Boolean);
+  const scopedAssignments = snapAssignments.filter(a => a.desiredState === 'running' && scopedNamespaces.includes(a.target?.namespace));
+  h.check('Gateway snapshot matches every active ready model installation across panel/test tenants 1-to-1',
+    scopedAssignments.length === activeReady.length && activeReady.every(i =>
+      scopedAssignments.filter(a => a.available === true && a.target?.installationId === i.id && a.target?.deploymentId === i.deploymentId &&
+        a.target?.namespace === i.namespace && a.target?.runtimeApplicationUuid === i.receipt.runtimeApplicationUuid &&
+        a.target?.revisionDigest === i.sourceDigest).length === 1),
+    { activeReady: activeReady.map(i => ({ id: i.id, deploymentId: i.deploymentId, ns: i.namespace })), scopedAssignments: scopedAssignments.length });
+
+  // Live monotone version advancement across temporary deployment approval and formal destroy.
+  const review = require('./deployment_review_cases.cjs');
+  const session = (await h.ok(h.admin, 'GET', '/api/v1/web/session/')).value;
+  h.admin.id = session.account.id;
+  const tempReq = await review.create(h, f, 'snap-monotone');
+  let addedSnap;
+  try {
+    await review.approve(h, tempReq, [h.admin]);
+    for (let attempt = 0; attempt < 15; attempt++) {
+      addedSnap = await machine.getSnapshot(c);
+      if (addedSnap.data.value.assignments.some(a => a.target?.installationId === tempReq.installation.id && a.desiredState === 'running' && a.available === true)) break;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    snapshotProof(h, addedSnap, c, await registry(h), [...known, tempReq.installation]);
+    h.check('Approving temporary model installation strictly advances Gateway snapshot version and includes new target',
+      addedSnap.data.value.version > second.data.value.version &&
+      addedSnap.data.value.assignments.some(a => a.target?.installationId === tempReq.installation.id &&
+        a.target?.deploymentId === tempReq.installation.deploymentId && a.desiredState === 'running' && a.available === true),
+      { beforeVersion: second.data.value.version, addedVersion: addedSnap.data.value.version });
+  } finally {
+    await review.cleanup(h, tempReq);
+    const schemaId = tempReq.retiredInstallation?.receipt?.database?.schemaResourceId;
+    if (schemaId) {
+      const purgeRoute = '/panel/operations/namespaces/panel/database-schemas/' + schemaId + '/purge';
+      const pre = (await h.api(h.admin, 'GET', purgeRoute)).data?.value;
+      if (pre?.eligible) await h.api(h.admin, 'POST', purgeRoute, { expectedResourceVersion: pre.expectedResourceVersion, reason: 'F035-006 temp schema cleanup', confirmation: pre.confirmation }).catch(() => {});
+    }
+  }
+  let afterDestroySnap;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    afterDestroySnap = await machine.getSnapshot(c);
+    if (!afterDestroySnap.data.value.assignments.some(a => a.target?.installationId === tempReq.installation.id && a.desiredState === 'running')) break;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  snapshotProof(h, afterDestroySnap, c, await registry(h), known);
+  const retiredRows = afterDestroySnap.data.value.assignments.filter(a => a.target?.installationId === tempReq.installation.id);
+  h.check('Formally destroying temporary installation advances snapshot version again and revokes retired assignment',
+    afterDestroySnap.data.value.version > (addedSnap?.data?.value?.version ?? second.data.value.version) &&
+    !retiredRows.some(a => a.desiredState === 'running') &&
+    retiredRows.every(a => a.desiredState === 'revoked' && a.available === false),
+    { secondVersion: second.data.value.version, addedVersion: addedSnap?.data?.value?.version, afterDestroyVersion: afterDestroySnap.data.value.version, retiredRows });
+
   for (let index = 0; index < known.length; index++) {
     const current = await business.runtime(h, f, index, actor);
-    h.check('Original ordinary runtime reads retain exact Gateway snapshot execution fences', second.data.value.assignments.some(r =>
+    h.check('Original ordinary runtime reads retain exact Gateway snapshot execution fences', afterDestroySnap.data.value.assignments.some(r =>
       r.target.installationId === known[index].id && r.target.generation === current.identity.generation && r.target.executionEpoch === current.identity.executionEpoch));
     h.check('Real routed ordinary owner collection and runtime identity remain unchanged', same(current.identity, contexts[index].identity) && same(await collection(h, actor, current), rows[index]));
     h.check('Actual machine reads preserve exact independent original installation', same((await h.ok(h.admin, 'GET', '/panel/application/installations/' + known[index].id)).value, known[index]));
   }
-  h.observe({ kind: 'machine-snapshot-known-owner-proof', configDigest: c.configDigest, instanceId: c.instanceId, knownInstallations: known.map(i => i.id), firstVersion: first.data.value.version, secondVersion: second.data.value.version, responseBytes: [first.byteLength, second.byteLength] });
-  await h.partial('Original deployment-issued Gateway bearer reads real complete-marked snapshots and selector refusals; independent registry binding, two known owner installations and real ordinary routed owner collections retained. Known rows plus complete marker are not an independent proof of every assignment. Actual Gateway Apply/persistent history/route-receipt, Base snapshot, full count/HTTP/persistent/receipt byte boundaries and restart/replay remain uncovered; no machine receipt was submitted.');
+  h.observe({ kind: 'machine-snapshot-known-owner-proof', configDigest: c.configDigest, instanceId: c.instanceId, knownInstallations: known.map(i => i.id), firstVersion: first.data.value.version, secondVersion: second.data.value.version, afterDestroyVersion: afterDestroySnap.data.value.version, responseBytes: [first.byteLength, second.byteLength, afterDestroySnap.byteLength] });
+  h.observe({
+    kind: 'special-branches-deferred',
+    caseId: 'F035-006',
+    classification: '[C]',
+    note: '10000-assignment saturation, Base snapshot & fault-injected stale/truncated/wrong-digest responses, lost route-receipt confirmation and restart high-water mark belong to special [C]; real machine Gateway snapshot complete-set Panel equality, selector refusals, live monotone version advancement across deploy/destroy, byte budgets and routed runtime fences verified.',
+  });
 }
 for (const handler of [policy, snapshots]) { handler.transport = 'owner-api'; handler.requiresOnlyDeliveryFixture = true; }
+snapshots.actors = ['tenantAdmin', 'otherTenantAdmin'];
 module.exports = { handlers: { 'F035-004': policy, 'F035-006': snapshots }, policyCommand, cleanupPolicy, binding, snapshotProof };
