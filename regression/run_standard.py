@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -294,7 +295,84 @@ def main():
         return execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite=args.suite)
 
 
+def cleanup_historical_runs(catalog_path, output_root, *, suite='standard', cases=None):
+    """Clean previous local run artifacts under acceptance/runs before a full regression."""
+    if cases is not None:
+        return {'cleaned': False, 'reason': 'targeted-subset'}
+    acceptance_dir = Path(catalog_path).parent
+    runs_root = acceptance_dir / 'runs'
+    if acceptance_dir.is_symlink() or runs_root.is_symlink() or (runs_root.exists() and not runs_root.is_dir()):
+        raise ValueError(f'unsafe acceptance runs root: {runs_root}')
+    runs_root_abs = Path(os.path.abspath(runs_root))
+    output_abs = Path(os.path.abspath(Path(output_root).expanduser()))
+    if output_abs != runs_root_abs and not output_abs.is_relative_to(runs_root_abs):
+        return {'cleaned': False, 'reason': 'output-outside-runs-root'}
+    probe = output_abs
+    while probe != runs_root_abs:
+        if probe.is_symlink():
+            raise ValueError(f'unsafe symlinked regression output path: {probe}')
+        probe = probe.parent
+    preserved_names = {'.git', '.gitignore', '.gitattributes', '.gitkeep'}
+    targets = []
+    if runs_root_abs.exists():
+        if suite == 'standard':
+            for entry in sorted(runs_root_abs.iterdir()):
+                if entry.name not in preserved_names:
+                    targets.append(entry)
+        else:
+            rel_parts = output_abs.relative_to(runs_root_abs).parts if output_abs != runs_root_abs else ()
+            if len(rel_parts) >= 2:
+                current_round = runs_root_abs / rel_parts[0]
+                for entry in sorted(runs_root_abs.iterdir()):
+                    if entry != current_round and entry.name not in preserved_names:
+                        targets.append(entry)
+                if output_abs.is_dir():
+                    for entry in sorted(output_abs.iterdir()):
+                        if entry.name not in preserved_names:
+                            targets.append(entry)
+            elif len(rel_parts) == 1:
+                standard_dir = runs_root_abs / 'standard'
+                for entry in sorted(runs_root_abs.iterdir()):
+                    if entry != standard_dir and entry != output_abs and entry.name not in preserved_names:
+                        targets.append(entry)
+                if output_abs.is_dir():
+                    for entry in sorted(output_abs.iterdir()):
+                        if entry.name not in preserved_names:
+                            targets.append(entry)
+            else:
+                for entry in sorted(runs_root_abs.iterdir()):
+                    if entry.name not in preserved_names:
+                        targets.append(entry)
+    removed_files = 0
+    removed_bytes = 0
+    for target in targets:
+        entries = [target] if target.is_symlink() or target.is_file() else target.rglob('*')
+        for entry in entries:
+            if entry.is_file() and not entry.is_symlink():
+                removed_files += 1
+                removed_bytes += entry.stat().st_size
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        else:
+            shutil.rmtree(target)
+    return {
+        'cleaned': True,
+        'suite': suite,
+        'runsRoot': str(runs_root_abs),
+        'removedEntries': len(targets),
+        'removedFiles': removed_files,
+        'removedBytes': removed_bytes,
+    }
+
+
 def execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite='standard'):
+    history_cleanup = cleanup_historical_runs(catalog_path, config['output'], suite=suite, cases=cases)
+    if history_cleanup.get('cleaned'):
+        print(
+            f"Historical runs cleaned under {history_cleanup['runsRoot']}: "
+            f"{history_cleanup['removedEntries']} entries, {history_cleanup['removedFiles']} files",
+            flush=True,
+        )
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
     directory = Path(config['output']).expanduser().resolve() / stamp
     directory.mkdir(parents=True, exist_ok=False)
@@ -303,6 +381,7 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     print('Private recovery state (retained outside repositories): ' + str(private), flush=True)
     inputs = tool_hashes()
     save(directory / 'inputs.json', {'suite': suite, 'selectedCases': cases or f'all required {suite} branches',
+                                    'historyCleanup': history_cleanup,
                                     'catalogDigest': owner.digest(catalog), 'toolHashes': inputs,
                                     'fileUploadMaxBytes': config.get('fileUploadMaxBytes'),
                                     'runtimeSnapshotConfigDigest': 'sha256:' + hashlib.sha256(Path(config['runtimeSnapshotConfig']).expanduser().read_bytes()).hexdigest() if config.get('runtimeSnapshotConfig') else None,

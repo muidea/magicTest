@@ -11,7 +11,7 @@ from unittest import mock
 
 from regression import run_standard
 
-from regression.run_standard import ROOT, environment_lock, finish, load_owner, run_browser, tool_hashes
+from regression.run_standard import ROOT, cleanup_historical_runs, environment_lock, finish, load_owner, run_browser, tool_hashes
 
 
 class ReportGatesTest(unittest.TestCase):
@@ -302,6 +302,161 @@ class ReportGatesTest(unittest.TestCase):
             preflight = json.loads((evidence_dir / 'preflight.json').read_text())
             self.assertEqual(preflight['status'], 'blocked')
             self.assertIn('publish failed', preflight['reason'])
+
+    def _prepare_runs_tree(self, root):
+        acceptance_dir = root / 'acceptance'
+        acceptance_dir.mkdir(parents=True, exist_ok=True)
+        catalog_path = acceptance_dir / 'platform-catalog.json'
+        catalog_path.write_text('{}')
+        runs_dir = acceptance_dir / 'runs'
+        (runs_dir / '2026-11-20-old/standard').mkdir(parents=True)
+        (runs_dir / '2026-11-20-old/standard/report.json').write_text('old-std')
+        (runs_dir / '2026-11-20-old/abnormal').mkdir(parents=True)
+        (runs_dir / '2026-11-20-old/abnormal/report.json').write_text('old-abn')
+        (runs_dir / 'stale-note.txt').write_text('stale')
+        (runs_dir / '.gitignore').write_text('# keep\n')
+        return catalog_path, runs_dir
+
+    def _run_cleanup_live(self, root, catalog_path, output_dir, *, suite='standard', cases=None):
+        health = root / f'health-{suite}.json'
+        health.write_text(json.dumps({'results': [{'status': 'passed'}], 'environment': {'name': 'unit'}}))
+        owner = mock.Mock()
+        owner.digest.return_value = 'unit-digest'
+        owner.capture_health.return_value = health
+        creds = root / 'credentials.json'
+        creds.write_text('{}')
+        config = {'output': str(output_dir), 'credentials': str(creds)}
+        with mock.patch.object(run_standard.tempfile, 'mkdtemp', return_value=str(root / f'private-{suite}')), \
+                mock.patch.object(run_standard, 'run_browser', return_value=0), \
+                mock.patch.object(run_standard, 'finish', return_value={'counts': {}, 'complete': True, 'executionGates': {}}), \
+                mock.patch('builtins.print'):
+            rc = run_standard.execute_live(
+                config,
+                catalog_path,
+                owner,
+                {},
+                ['node', 'standard.cjs'],
+                creds,
+                cases,
+                suite=suite,
+            )
+        self.assertEqual(rc, 0)
+        return next(output_dir.iterdir())
+
+    def test_full_standard_regression_cleans_all_historical_runs_under_acceptance_runs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            catalog_path, runs_dir = self._prepare_runs_tree(root)
+            current_std = runs_dir / '2026-11-22-cur/standard'
+            (current_std / 'old-batch').mkdir(parents=True)
+            (current_std / 'old-batch/result.json').write_text('old-batch')
+
+            evidence_dir = self._run_cleanup_live(root, catalog_path, current_std, suite='standard', cases=None)
+            self.assertFalse((runs_dir / '2026-11-20-old').exists())
+            self.assertFalse((runs_dir / 'stale-note.txt').exists())
+            self.assertFalse((current_std / 'old-batch').exists())
+            self.assertTrue((runs_dir / '.gitignore').is_file())
+            self.assertTrue(catalog_path.is_file())
+            inputs = json.loads((evidence_dir / 'inputs.json').read_text())
+            self.assertTrue(inputs['historyCleanup']['cleaned'])
+            self.assertEqual(inputs['historyCleanup']['suite'], 'standard')
+            self.assertGreaterEqual(inputs['historyCleanup']['removedFiles'], 3)
+
+    def test_full_abnormal_regression_cleans_other_rounds_and_old_abnormal_while_keeping_current_standard(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            catalog_path, runs_dir = self._prepare_runs_tree(root)
+            current_round = runs_dir / '2026-11-22-cur'
+            (current_round / 'standard/run1').mkdir(parents=True)
+            (current_round / 'standard/run1/report.json').write_text('keep-standard')
+            (current_round / 'README.md').write_text('keep-readme')
+            (current_round / 'abnormal/old-abn').mkdir(parents=True)
+            (current_round / 'abnormal/old-abn/report.json').write_text('drop-abn')
+
+            evidence_dir = self._run_cleanup_live(
+                root,
+                catalog_path,
+                current_round / 'abnormal',
+                suite='abnormal',
+                cases=None,
+            )
+            self.assertFalse((runs_dir / '2026-11-20-old').exists())
+            self.assertFalse((runs_dir / 'stale-note.txt').exists())
+            self.assertFalse((current_round / 'abnormal/old-abn').exists())
+            self.assertEqual((current_round / 'standard/run1/report.json').read_text(), 'keep-standard')
+            self.assertEqual((current_round / 'README.md').read_text(), 'keep-readme')
+            inputs = json.loads((evidence_dir / 'inputs.json').read_text())
+            self.assertTrue(inputs['historyCleanup']['cleaned'])
+            self.assertEqual(inputs['historyCleanup']['suite'], 'abnormal')
+
+    def test_targeted_subset_dry_run_and_external_output_do_not_clean_historical_runs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            catalog_path, runs_dir = self._prepare_runs_tree(root)
+            subset_out = runs_dir / '2026-11-22-cur/standard'
+            evidence_subset = self._run_cleanup_live(
+                root,
+                catalog_path,
+                subset_out,
+                suite='standard',
+                cases=['F035-006'],
+            )
+            self.assertTrue((runs_dir / '2026-11-20-old/standard/report.json').is_file())
+            self.assertEqual(
+                json.loads((evidence_subset / 'inputs.json').read_text())['historyCleanup'],
+                {'cleaned': False, 'reason': 'targeted-subset'},
+            )
+
+            external_out = root / 'external-evidence'
+            evidence_external = self._run_cleanup_live(
+                root,
+                catalog_path,
+                external_out,
+                suite='standard',
+                cases=None,
+            )
+            self.assertTrue((runs_dir / '2026-11-20-old/standard/report.json').is_file())
+            self.assertEqual(
+                json.loads((evidence_external / 'inputs.json').read_text())['historyCleanup'],
+                {'cleaned': False, 'reason': 'output-outside-runs-root'},
+            )
+
+            config = root / 'config.json'
+            config.write_text(json.dumps({'output': str(subset_out)}))
+            with mock.patch.object(sys, 'argv', ['run_standard.py', '--config', str(config), '--dry-run']), \
+                    mock.patch.object(run_standard.subprocess, 'run', return_value=mock.Mock(returncode=0)):
+                self.assertEqual(run_standard.main(), 0)
+            self.assertTrue((runs_dir / '2026-11-20-old/standard/report.json').is_file())
+
+    def test_cleanup_historical_runs_blocks_symlinked_roots_and_unlinks_child_symlink_safely(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            external = root / 'outside'
+            external.mkdir()
+            (external / 'keep.txt').write_text('keep')
+
+            acceptance = root / 'acc1'
+            acceptance.mkdir()
+            catalog = acceptance / 'platform-catalog.json'
+            catalog.write_text('{}')
+            (acceptance / 'runs').symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'unsafe acceptance runs root'):
+                cleanup_historical_runs(catalog, acceptance / 'runs/std', suite='standard', cases=None)
+            self.assertTrue((external / 'keep.txt').is_file())
+
+            acceptance2 = root / 'acc2'
+            (acceptance2 / 'runs').mkdir(parents=True)
+            catalog2 = acceptance2 / 'platform-catalog.json'
+            catalog2.write_text('{}')
+            (acceptance2 / 'runs/linked-round').symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'unsafe symlinked regression output path'):
+                cleanup_historical_runs(catalog2, acceptance2 / 'runs/linked-round/standard', suite='standard', cases=None)
+            self.assertTrue((external / 'keep.txt').is_file())
+
+            result = cleanup_historical_runs(catalog2, acceptance2 / 'runs/clean-round/standard', suite='standard', cases=None)
+            self.assertTrue(result['cleaned'])
+            self.assertFalse((acceptance2 / 'runs/linked-round').is_symlink())
+            self.assertTrue((external / 'keep.txt').is_file())
 
 
 if __name__ == '__main__':

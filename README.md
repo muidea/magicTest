@@ -47,7 +47,7 @@ MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json pyth
 
 配置可选`catalog`（唯一用例目录）、`cases`（所选分组的用例ID数组，省略即全量）、`chrome`（已安装浏览器）和`fileUploadMaxBytes`（实际部署的文件上传上限字节，F049-003必填）。直接执行`python3 -B regression/run_standard.py --suite standard --config <private-config> --dry-run`或`--suite abnormal`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的分项，运行入口存在不代表完整套件交付。
 
-每次在已登记运行目录下生成唯一子目录，保留`inputs.json`、`health-before`、`browser`、`health-after`、`results.json`和`report.json`。报告校验逐例证据摘要；只有所选分组全部分项通过、部署身份不变、前后健康、本次资源已独立确认清理且执行器成功，才返回成功。定向执行也报告所选分组完整覆盖率，其余项显示未执行；非零退出需根据逐例状态区分受阻、工具错误和产品失败。私密恢复状态自动留在仓库外，位置打印到终端，不归档其内容。当前浏览器夹具清理不代表历史基础设施登记器已全局核销。
+每次在已登记运行目录下生成唯一子目录，保留`inputs.json`、`health-before`、`browser`、`health-after`、`results.json`和`report.json`。`docs/acceptance/runs/` 下所有验证过程产生的文件仅留在本地，统一不提交 Git；每次执行全量回归（省略 `cases` 且非 `--dry-run`）时，编排工具会在写新目录前自动清理 `acceptance/runs/` 下之前的历史数据（同轮全量 `abnormal` 保留同轮 `standard/`；定向子集复验 `--cases` 与 `--dry-run` 不触发清理）。报告校验逐例证据摘要；只有所选分组全部分项通过、部署身份不变、前后健康、本次资源已独立确认清理且执行器成功，才返回成功。定向执行也报告所选分组完整覆盖率，其余项显示未执行；非零退出需根据逐例状态区分受阻、工具错误和产品失败。私密恢复状态自动留在仓库外，位置打印到终端，不归档其内容。当前浏览器夹具清理不代表历史基础设施登记器已全局核销。
 
 同一HTTPS origin的常规执行串行进行。编排工具从预检到清理／报告持有本机排他锁，重复启动在业务操作前明确拒绝；不同用例的独立租户仍可能共享平台OAuth客户端，不能据此并发启动整组夹具。直接调用子执行器须由调用方保障同环境互斥；锁不协调其他机器或平台管理操作。
 
