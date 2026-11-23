@@ -1,0 +1,27 @@
+{
+  "uuid": "a2710271027102710271027102710001",
+  "name": "platform-regression-2710",
+  "showName": "平台回归2710",
+  "pkgPrefix": "regression2710",
+  "catalog": "平台功能回归",
+  "icon": "",
+  "version": "v1.0.0",
+  "email": "reg2710@example.invalid",
+  "author": "Platform regression",
+  "description": "Isolated temporary platform regression fixture",
+  "runtimeType": "model-driven",
+  "storage": {
+    "required": true,
+    "engine": "postgresql",
+    "versionConstraint": "",
+    "slots": [
+      {
+        "name": "primary",
+        "required": true,
+        "isolation": "schema",
+        "extensions": [],
+        "estimatedConnections": 5
+      }
+    ]
+  }
+}

@@ -5,7 +5,7 @@ const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const handlers = {};
 const base = '/panel/application/definitions/';
 const clone = value => structuredClone(value);
-const fixture = (h, name) => JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression/' + name)));
+const fixture = (h, name) => JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, 'regression/fixtures/platform-regression/' + name)));
 async function definition(h, suffix) {
   const body = fixture(h, 'fixture-definition-create-request.json');
   Object.assign(body, { uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-' + suffix, pkgPrefix: h.state.prefix + suffix.replaceAll('-', '') });

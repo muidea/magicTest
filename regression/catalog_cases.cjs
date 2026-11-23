@@ -18,7 +18,7 @@ async function categoryNames(h) {
     const directory = await h.directory(actor, collection);
     h.check('Category selection only includes current tenant owner records', expected.every(id => directory.some(r => r.id === id)) && excluded.every(id => !directory.some(r => r.id === id)), { identity: actor.identity, expected, excluded, ids: directory.map(r => r.id) });
   }
-  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression/fixture-definition-create-request.json')));
+  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, 'regression/fixtures/platform-regression/fixture-definition-create-request.json')));
   Object.assign(body, { uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-catalog-app', pkgPrefix: h.state.prefix + 'catalog', catalog: label });
   const application = await h.createAs('tenantAdmin', '/panel/application/definitions/', body, 'definition');
   const address = 'https://regression.invalid/catalog';
@@ -54,7 +54,7 @@ async function categoryAndTags(h) {
   const current = (await h.ok(actor, 'GET', collection + category.id)).value;
   h.check('Independent category owner preserves ID and complete edited name/description', current.id === category.id && current.name === renamed && current.description === tracked.categoryEdit.payload.description && current.parent == null, current);
   tracked.categoryEdit.outcome = 'confirmed'; h.persist();
-  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression/fixture-definition-create-request.json')));
+  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, 'regression/fixtures/platform-regression/fixture-definition-create-request.json')));
   Object.assign(body, { uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-category-display', showName: h.state.prefix + '分类展示应用', pkgPrefix: h.state.prefix + 'categorydisplay', catalog: renamed });
   const app = await h.createAs('tenantAdmin', '/panel/application/definitions/', body, 'definition');
   const address = 'https://regression.invalid/category-display';

@@ -1,0 +1,1214 @@
+{
+  "schemaVersion": "chess-room-booking.synthetic-fixture/v1",
+  "anchorUtc": "2026-11-01T00:00:00.000Z",
+  "purpose": "offline-and-isolated-display-planning-only",
+  "runtimeIdentity": null,
+  "scenarioAssumptions": {
+    "approvedBusinessDefaults": false,
+    "confirmation": "mixed-automatic-and-manual",
+    "reserveWhilePending": true,
+    "holdSeconds": 900,
+    "timeZone": "UTC",
+    "crossDay": false,
+    "note": "这些数值仅为固定回放样例，不改变 Q01—Q13 的待决状态；样例含终态及未到期阶段，非实时占用快照。"
+  },
+  "records": {
+    "merchant": [
+      {
+        "key": "merchant:A",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "code": "FIXTURE-A",
+          "name": "模拟商户A",
+          "availability": "active"
+        }
+      },
+      {
+        "key": "merchant:B",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "code": "FIXTURE-B",
+          "name": "模拟商户B",
+          "availability": "active"
+        }
+      }
+    ],
+    "store": [
+      {
+        "key": "store:A1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "code": "FIXTURE-A1",
+          "name": "模拟门店A1",
+          "address": "仅用于验证的虚构地址 A1",
+          "timeZone": "UTC",
+          "availability": "active",
+          "published": true
+        }
+      },
+      {
+        "key": "store:A2",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "code": "FIXTURE-A2",
+          "name": "模拟门店A2",
+          "address": "仅用于验证的虚构地址 A2",
+          "timeZone": "UTC",
+          "availability": "active",
+          "published": true
+        }
+      },
+      {
+        "key": "store:B1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "code": "FIXTURE-B1",
+          "name": "模拟门店B1",
+          "address": "仅用于验证的虚构地址 B1",
+          "timeZone": "UTC",
+          "availability": "active",
+          "published": true
+        }
+      }
+    ],
+    "room": [
+      {
+        "key": "room:A1-R1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "code": "A1-R1",
+          "name": "模拟房间A1-R1",
+          "capacity": 4,
+          "features": "空调、棋牌桌（模拟）",
+          "availability": "active",
+          "referencePriceDescription": "到店咨询；仅展示，不产生支付状态"
+        }
+      },
+      {
+        "key": "room:A1-R2",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "code": "A1-R2",
+          "name": "模拟房间A1-R2",
+          "capacity": 4,
+          "features": "空调、棋牌桌（模拟）",
+          "availability": "active",
+          "referencePriceDescription": "到店咨询；仅展示，不产生支付状态"
+        }
+      },
+      {
+        "key": "room:A2-R1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A2"
+          },
+          "code": "A2-R1",
+          "name": "模拟房间A2-R1",
+          "capacity": 4,
+          "features": "空调、棋牌桌（模拟）",
+          "availability": "active",
+          "referencePriceDescription": "到店咨询；仅展示，不产生支付状态"
+        }
+      },
+      {
+        "key": "room:B1-R1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "code": "B1-R1",
+          "name": "模拟房间B1-R1",
+          "capacity": 4,
+          "features": "空调、棋牌桌（模拟）",
+          "availability": "active",
+          "referencePriceDescription": "到店咨询；仅展示，不产生支付状态"
+        }
+      },
+      {
+        "key": "room:B1-R2",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "code": "B1-R2",
+          "name": "模拟房间B1-R2",
+          "capacity": 4,
+          "features": "空调、棋牌桌（模拟）",
+          "availability": "maintenance",
+          "referencePriceDescription": "到店咨询；仅展示，不产生支付状态"
+        }
+      },
+      {
+        "key": "room:B1-R3",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "code": "B1-R3",
+          "name": "模拟房间B1-R3",
+          "capacity": 4,
+          "features": "空调、棋牌桌（模拟）",
+          "availability": "suspended",
+          "referencePriceDescription": "到店咨询；仅展示，不产生支付状态"
+        }
+      }
+    ],
+    "bookingRule": [
+      {
+        "key": "bookingRule:A1-R1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "scopeKey": "fixture:room:A1-R1",
+          "ruleVersion": 1,
+          "effectiveFrom": "2026-10-25T00:00:00.000Z",
+          "weeklyWindows": "{\"windows\": [{\"weekdays\": [1, 2, 3, 4, 5, 6, 7], \"startLocal\": \"00:00\", \"endLocal\": \"23:59\", \"endDayOffset\": 0}]}",
+          "confirmationMode": "automatic",
+          "pendingPolicy": "{\"reserveWhilePending\": true, \"holdSeconds\": 900}",
+          "timePolicy": "{\"mode\": \"interval\", \"granularityMinutes\": null, \"allowCrossDay\": false, \"minDurationMinutes\": 30, \"maxDurationMinutes\": 120, \"dstAmbiguity\": \"reject\"}",
+          "cancelPolicy": "{\"customerBeforeStartMinutes\": 0, \"merchantReasonRequired\": true}",
+          "reschedulePolicy": "{\"maxTimes\": 1, \"allowRoomChange\": true, \"allowStoreChange\": false, \"reconfirmationRequired\": true}",
+          "arrivalPolicy": "{\"checkInBeforeMinutes\": 15, \"noShowAfterMinutes\": 30, \"allowEarlyCompletion\": true, \"overrunPolicy\": \"manual-no-automatic-extension\"}"
+        }
+      },
+      {
+        "key": "bookingRule:A1-R2",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R2"
+          },
+          "scopeKey": "fixture:room:A1-R2",
+          "ruleVersion": 1,
+          "effectiveFrom": "2026-10-25T00:00:00.000Z",
+          "weeklyWindows": "{\"windows\": [{\"weekdays\": [1, 2, 3, 4, 5, 6, 7], \"startLocal\": \"00:00\", \"endLocal\": \"23:59\", \"endDayOffset\": 0}]}",
+          "confirmationMode": "automatic",
+          "pendingPolicy": "{\"reserveWhilePending\": true, \"holdSeconds\": 900}",
+          "timePolicy": "{\"mode\": \"interval\", \"granularityMinutes\": null, \"allowCrossDay\": false, \"minDurationMinutes\": 30, \"maxDurationMinutes\": 120, \"dstAmbiguity\": \"reject\"}",
+          "cancelPolicy": "{\"customerBeforeStartMinutes\": 0, \"merchantReasonRequired\": true}",
+          "reschedulePolicy": "{\"maxTimes\": 1, \"allowRoomChange\": true, \"allowStoreChange\": false, \"reconfirmationRequired\": true}",
+          "arrivalPolicy": "{\"checkInBeforeMinutes\": 15, \"noShowAfterMinutes\": 30, \"allowEarlyCompletion\": true, \"overrunPolicy\": \"manual-no-automatic-extension\"}"
+        }
+      },
+      {
+        "key": "bookingRule:A2-R1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A2"
+          },
+          "roomId": {
+            "$ref": "room:A2-R1"
+          },
+          "scopeKey": "fixture:room:A2-R1",
+          "ruleVersion": 1,
+          "effectiveFrom": "2026-10-25T00:00:00.000Z",
+          "weeklyWindows": "{\"windows\": [{\"weekdays\": [1, 2, 3, 4, 5, 6, 7], \"startLocal\": \"00:00\", \"endLocal\": \"23:59\", \"endDayOffset\": 0}]}",
+          "confirmationMode": "manual",
+          "pendingPolicy": "{\"reserveWhilePending\": true, \"holdSeconds\": 900}",
+          "timePolicy": "{\"mode\": \"interval\", \"granularityMinutes\": null, \"allowCrossDay\": false, \"minDurationMinutes\": 30, \"maxDurationMinutes\": 120, \"dstAmbiguity\": \"reject\"}",
+          "cancelPolicy": "{\"customerBeforeStartMinutes\": 0, \"merchantReasonRequired\": true}",
+          "reschedulePolicy": "{\"maxTimes\": 1, \"allowRoomChange\": true, \"allowStoreChange\": false, \"reconfirmationRequired\": true}",
+          "arrivalPolicy": "{\"checkInBeforeMinutes\": 15, \"noShowAfterMinutes\": 30, \"allowEarlyCompletion\": true, \"overrunPolicy\": \"manual-no-automatic-extension\"}"
+        }
+      },
+      {
+        "key": "bookingRule:B1-R1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "roomId": {
+            "$ref": "room:B1-R1"
+          },
+          "scopeKey": "fixture:room:B1-R1",
+          "ruleVersion": 1,
+          "effectiveFrom": "2026-10-25T00:00:00.000Z",
+          "weeklyWindows": "{\"windows\": [{\"weekdays\": [1, 2, 3, 4, 5, 6, 7], \"startLocal\": \"00:00\", \"endLocal\": \"23:59\", \"endDayOffset\": 0}]}",
+          "confirmationMode": "automatic",
+          "pendingPolicy": "{\"reserveWhilePending\": true, \"holdSeconds\": 900}",
+          "timePolicy": "{\"mode\": \"interval\", \"granularityMinutes\": null, \"allowCrossDay\": false, \"minDurationMinutes\": 30, \"maxDurationMinutes\": 120, \"dstAmbiguity\": \"reject\"}",
+          "cancelPolicy": "{\"customerBeforeStartMinutes\": 0, \"merchantReasonRequired\": true}",
+          "reschedulePolicy": "{\"maxTimes\": 1, \"allowRoomChange\": true, \"allowStoreChange\": false, \"reconfirmationRequired\": true}",
+          "arrivalPolicy": "{\"checkInBeforeMinutes\": 15, \"noShowAfterMinutes\": 30, \"allowEarlyCompletion\": true, \"overrunPolicy\": \"manual-no-automatic-extension\"}"
+        }
+      }
+    ],
+    "openingException": [
+      {
+        "key": "openingException:maintenance",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "roomId": {
+            "$ref": "room:B1-R2"
+          },
+          "scopeKey": "fixture:room:B1-R2",
+          "localDate": "2026-11-01",
+          "effect": "close",
+          "reason": "模拟维护"
+        }
+      }
+    ],
+    "customerProfile": [
+      {
+        "key": "customerProfile:U1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "subject": "fixture:customer:U1",
+          "displayName": "模拟顾客U1",
+          "consentVersion": "fixture-v1",
+          "availability": "active"
+        }
+      },
+      {
+        "key": "customerProfile:U2",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "subject": "fixture:customer:U2",
+          "displayName": "模拟顾客U2",
+          "consentVersion": "fixture-v1",
+          "availability": "active"
+        }
+      }
+    ],
+    "staffAssignment": [
+      {
+        "key": "staffAssignment:EA1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "subject": "fixture:staff:EA1",
+          "storeIds": [
+            {
+              "$ref": "store:A1"
+            }
+          ],
+          "availability": "active",
+          "effectiveFrom": "2026-10-25T00:00:00.000Z"
+        }
+      },
+      {
+        "key": "staffAssignment:MB",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "subject": "fixture:staff:MB",
+          "storeIds": [
+            {
+              "$ref": "store:B1"
+            }
+          ],
+          "availability": "active",
+          "effectiveFrom": "2026-10-25T00:00:00.000Z"
+        }
+      }
+    ],
+    "bookingOrder": [
+      {
+        "key": "bookingOrder:O01",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O01",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A2"
+          },
+          "roomId": {
+            "$ref": "room:A2-R1"
+          },
+          "customerSubject": "fixture:customer:U1",
+          "startAt": "2026-11-01T08:00:00.000Z",
+          "endAt": "2026-11-01T08:45:00.000Z",
+          "status": "pending_confirmation",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A2\", \"roomCode\": \"A2-R1\", \"roomName\": \"模拟房间A2-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A2-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}"
+        }
+      },
+      {
+        "key": "bookingOrder:O02",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O02",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "customerSubject": "fixture:customer:U2",
+          "startAt": "2026-11-01T09:00:00.000Z",
+          "endAt": "2026-11-01T09:45:00.000Z",
+          "status": "confirmed",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A1\", \"roomCode\": \"A1-R1\", \"roomName\": \"模拟房间A1-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A1-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}",
+          "confirmedAt": "2026-11-01T08:00:00.000Z"
+        }
+      },
+      {
+        "key": "bookingOrder:O03",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O03",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "customerSubject": "fixture:customer:U1",
+          "startAt": "2026-11-01T10:00:00.000Z",
+          "endAt": "2026-11-01T10:45:00.000Z",
+          "status": "merchant_rejected",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A1\", \"roomCode\": \"A1-R1\", \"roomName\": \"模拟房间A1-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A1-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}"
+        }
+      },
+      {
+        "key": "bookingOrder:O04",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O04",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "customerSubject": "fixture:customer:U2",
+          "startAt": "2026-11-01T11:00:00.000Z",
+          "endAt": "2026-11-01T11:45:00.000Z",
+          "status": "customer_canceled",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A1\", \"roomCode\": \"A1-R1\", \"roomName\": \"模拟房间A1-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A1-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}"
+        }
+      },
+      {
+        "key": "bookingOrder:O05",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O05",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "customerSubject": "fixture:customer:U1",
+          "startAt": "2026-11-01T12:00:00.000Z",
+          "endAt": "2026-11-01T12:45:00.000Z",
+          "status": "merchant_canceled",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A1\", \"roomCode\": \"A1-R1\", \"roomName\": \"模拟房间A1-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A1-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}"
+        }
+      },
+      {
+        "key": "bookingOrder:O06",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O06",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A2"
+          },
+          "roomId": {
+            "$ref": "room:A2-R1"
+          },
+          "customerSubject": "fixture:customer:U2",
+          "startAt": "2026-11-01T13:00:00.000Z",
+          "endAt": "2026-11-01T13:45:00.000Z",
+          "status": "pending_expired",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A2\", \"roomCode\": \"A2-R1\", \"roomName\": \"模拟房间A2-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A2-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}"
+        }
+      },
+      {
+        "key": "bookingOrder:O07",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O07",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "customerSubject": "fixture:customer:U1",
+          "startAt": "2026-11-01T14:00:00.000Z",
+          "endAt": "2026-11-01T14:45:00.000Z",
+          "status": "in_use",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A1\", \"roomCode\": \"A1-R1\", \"roomName\": \"模拟房间A1-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A1-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}",
+          "confirmedAt": "2026-11-01T13:00:00.000Z",
+          "checkInAt": "2026-11-01T14:00:00.000Z"
+        }
+      },
+      {
+        "key": "bookingOrder:O08",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O08",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "customerSubject": "fixture:customer:U2",
+          "startAt": "2026-11-01T15:00:00.000Z",
+          "endAt": "2026-11-01T15:45:00.000Z",
+          "status": "completed",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户A\", \"storeName\": \"模拟门店A1\", \"roomCode\": \"A1-R1\", \"roomName\": \"模拟房间A1-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:A1-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}",
+          "confirmedAt": "2026-11-01T14:00:00.000Z",
+          "checkInAt": "2026-11-01T15:00:00.000Z",
+          "completedAt": "2026-11-01T15:45:00.000Z"
+        }
+      },
+      {
+        "key": "bookingOrder:O09",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderNo": "FIXTURE-O09",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "roomId": {
+            "$ref": "room:B1-R1"
+          },
+          "customerSubject": "fixture:customer:U1",
+          "startAt": "2026-11-01T16:00:00.000Z",
+          "endAt": "2026-11-01T16:45:00.000Z",
+          "status": "no_show",
+          "resourceSnapshot": "{\"merchantName\": \"模拟商户B\", \"storeName\": \"模拟门店B1\", \"roomCode\": \"B1-R1\", \"roomName\": \"模拟房间B1-R1\", \"storeTimeZone\": \"UTC\"}",
+          "ruleSnapshot": "{\"scopeKey\": \"fixture:room:B1-R1\", \"ruleVersion\": 1, \"fixtureOnly\": true}",
+          "referencePriceSnapshot": "{\"description\": \"仅展示\", \"notPaymentEvidence\": true}",
+          "confirmedAt": "2026-11-01T15:00:00.000Z"
+        }
+      }
+    ],
+    "roomOccupancy": [
+      {
+        "key": "roomOccupancy:O01",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A2"
+          },
+          "roomId": {
+            "$ref": "room:A2-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O01"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O01",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T08:00:00.000Z",
+          "endAt": "2026-11-01T08:45:00.000Z",
+          "state": "active",
+          "holdUntil": "2026-11-01T07:45:00.000Z"
+        }
+      },
+      {
+        "key": "roomOccupancy:O02",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O02"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O02",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T09:00:00.000Z",
+          "endAt": "2026-11-01T09:45:00.000Z",
+          "state": "active"
+        }
+      },
+      {
+        "key": "roomOccupancy:O03",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O03"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O03",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T10:00:00.000Z",
+          "endAt": "2026-11-01T10:45:00.000Z",
+          "state": "released",
+          "releasedAt": "2026-11-01T10:45:00.000Z",
+          "releaseReason": "fixture:merchant_rejected"
+        }
+      },
+      {
+        "key": "roomOccupancy:O04",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O04"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O04",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T11:00:00.000Z",
+          "endAt": "2026-11-01T11:45:00.000Z",
+          "state": "released",
+          "releasedAt": "2026-11-01T11:45:00.000Z",
+          "releaseReason": "fixture:customer_canceled"
+        }
+      },
+      {
+        "key": "roomOccupancy:O05",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O05"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O05",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T12:00:00.000Z",
+          "endAt": "2026-11-01T12:45:00.000Z",
+          "state": "released",
+          "releasedAt": "2026-11-01T12:45:00.000Z",
+          "releaseReason": "fixture:merchant_canceled"
+        }
+      },
+      {
+        "key": "roomOccupancy:O06",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A2"
+          },
+          "roomId": {
+            "$ref": "room:A2-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O06"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O06",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T13:00:00.000Z",
+          "endAt": "2026-11-01T13:45:00.000Z",
+          "state": "released",
+          "holdUntil": "2026-11-01T12:45:00.000Z",
+          "releasedAt": "2026-11-01T13:45:00.000Z",
+          "releaseReason": "fixture:pending_expired"
+        }
+      },
+      {
+        "key": "roomOccupancy:O07",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O07"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O07",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T14:00:00.000Z",
+          "endAt": "2026-11-01T14:45:00.000Z",
+          "state": "active"
+        }
+      },
+      {
+        "key": "roomOccupancy:O08",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "roomId": {
+            "$ref": "room:A1-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O08"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O08",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T15:00:00.000Z",
+          "endAt": "2026-11-01T15:45:00.000Z",
+          "state": "released",
+          "releasedAt": "2026-11-01T15:45:00.000Z",
+          "releaseReason": "fixture:completed"
+        }
+      },
+      {
+        "key": "roomOccupancy:O09",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "roomId": {
+            "$ref": "room:B1-R1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O09"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O09",
+          "allocationRevision": 1,
+          "startAt": "2026-11-01T16:00:00.000Z",
+          "endAt": "2026-11-01T16:45:00.000Z",
+          "state": "released",
+          "releasedAt": "2026-11-01T16:45:00.000Z",
+          "releaseReason": "fixture:no_show"
+        }
+      }
+    ],
+    "orderEvent": [
+      {
+        "key": "orderEvent:O01",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O01"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O01",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "pending_confirmation",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T08:00:00.000Z",
+          "operationId": "fixture:operation:O01",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O02",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O02"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O02",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "confirmed",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T09:00:00.000Z",
+          "operationId": "fixture:operation:O02",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O03",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O03"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O03",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "merchant_rejected",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T10:00:00.000Z",
+          "operationId": "fixture:operation:O03",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O04",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O04"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O04",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "customer_canceled",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T11:00:00.000Z",
+          "operationId": "fixture:operation:O04",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O05",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O05"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O05",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "merchant_canceled",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T12:00:00.000Z",
+          "operationId": "fixture:operation:O05",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O06",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O06"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O06",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "pending_expired",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T13:00:00.000Z",
+          "operationId": "fixture:operation:O06",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O07",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O07"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O07",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "in_use",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T14:00:00.000Z",
+          "operationId": "fixture:operation:O07",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O08",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O08"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O08",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "completed",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T15:00:00.000Z",
+          "operationId": "fixture:operation:O08",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      },
+      {
+        "key": "orderEvent:O09",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "orderId": {
+            "$ref": "bookingOrder:O09"
+          },
+          "sampleKey": "FIXTURE-SAMPLE-O09",
+          "eventSequence": 1,
+          "eventType": "fixture_snapshot",
+          "toStatus": "no_show",
+          "actorSubject": "fixture:operator",
+          "occurredAt": "2026-11-01T16:00:00.000Z",
+          "operationId": "fixture:operation:O09",
+          "reason": "合成状态展示样例，不是业务命令执行证明"
+        }
+      }
+    ],
+    "complaint": [
+      {
+        "key": "complaint:C01",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "caseNo": "FIXTURE-C01",
+          "merchantId": {
+            "$ref": "merchant:A"
+          },
+          "storeId": {
+            "$ref": "store:A1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O08"
+          },
+          "complainantSubject": "fixture:customer:U2",
+          "category": "service",
+          "summary": "模拟服务说明问题",
+          "status": "open"
+        }
+      },
+      {
+        "key": "complaint:C02",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "caseNo": "FIXTURE-C02",
+          "merchantId": {
+            "$ref": "merchant:B"
+          },
+          "storeId": {
+            "$ref": "store:B1"
+          },
+          "orderId": {
+            "$ref": "bookingOrder:O09"
+          },
+          "complainantSubject": "fixture:customer:U1",
+          "category": "service",
+          "summary": "模拟服务说明问题",
+          "status": "resolved"
+        }
+      }
+    ],
+    "complaintEntry": [
+      {
+        "key": "complaintEntry:C01-1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "complaintId": {
+            "$ref": "complaint:C01"
+          },
+          "entrySequence": 1,
+          "kind": "message",
+          "authorSubject": "fixture:customer:U2",
+          "content": "模拟顾客留言",
+          "visibility": "customer",
+          "occurredAt": "2026-11-01T20:00:00.000Z"
+        }
+      },
+      {
+        "key": "complaintEntry:C02-1",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "complaintId": {
+            "$ref": "complaint:C02"
+          },
+          "entrySequence": 1,
+          "kind": "message",
+          "authorSubject": "fixture:customer:U1",
+          "content": "模拟顾客留言",
+          "visibility": "customer",
+          "occurredAt": "2026-11-01T20:00:00.000Z"
+        }
+      },
+      {
+        "key": "complaintEntry:C02-2",
+        "values": {
+          "version": 1,
+          "createdAt": "2026-10-31T00:00:00.000Z",
+          "updatedAt": "2026-10-31T00:00:00.000Z",
+          "updatedBy": "fixture:operator",
+          "complaintId": {
+            "$ref": "complaint:C02"
+          },
+          "entrySequence": 2,
+          "kind": "note",
+          "authorSubject": "fixture:operator",
+          "content": "模拟内部处理备注；后续须验证不会对顾客显示",
+          "visibility": "internal",
+          "occurredAt": "2026-11-01T21:00:00.000Z"
+        }
+      }
+    ]
+  }
+}

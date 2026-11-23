@@ -1,0 +1,33 @@
+{
+  "program": {
+    "files": [
+      {
+        "name": "main.go",
+        "content": "package block\nimport \"context\"\nfunc Handle(ctx context.Context,input map[string]any,output map[string]any) error {output[\"echo\"] = input[\"text\"]; return nil}\n"
+      }
+    ],
+    "entryFile": "main.go",
+    "entrypoint": "block.Handle"
+  },
+  "inputs": [
+    {
+      "name": "text",
+      "type": "string",
+      "required": true,
+      "example": "平台回归"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "echo",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "input": {
+    "text": "平台回归"
+  },
+  "timeout": 3000,
+  "mode": "example",
+  "applicationDefinitionId": 1037148707670272
+}

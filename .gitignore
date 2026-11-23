@@ -161,3 +161,7 @@ cython_debug/
 
 # Installed Node.js browser dependencies
 node_modules/
+
+# Local acceptance execution outputs (never commit; auto-cleaned before full runs)
+reports/*
+!reports/README.md

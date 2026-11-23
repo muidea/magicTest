@@ -102,6 +102,11 @@ GOALS: Dict[str, TestGoal] = {
         title="并发、热点与老化压测",
         description="VMI 现有并发、热点、老化、长稳态压测入口。",
     ),
+    "applications": TestGoal(
+        key="applications",
+        title="模拟应用与验收工具",
+        description="设备管理与棋牌室预订模拟应用的离线定义/夹具/模拟器回归、双应用 E2E 编排及测试基础设施单测。",
+    ),
 }
 
 
@@ -335,6 +340,70 @@ TARGETS: Tuple[TestTarget, ...] = (
         workdir=ROOT_DIR / "vmi",
         command=(sys.executable, "run_tests.py", "--aging", "30"),
         default_env_profile="autotest-local",
+    ),
+    TestTarget(
+        key="app-device-management-unit",
+        goal="applications",
+        title="设备管理离线校验与模拟器单测",
+        description="验证设备管理模型定义声明、固定样例 oracle、阈值候选边界及 HTTPS/日志恢复回归。",
+        workdir=ROOT_DIR,
+        command=(
+            sys.executable,
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "applications/device-management/tooling",
+            "-p",
+            "test_*.py",
+            "-v",
+        ),
+    ),
+    TestTarget(
+        key="app-chess-room-booking-unit",
+        goal="applications",
+        title="棋牌室预订离线校验与模拟器单测",
+        description="验证棋牌室预订闭环定义/页面/授权声明、三阶段准入计划与仿真客户端回归。",
+        workdir=ROOT_DIR,
+        command=(
+            sys.executable,
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "applications/chess-room-booking/tooling",
+            "-p",
+            "test_*.py",
+            "-v",
+        ),
+    ),
+    TestTarget(
+        key="app-tools-unit",
+        goal="applications",
+        title="验收工具与回归编排器单测",
+        description="运行 tools/ 验收基础设施单测以及 regression_inventory 与 run_standard 回归测试。",
+        workdir=ROOT_DIR,
+        command=(
+            sys.executable,
+            "-B",
+            "-c",
+            "import subprocess, sys; cmds = [[sys.executable, '-B', '-m', 'unittest', 'discover', '-s', 'tools', '-p', 'test_*.py', '-v'], [sys.executable, '-B', '-m', 'unittest', 'test_regression_inventory', 'regression.test_run_standard', '-v']]; sys.exit(next((c for c in (subprocess.call(cmd) for cmd in cmds) if c != 0), 0))",
+        ),
+    ),
+    TestTarget(
+        key="app-dual-live-e2e",
+        goal="applications",
+        title="双模拟应用联合 E2E 编排",
+        description="默认以 --dry-run 运行双应用包校验与计划预检；传入 --dm-config 与 --crb-* 参数可执行真实 Live E2E。",
+        workdir=ROOT_DIR,
+        command=(
+            sys.executable,
+            "-B",
+            "applications/live_e2e/run_dual_apps_e2e.py",
+            "--dry-run",
+        ),
     ),
 )
 

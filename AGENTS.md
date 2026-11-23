@@ -22,7 +22,7 @@
 ## 功能定位与边界
 
 - 提供公开 API、浏览器、业务场景和压力验证工具，以及测试目标目录、会话管理和报告；不成为产品业务事实、发行版本、权限策略或恢复流程的 owner。
-- 根入口按 platform-regression、foundation、auth、ui、file、platform-core、panel-api、business-scenario、load 组织测试；平台常规统一target为platform-standard，子目录 runner 保留给专项调试。历史 VMI 测试不能代替最新设备管理／棋牌应用验收。
+- 根入口按 platform-regression、foundation、auth、ui、file、platform-core、panel-api、business-scenario、load、applications 组织测试；平台常规统一target为platform-standard，双模拟应用联合编排入口为 `app-dual-live-e2e`，子目录 runner 保留给专项调试。历史 VMI 测试不能代替最新设备管理／棋牌应用验收。
 - 按原普通账号和 ApiKey Endpoint 的真实角色验证正反例，不使用管理员身份替代普通角色成功证明。撤权、租户／实例隔离、版本及原请求身份分别核对。
 - 测试只通过 owner 公开接口／页面操作，不直接 SQL 改库、改回执、清运行目录或伪造成功。超时和取消不等于未提交，先查原请求，再按 owner 合同恢复及清理。
 - 源码替身、离线包、隔离数据库、部署镜像和 Live 分别记录；保留候选身份、输入、执行日志、截图及独立 owner 回读，失败、跳过和未执行不能算通过。
@@ -33,7 +33,7 @@
 - magicRunner — https://github.com/muidea/magicRunner.git：应用定义、部署、Apps／Gateway／BFF 接口。
 - magicCas — https://github.com/muidea/magicCas.git、magicBase — https://github.com/muidea/magicBase.git、magicFile — https://github.com/muidea/magicFile.git：各自事实的正式核验入口。
 - magicWebPortal — https://github.com/muidea/magicWebPortal.git：真实交互与响应式页面。
-- magicPlatform — https://github.com/muidea/magicPlatform.git：候选制品、部署入口及平台材料；应用资料仓库 docs 当前未配置 Git 远端，不推测地址。
+- magicPlatform — https://github.com/muidea/magicPlatform.git：权威应用模型资产（`apps/models/`）、候选制品、部署入口、平台文档与仓库治理检查；本仓独立承载 `acceptance/`、`applications/`、`tools/`、`regression/` 与本地 `reports/`，跨环境仅需 `magicPlatform` 与 `magicTest` 即可完成部署后验证。
 
 ## 结构、编码与验证
 
@@ -46,8 +46,8 @@
 ## 交付
 
 - 工具、SDK 和断言随公开合同同步；Go owner 变化由工作区同步并验证 vendor，不在测试仓修改其他项目依赖或产品状态。
-- 新证据仅保存在本地 `docs/acceptance/runs/`（该目录下所有过程产生文件统一不提交 Git，每次全量回归前自动清理之前全部历史数据；同轮 `abnormal` 保留同轮 `standard/`）。设计、实现、源码通过和 Live 通过分开；长期规则直接更新本文件，不依赖外部 AGENTS 或本机路径。
-- 按仓库分别提交，不提交 `docs/acceptance/runs/` 过程文件、凭据、运行数据、浏览器会话或生成秘密；跨项目配合注明项目名及已核验 Git 地址。
+- 新证据默认保存在本地 `reports/`（见 `reports/README.md`，该目录下所有过程产生文件统一不提交 Git，每次全量回归前自动清理之前全部历史数据；同轮 `abnormal` 保留同轮 `standard/`）。设计、实现、源码通过和 Live 通过分开；长期规则直接更新本文件，不依赖外部 AGENTS 或本机路径。
+- 按仓库分别提交，不提交 `reports/` 过程文件、凭据、运行数据、浏览器会话或生成秘密；跨项目配合注明项目名及已核验 Git 地址。
 
 ## 应用与业务动作权限粒度
 

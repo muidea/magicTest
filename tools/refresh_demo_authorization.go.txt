@@ -1,0 +1,66 @@
+package common_test
+
+import (
+ "encoding/json"
+ "os"
+ "path/filepath"
+ "reflect"
+ "testing"
+
+ cas "github.com/muidea/magicCas/pkg/common"
+ common "github.com/muidea/magicRunner/internal/modules/kernel/panel/pkg/common"
+ installer "github.com/muidea/magicRunner/internal/modules/kernel/installer/pkg/common"
+ bc "github.com/muidea/magicBase/pkg/common"
+ "github.com/muidea/magicRunner/internal/pkg/casaccess"
+)
+
+func TestRefreshDemoAuthorization(t *testing.T) {
+ root:=os.Getenv("DEMO_AUTH_ROOT")
+ app:=os.Getenv("DEMO_AUTH_APPLICATION")
+ var metadata *common.ApplicationDefinitionView
+ var artifact common.ApplicationModelArtifact
+ var entities []*common.EntityDefinitionView
+ var path string
+ var document map[string]json.RawMessage
+ read:=func(name string, value any) { t.Helper(); data,err:=os.ReadFile(name);if err!=nil{t.Fatal(err)};if err=json.Unmarshal(data,value);err!=nil{t.Fatal(err)} }
+ if app=="device-management" {
+  path=filepath.Join(root,app,"definition/candidate.artifact.json");read(path,&artifact);metadata=artifact.Application;entities=artifact.Entities
+  read(path,&document)
+ } else {
+  path=filepath.Join(root,app,"definition/application/metadata.json");read(path,&metadata)
+  files,err:=filepath.Glob(filepath.Join(root,app,"definition/application/entities/*.json"));if err!=nil{t.Fatal(err)}
+  for _,file:=range files {var entity common.EntityDefinitionView;read(file,&entity);entities=append(entities,&entity)}
+ }
+ definition,err:=common.StandardApplicationAuthorization(entities);if err!=nil{t.Fatal(err)}
+ // Portal user profiles include unrelated self-service and broad application grants;
+ // the demo uses only the minimal built-in invocation role.
+ invoker:=&cas.RoleRef{Module:"/modules/kernel/runner",Key:"portal-service-invoker"}
+ definition.BuiltinRoles=[]*cas.RoleRef{invoker}
+ collector:=&cas.ApplicationTemplateDefinition{Key:"collector",Name:"模拟数据采集",Scene:cas.RoleSceneUsage,SubjectType:cas.EndpointType,BuiltinRoles:[]*cas.RoleRef{invoker},RoleKeys:[]string{}}
+ for _,ref:=range definition.DataAccess {if ref.Operation=="read" || ref.Operation=="write" {collector.RoleKeys=append(collector.RoleKeys,ref.RoleKey())}}
+ definition.Templates=[]*cas.ApplicationTemplateDefinition{collector}
+ if app=="device-management" {
+  operator:=&cas.ApplicationTemplateDefinition{Key:"operator",Name:"设备运维",Scene:cas.RoleSceneUsage,SubjectType:cas.AccountType,RoleKeys:[]string{cas.ApplicationAccessViewerRoleKey}}
+  master:=&cas.ApplicationTemplateDefinition{Key:"master-data",Name:"设备基础资料维护",Scene:cas.RoleSceneUsage,SubjectType:cas.AccountType,RoleKeys:[]string{cas.ApplicationAccessViewerRoleKey}}
+  operator.RoleKeys=append(operator.RoleKeys,"application-data-write")
+  master.RoleKeys=append(master.RoleKeys,"application-data-write","application-data-delete")
+  for _,ref:=range definition.EntityActions {operator.RoleKeys=append(operator.RoleKeys,ref.RoleKey())}
+  definition.Templates=append(definition.Templates,operator,master)
+ }
+ builtin:=[]*cas.RoleView{}
+ for _,role:=range installer.PlatformPortalRoles(){if role.Key==invoker.Key {
+  if len(role.PrivilegeSource.Refs)!=1 || role.PrivilegeSource.Refs[0]!=casaccess.ScopeUsageGatewayRead {t.Fatal("invocation contract changed; review minimum demo rights")}
+  builtin=append(builtin,&cas.RoleView{Module:invoker.Module,Key:role.Key,SystemManaged:true,Status:bc.EnableStatus,Scene:role.Scene,NamespaceMode:role.NamespaceMode,SubjectKinds:role.SubjectKinds,HumanAssignable:role.HumanAssignable,Privilege:[]*bc.Privilege{{Module:invoker.Module,UriPath:"/gateway/",Value:bc.ReadPermission}}})
+ }}
+ definition.BuiltinContractDigest,err=cas.ApplicationAuthorizationDependencyDigest(definition,builtin,nil);if err!=nil{t.Fatal(err)}
+ if err:=definition.ValidateFrozenDependencies();err!=nil{t.Fatal(err)}
+ if os.Getenv("DEMO_AUTH_WRITE")=="1" {
+  metadata.Authorization=definition
+  data,err:=json.Marshal(metadata);if err!=nil{t.Fatal(err)}
+  if app=="device-management" {document["application"]=data;data,err=json.Marshal(document);if err!=nil{t.Fatal(err)}}
+  // Let the wrapper preserve the authored file's existing field ordering.
+  authData,_:=json.MarshalIndent(definition,"","  ");if err:=os.WriteFile(os.Getenv("DEMO_AUTH_OUTPUT"),authData,0600);err!=nil{t.Fatal(err)}
+ } else if !reflect.DeepEqual(metadata.Authorization,definition) {t.Fatal("demo authorization differs from the platform model contract and reviewed builtin-role composition")}
+ counts:=map[string]int{};for _,ref:=range definition.DataAccess{counts[ref.Operation]++}
+ t.Logf("%s standard permissions=%v actions=%d extension roles=%d application templates=%d",app,counts,len(definition.EntityActions),len(definition.Roles),len(definition.Templates))
+}

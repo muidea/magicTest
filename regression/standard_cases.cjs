@@ -5,7 +5,7 @@ const { sameAuthority, sameAccounts } = require('./authority_snapshot.cjs');
 const { negativeBrandWrite, negativeCreate } = require('./negative_mutations.cjs');
 const { PORTAL_BASIC_KEYS } = require('./platform_profiles.cjs');
 const handlers = {};
-const fixturesDir = h => h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression');
+const fixturesDir = h => h.path.resolve(h.root, 'regression/fixtures/platform-regression');
 const accountBase = h => '/cas/namespaces/' + h.state.fixtures.tenantA.name + '/accounts/';
 const definitionBase = '/panel/application/definitions/';
 const policy = '/panel/session-policy/';

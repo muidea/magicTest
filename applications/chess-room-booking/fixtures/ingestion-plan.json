@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "chess-room-booking.fixture-plan/v1",
+  "status": "planning-only-no-writes",
+  "targetInstance": null,
+  "executable": false,
+  "requires": "future controlled fixture ingestion or isolated test harness; not generic booking CRUD",
+  "steps": [
+    {
+      "entity": "merchant",
+      "count": 2,
+      "keys": [
+        "merchant:A",
+        "merchant:B"
+      ]
+    },
+    {
+      "entity": "store",
+      "count": 3,
+      "keys": [
+        "store:A1",
+        "store:A2",
+        "store:B1"
+      ]
+    },
+    {
+      "entity": "room",
+      "count": 6,
+      "keys": [
+        "room:A1-R1",
+        "room:A1-R2",
+        "room:A2-R1",
+        "room:B1-R1",
+        "room:B1-R2",
+        "room:B1-R3"
+      ]
+    },
+    {
+      "entity": "bookingRule",
+      "count": 4,
+      "keys": [
+        "bookingRule:A1-R1",
+        "bookingRule:A1-R2",
+        "bookingRule:A2-R1",
+        "bookingRule:B1-R1"
+      ]
+    },
+    {
+      "entity": "openingException",
+      "count": 1,
+      "keys": [
+        "openingException:maintenance"
+      ]
+    },
+    {
+      "entity": "customerProfile",
+      "count": 2,
+      "keys": [
+        "customerProfile:U1",
+        "customerProfile:U2"
+      ]
+    },
+    {
+      "entity": "staffAssignment",
+      "count": 2,
+      "keys": [
+        "staffAssignment:EA1",
+        "staffAssignment:MB"
+      ]
+    },
+    {
+      "entity": "bookingOrder",
+      "count": 9,
+      "keys": [
+        "bookingOrder:O01",
+        "bookingOrder:O02",
+        "bookingOrder:O03",
+        "bookingOrder:O04",
+        "bookingOrder:O05",
+        "bookingOrder:O06",
+        "bookingOrder:O07",
+        "bookingOrder:O08",
+        "bookingOrder:O09"
+      ]
+    },
+    {
+      "entity": "roomOccupancy",
+      "count": 9,
+      "keys": [
+        "roomOccupancy:O01",
+        "roomOccupancy:O02",
+        "roomOccupancy:O03",
+        "roomOccupancy:O04",
+        "roomOccupancy:O05",
+        "roomOccupancy:O06",
+        "roomOccupancy:O07",
+        "roomOccupancy:O08",
+        "roomOccupancy:O09"
+      ]
+    },
+    {
+      "entity": "orderEvent",
+      "count": 9,
+      "keys": [
+        "orderEvent:O01",
+        "orderEvent:O02",
+        "orderEvent:O03",
+        "orderEvent:O04",
+        "orderEvent:O05",
+        "orderEvent:O06",
+        "orderEvent:O07",
+        "orderEvent:O08",
+        "orderEvent:O09"
+      ]
+    },
+    {
+      "entity": "complaint",
+      "count": 2,
+      "keys": [
+        "complaint:C01",
+        "complaint:C02"
+      ]
+    },
+    {
+      "entity": "complaintEntry",
+      "count": 3,
+      "keys": [
+        "complaintEntry:C01-1",
+        "complaintEntry:C02-1",
+        "complaintEntry:C02-2"
+      ]
+    }
+  ],
+  "rules": [
+    "resolve aliases using real owner allocated identities",
+    "no source fixed primary keys",
+    "verify same merchant/store relations",
+    "never expose real contacts or CAS credentials",
+    "do not treat fixture orders as operation receipts",
+    "retain exact ownership list for cleanup"
+  ]
+}

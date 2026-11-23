@@ -24,7 +24,7 @@ handlers['F017-001'] = async h => {
   h.check('Formatting is stable and legal', again.valid && again.formattedSource === formatted);
   const debug = (await h.ok(h.admin, 'POST', root + 'debug', { ...request, scriptContent: formatted })).value;
   h.check('Real debug preserves required zero and false, output and logs', debug.valid && same(debug.output, { count: 0, enabled: false }) && debug.log.includes('regression script output') && debug.mode === 'example' && debug.durationMs >= 0 && !debug.diagnostics?.length, debug);
-  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression/fixture-definition-create-request.json')));
+  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, 'regression/fixtures/platform-regression/fixture-definition-create-request.json')));
   Object.assign(body, { uuid: crypto.randomBytes(16).toString('hex'), name: h.state.prefix + '-script', showName: '脚本调试保存回读', pkgPrefix: h.state.prefix + 'script' });
   const app = await h.create('/panel/application/definitions/', body, 'definition');
   const route = '/panel/application/definitions/' + app.id + '/function-blocks';

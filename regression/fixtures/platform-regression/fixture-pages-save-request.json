@@ -1,0 +1,273 @@
+{
+  "expectedDefinitionVersion": 1793089086576,
+  "content": {
+    "schemaVersion": "magic.application-ui/v1",
+    "defaultPage": "categories",
+    "navigation": [
+      "categories"
+    ],
+    "pages": [
+      {
+        "key": "categories",
+        "title": "分类管理",
+        "routes": [
+          "/categories"
+        ],
+        "navigation": true,
+        "layout": {
+          "type": "dictionary",
+          "columns": 24,
+          "gap": 16
+        },
+        "routeParameters": [],
+        "components": [
+          {
+            "key": "category-directory",
+            "type": "entity-table",
+            "layout": {
+              "order": 1,
+              "span": 24
+            },
+            "properties": {
+              "entity": "/regression2710/sample",
+              "columns": [
+                "code",
+                "name",
+                "description",
+                "sortOrder"
+              ]
+            },
+            "dataSources": [
+              "DS02"
+            ]
+          },
+          {
+            "key": "category-form",
+            "type": "selected-entity-detail",
+            "layout": {
+              "order": 2,
+              "span": 24
+            },
+            "properties": {
+              "entity": "/regression2710/sample",
+              "selectionFrom": "category-directory",
+              "actions": [
+                "sample.create",
+                "sample.update",
+                "sample.delete"
+              ]
+            },
+            "dataSources": [
+              "DS02"
+            ]
+          }
+        ],
+        "description": "code/name/description/sortOrder；完整列表仍有分页边界；被引用项禁删由后端保证"
+      }
+    ],
+    "dataSources": [
+      {
+        "key": "DS02",
+        "entity": "/regression2710/sample",
+        "mode": "options",
+        "fields": [
+          "code",
+          "description",
+          "id",
+          "name",
+          "sortOrder",
+          "version"
+        ],
+        "authorization": "[redacted]",
+        "instanceScope": "current-installation",
+        "description": "id、code、name、description、sortOrder；sortOrder/code/id 升序；目录与选择器支持有界加载",
+        "pagination": {
+          "mode": "cursor",
+          "defaultPageSize": 20,
+          "maxPageSize": 100
+        },
+        "orderBy": [
+          {
+            "field": "sortOrder",
+            "direction": "asc"
+          },
+          {
+            "field": "code",
+            "direction": "asc"
+          },
+          {
+            "field": "id",
+            "direction": "asc"
+          }
+        ]
+      }
+    ],
+    "entityViews": {
+      "/regression2710/sample": {
+        "entity": {
+          "name": "sample",
+          "showName": "回归样本",
+          "pkgPath": "/regression2710",
+          "primaryKey": "id"
+        },
+        "entry": {
+          "visible": true,
+          "kind": "support",
+          "title": "回归样本"
+        },
+        "capabilities": {
+          "query": true,
+          "get": true,
+          "create": true,
+          "update": true,
+          "delete": true
+        },
+        "list": {
+          "layout": "table",
+          "defaultPageSize": 20,
+          "columns": [
+            "code",
+            "name",
+            "sortOrder"
+          ],
+          "filters": [
+            "code",
+            "name"
+          ],
+          "actions": [
+            "detail",
+            "create",
+            "update",
+            "delete"
+          ]
+        },
+        "detail": {
+          "sections": [
+            {
+              "key": "record",
+              "title": "设备分类",
+              "fields": [
+                "id",
+                "code",
+                "name",
+                "description",
+                "sortOrder",
+                "version"
+              ]
+            }
+          ]
+        },
+        "form": {
+          "sections": [
+            {
+              "key": "fields",
+              "title": "设备分类",
+              "fields": [
+                "code",
+                "name",
+                "description",
+                "sortOrder"
+              ]
+            }
+          ]
+        },
+        "fields": [
+          {
+            "name": "id",
+            "showName": "主键",
+            "description": "正式执行 owner 分配；不固定运行数据主键",
+            "type": "integer",
+            "widget": "number",
+            "required": false,
+            "readonly": true,
+            "searchable": false,
+            "sortable": true,
+            "order": 1,
+            "span": 12,
+            "hiddenInList": true,
+            "hiddenInCreate": true,
+            "hiddenInUpdate": true
+          },
+          {
+            "name": "code",
+            "showName": "编号",
+            "description": "无默认；创建后不可改",
+            "type": "string",
+            "widget": "input",
+            "required": true,
+            "readonly": false,
+            "searchable": true,
+            "sortable": true,
+            "order": 2,
+            "span": 12,
+            "hiddenInUpdate": true
+          },
+          {
+            "name": "name",
+            "showName": "名称",
+            "description": "无默认；拒绝纯空白",
+            "type": "string",
+            "widget": "input",
+            "required": true,
+            "readonly": false,
+            "searchable": true,
+            "sortable": true,
+            "order": 3,
+            "span": 12
+          },
+          {
+            "name": "description",
+            "showName": "说明",
+            "description": "无默认",
+            "type": "string",
+            "widget": "textarea",
+            "required": false,
+            "readonly": false,
+            "searchable": true,
+            "sortable": true,
+            "order": 4,
+            "span": 12,
+            "hiddenInList": true
+          },
+          {
+            "name": "sortOrder",
+            "showName": "显示顺序",
+            "description": "0",
+            "type": "integer",
+            "widget": "number",
+            "required": false,
+            "readonly": false,
+            "searchable": false,
+            "sortable": true,
+            "order": 5,
+            "span": 12
+          },
+          {
+            "name": "version",
+            "showName": "记录版本",
+            "description": "执行 owner 维护；普通表单仅用作条件版本，禁止作为编辑字段",
+            "type": "integer",
+            "widget": "number",
+            "required": true,
+            "readonly": true,
+            "searchable": false,
+            "sortable": false,
+            "order": 6,
+            "span": 12,
+            "hiddenInList": true,
+            "hiddenInCreate": true,
+            "hiddenInUpdate": true
+          }
+        ]
+      }
+    },
+    "timezone": "UTC",
+    "actions": {
+      "sample": [
+        "create",
+        "update",
+        "delete"
+      ]
+    }
+  }
+}

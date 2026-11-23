@@ -45,7 +45,7 @@ async function main() {
   if (options['reconcile-retired-creators'] && options['reconcile-retired-creators'] !== 'true') throw Error('Retired creator disposition requires literal true');
   if (options['reconcile-retired-credentials'] && options['reconcile-retired-credentials'] !== 'true') throw Error('Credential disposition requires literal true');
   if (options['dry-run'] === 'true') {
-    const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, '../docs/acceptance/platform-catalog.json')));
+    const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, 'acceptance/platform-catalog.json')));
     const selected = selectCases(catalog);
     console.log(JSON.stringify({ suite: targetSuite, selected: selected.length, registeredHandlers: selected.filter(c => handlers[c.id]).map(c => c.id), missing: selected.filter(c => !handlers[c.id]).map(c => c.id), note: 'Registered handlers can still report partial verification; registration is not complete coverage.' }, null, 2));
     return;
@@ -63,7 +63,7 @@ async function main() {
   const credentials = JSON.parse(fs.readFileSync(options.credentials));
   const origin = credentials.origin;
   if (!origin || new URL(origin).protocol !== 'https:') throw Error('Credentials need an explicit HTTPS origin');
-  const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, '../docs/acceptance/platform-catalog.json')));
+  const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, 'acceptance/platform-catalog.json')));
   const baseline = JSON.parse(fs.readFileSync(options['baseline-health']));
   const selected = selectCases(catalog);
   if (!selected.length) throw Error('No selected ' + targetSuite + ' cases');

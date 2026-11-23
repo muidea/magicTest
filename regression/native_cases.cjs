@@ -340,7 +340,7 @@ handlers['F026-002'] = async h => {
   }
   // A structurally invalid dependency cannot enter an owner-valid revision.
   // An unavailable image can: exercise that real draft/publication boundary too.
-  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression/fixture-definition-create-request.json')));
+  const body = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, 'regression/fixtures/platform-regression/fixture-definition-create-request.json')));
   Object.assign(body, { uuid: missingImage.applicationUuid, name: h.state.prefix + '-invalid-native-revision', pkgPrefix: h.state.prefix + 'nativeadmission', runtimeType: 'packaged-runtime',
     storage: { required: false, engine: '', versionConstraint: '', slots: [] }, orchestration: { contract: missingImage.contract } });
   const app = await h.create(base, body, 'definition');

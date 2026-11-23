@@ -77,7 +77,9 @@ def environment_lock(credentials):
 
 
 def load_owner(catalog_path):
-    script = catalog_path.parent.parent / 'scripts/platform_acceptance.py'
+    script = ROOT / 'tools/platform_acceptance.py'
+    if not script.is_file():
+        script = catalog_path.parent.parent / 'tools/platform_acceptance.py'
     spec = importlib.util.spec_from_file_location('platform_acceptance', script)
     owner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(owner)
@@ -264,7 +266,7 @@ def main():
         raise ValueError('runtimeSnapshotConfig requires a non-empty private file path')
     if 'deliveryFixtureConfig' in config and (not isinstance(config['deliveryFixtureConfig'], str) or not config['deliveryFixtureConfig'].strip()):
         raise ValueError('deliveryFixtureConfig requires a non-empty private file path')
-    catalog_path = Path(config.get('catalog', ROOT.parent / 'docs/acceptance/platform-catalog.json')).expanduser().resolve()
+    catalog_path = Path(config.get('catalog', ROOT / 'acceptance/platform-catalog.json')).expanduser().resolve()
     owner = load_owner(catalog_path)
     catalog = json.loads(catalog_path.read_text())
     owner.validate_catalog(catalog)
@@ -296,23 +298,34 @@ def main():
 
 
 def cleanup_historical_runs(catalog_path, output_root, *, suite='standard', cases=None):
-    """Clean previous local run artifacts under acceptance/runs before a full regression."""
+    """Clean previous local run artifacts under reports/ or acceptance/runs/ before a full regression."""
     if cases is not None:
         return {'cleaned': False, 'reason': 'targeted-subset'}
     acceptance_dir = Path(catalog_path).parent
-    runs_root = acceptance_dir / 'runs'
-    if acceptance_dir.is_symlink() or runs_root.is_symlink() or (runs_root.exists() and not runs_root.is_dir()):
-        raise ValueError(f'unsafe acceptance runs root: {runs_root}')
-    runs_root_abs = Path(os.path.abspath(runs_root))
+    base_root = acceptance_dir.parent
+    candidate_roots = [acceptance_dir / 'runs', base_root / 'reports']
     output_abs = Path(os.path.abspath(Path(output_root).expanduser()))
-    if output_abs != runs_root_abs and not output_abs.is_relative_to(runs_root_abs):
+    runs_root = None
+    runs_root_abs = None
+    for candidate in candidate_roots:
+        candidate_abs = Path(os.path.abspath(candidate))
+        if output_abs == candidate_abs or output_abs.is_relative_to(candidate_abs):
+            runs_root = candidate
+            runs_root_abs = candidate_abs
+            break
+    if runs_root is None:
         return {'cleaned': False, 'reason': 'output-outside-runs-root'}
+    for check_dir in (base_root, acceptance_dir, runs_root):
+        if check_dir.is_symlink():
+            raise ValueError(f'unsafe acceptance runs root: {runs_root}')
+    if runs_root.exists() and not runs_root.is_dir():
+        raise ValueError(f'unsafe acceptance runs root: {runs_root}')
     probe = output_abs
     while probe != runs_root_abs:
         if probe.is_symlink():
             raise ValueError(f'unsafe symlinked regression output path: {probe}')
         probe = probe.parent
-    preserved_names = {'.git', '.gitignore', '.gitattributes', '.gitkeep'}
+    preserved_names = {'.git', '.gitignore', '.gitattributes', '.gitkeep', 'README.md'}
     targets = []
     if runs_root_abs.exists():
         if suite == 'standard':
@@ -321,7 +334,21 @@ def cleanup_historical_runs(catalog_path, output_root, *, suite='standard', case
                     targets.append(entry)
         else:
             rel_parts = output_abs.relative_to(runs_root_abs).parts if output_abs != runs_root_abs else ()
-            if len(rel_parts) >= 2:
+            if runs_root_abs.name == 'reports' and len(rel_parts) >= 3 and rel_parts[0] == 'runs':
+                current_base = runs_root_abs / 'runs'
+                current_round = current_base / rel_parts[1]
+                for entry in sorted(runs_root_abs.iterdir()):
+                    if entry != current_base and entry.name not in preserved_names:
+                        targets.append(entry)
+                if current_base.is_dir():
+                    for entry in sorted(current_base.iterdir()):
+                        if entry != current_round and entry.name not in preserved_names:
+                            targets.append(entry)
+                if output_abs.is_dir():
+                    for entry in sorted(output_abs.iterdir()):
+                        if entry.name not in preserved_names:
+                            targets.append(entry)
+            elif len(rel_parts) >= 2:
                 current_round = runs_root_abs / rel_parts[0]
                 for entry in sorted(runs_root_abs.iterdir()):
                     if entry != current_round and entry.name not in preserved_names:

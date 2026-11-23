@@ -1,0 +1,45 @@
+{
+  "fixtureVersion": "device-management.threshold-bootstrap/v1",
+  "format": "logical-business-codes-not-API-request-bodies",
+  "location": [
+    {
+      "code": "DTA-SITE-001",
+      "name": "阈值验证园区",
+      "kind": "site",
+      "parentCode": null,
+      "sortOrder": 0
+    },
+    {
+      "code": "DTA-WORKSHOP-001",
+      "name": "阈值验证车间",
+      "kind": "workshop",
+      "parentCode": "DTA-SITE-001",
+      "sortOrder": 0
+    },
+    {
+      "code": "DTA-LINE-001",
+      "name": "阈值验证产线",
+      "kind": "line",
+      "parentCode": "DTA-WORKSHOP-001",
+      "sortOrder": 0
+    }
+  ],
+  "category": [
+    {
+      "code": "DTA-CATEGORY-001",
+      "name": "阈值验证设备",
+      "sortOrder": 0
+    }
+  ],
+  "device": [
+    {
+      "code": "DTA-DEVICE-001",
+      "name": "阈值回归设备",
+      "categoryCode": "DTA-CATEGORY-001",
+      "locationCode": "DTA-LINE-001",
+      "lifecycleStatus": "standby"
+    }
+  ],
+  "alarm": [],
+  "maintenance": []
+}

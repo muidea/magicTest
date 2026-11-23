@@ -1,0 +1,372 @@
+{
+  "fixtureVersion": "device-management.threshold-fixture/v1",
+  "synthetic": true,
+  "rules": [
+    {
+      "key": "temperature-range",
+      "version": "1",
+      "metric": "temperature",
+      "lower": 10,
+      "upper": 75,
+      "severity": "major",
+      "unit": "°C"
+    },
+    {
+      "key": "vibration-upper",
+      "version": "1",
+      "metric": "vibration",
+      "lower": null,
+      "upper": 4.5,
+      "severity": "critical",
+      "unit": "mm/s"
+    },
+    {
+      "key": "load-range",
+      "version": "1",
+      "metric": "loadPercent",
+      "lower": 20,
+      "upper": 90,
+      "severity": "minor",
+      "unit": "%"
+    }
+  ],
+  "liveSequence": [
+    {
+      "key": "normal",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:00:00.000Z",
+        "temperature": 20,
+        "vibration": 1,
+        "loadPercent": 50
+      },
+      "expected": []
+    },
+    {
+      "key": "lower-boundaries",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:01:00.000Z",
+        "temperature": 10,
+        "vibration": 4.5,
+        "loadPercent": 20
+      },
+      "expected": []
+    },
+    {
+      "key": "upper-boundaries",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:02:00.000Z",
+        "temperature": 75,
+        "vibration": 0,
+        "loadPercent": 90
+      },
+      "expected": []
+    },
+    {
+      "key": "temperature-low",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:03:00.000Z",
+        "temperature": 9.9,
+        "vibration": null,
+        "loadPercent": null
+      },
+      "expected": [
+        {
+          "metric": "temperature",
+          "direction": "below",
+          "severity": "major"
+        }
+      ]
+    },
+    {
+      "key": "temperature-high",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:04:00.000Z",
+        "temperature": 75.1,
+        "vibration": null,
+        "loadPercent": null
+      },
+      "expected": [
+        {
+          "metric": "temperature",
+          "direction": "above",
+          "severity": "major"
+        }
+      ]
+    },
+    {
+      "key": "vibration-high",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:05:00.000Z",
+        "temperature": null,
+        "vibration": 4.6,
+        "loadPercent": null
+      },
+      "expected": [
+        {
+          "metric": "vibration",
+          "direction": "above",
+          "severity": "critical"
+        }
+      ]
+    },
+    {
+      "key": "load-low",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:06:00.000Z",
+        "temperature": null,
+        "vibration": null,
+        "loadPercent": 19.9
+      },
+      "expected": [
+        {
+          "metric": "loadPercent",
+          "direction": "below",
+          "severity": "minor"
+        }
+      ]
+    },
+    {
+      "key": "load-high",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:07:00.000Z",
+        "temperature": null,
+        "vibration": null,
+        "loadPercent": 90.1
+      },
+      "expected": [
+        {
+          "metric": "loadPercent",
+          "direction": "above",
+          "severity": "minor"
+        }
+      ]
+    },
+    {
+      "key": "multi-high",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:08:00.000Z",
+        "temperature": 76,
+        "vibration": 5,
+        "loadPercent": 95
+      },
+      "expected": [
+        {
+          "metric": "temperature",
+          "direction": "above",
+          "severity": "major"
+        },
+        {
+          "metric": "vibration",
+          "direction": "above",
+          "severity": "critical"
+        },
+        {
+          "metric": "loadPercent",
+          "direction": "above",
+          "severity": "minor"
+        }
+      ]
+    },
+    {
+      "key": "zero-load",
+      "record": {
+        "deviceCode": "DTA-DEVICE-001",
+        "sampledAt": "2026-10-24T00:09:00.000Z",
+        "temperature": null,
+        "vibration": 0,
+        "loadPercent": 0
+      },
+      "expected": [
+        {
+          "metric": "loadPercent",
+          "direction": "below",
+          "severity": "minor"
+        }
+      ]
+    }
+  ],
+  "scriptOnlyCases": [
+    {
+      "key": "all-null-script-only",
+      "record": {
+        "temperature": null,
+        "vibration": null,
+        "loadPercent": null
+      },
+      "expected": [],
+      "admission": "telemetry-create-must-reject-anyNonNull"
+    },
+    {
+      "key": "numeric-text",
+      "record": {
+        "temperature": "75.0001",
+        "vibration": null,
+        "loadPercent": null
+      },
+      "expected": [
+        {
+          "metric": "temperature",
+          "direction": "above",
+          "severity": "major"
+        }
+      ]
+    },
+    {
+      "key": "reversed-bounds",
+      "record": {
+        "temperature": 20
+      },
+      "rules": [
+        {
+          "key": "temperature-range",
+          "version": "1",
+          "metric": "temperature",
+          "lower": 80,
+          "upper": 75,
+          "severity": "major",
+          "unit": "°C"
+        }
+      ],
+      "expectError": true
+    },
+    {
+      "key": "equal-bounds",
+      "record": {
+        "temperature": 20
+      },
+      "rules": [
+        {
+          "key": "temperature-range",
+          "version": "1",
+          "metric": "temperature",
+          "lower": 75,
+          "upper": 75,
+          "severity": "major",
+          "unit": "°C"
+        }
+      ],
+      "expectError": true
+    },
+    {
+      "key": "missing-bounds",
+      "record": {
+        "temperature": 20
+      },
+      "rules": [
+        {
+          "key": "temperature-range",
+          "version": "1",
+          "metric": "temperature",
+          "lower": null,
+          "upper": null,
+          "severity": "major",
+          "unit": "°C"
+        }
+      ],
+      "expectError": true
+    },
+    {
+      "key": "unknown-metric",
+      "record": {
+        "temperature": 20
+      },
+      "rules": [
+        {
+          "key": "temperature-range",
+          "version": "1",
+          "metric": "humidity",
+          "lower": 10,
+          "upper": 75,
+          "severity": "major",
+          "unit": "°C"
+        }
+      ],
+      "expectError": true
+    },
+    {
+      "key": "invalid-severity",
+      "record": {
+        "temperature": 20
+      },
+      "rules": [
+        {
+          "key": "temperature-range",
+          "version": "1",
+          "metric": "temperature",
+          "lower": 10,
+          "upper": 75,
+          "severity": "urgent",
+          "unit": "°C"
+        }
+      ],
+      "expectError": true
+    },
+    {
+      "key": "duplicate-rule",
+      "record": {
+        "temperature": 20
+      },
+      "rules": [
+        {
+          "key": "temperature-range",
+          "version": "1",
+          "metric": "temperature",
+          "lower": 10,
+          "upper": 75,
+          "severity": "major",
+          "unit": "°C"
+        },
+        {
+          "key": "temperature-range",
+          "version": "1",
+          "metric": "temperature",
+          "lower": 10,
+          "upper": 75,
+          "severity": "major",
+          "unit": "°C"
+        }
+      ],
+      "expectError": true
+    },
+    {
+      "key": "nonfinite-value",
+      "record": {
+        "temperature": "NaN"
+      },
+      "expectError": true
+    },
+    {
+      "key": "boolean-value",
+      "record": {
+        "temperature": false
+      },
+      "expectError": true
+    }
+  ],
+  "expectedLive": {
+    "location": 3,
+    "category": 1,
+    "device": 1,
+    "telemetry": 10,
+    "alarm": 9,
+    "maintenance": 0,
+    "open": 9,
+    "acknowledged": 0,
+    "resolved": 0
+  },
+  "replayExpectedDelta": {
+    "telemetry": 0,
+    "alarm": 0
+  },
+  "mutatedSameSample": "conflict-with-zero-derived-records",
+  "lateSameSample": "reject-or-confirm-original-never-duplicate"
+}

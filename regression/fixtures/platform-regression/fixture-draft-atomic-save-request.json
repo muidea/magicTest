@@ -1,0 +1,199 @@
+{
+  "expectedDefinitionVersion": 1793089067408,
+  "baseline": [],
+  "entities": [
+    {
+      "id": 0,
+      "name": "sample",
+      "showName": "回归样本",
+      "icon": "",
+      "pkgPath": "/regression2710",
+      "description": "platform fixture",
+      "fields": [
+        {
+          "name": "id",
+          "showName": "主键",
+          "description": "正式执行 owner 分配；不固定运行数据主键",
+          "type": {
+            "name": "int64",
+            "pkgPath": "",
+            "description": "",
+            "isPtr": false,
+            "elemType": null
+          },
+          "spec": {
+            "fieldName": "id",
+            "primaryKey": true,
+            "valueDeclare": "snowflake",
+            "viewDeclare": [
+              "detail",
+              "lite"
+            ],
+            "constraint": "",
+            "defaultValue": null
+          }
+        },
+        {
+          "name": "code",
+          "showName": "编号",
+          "description": "无默认；创建后不可改",
+          "type": {
+            "name": "string",
+            "pkgPath": "",
+            "description": "",
+            "isPtr": false,
+            "elemType": null
+          },
+          "spec": {
+            "fieldName": "code",
+            "primaryKey": false,
+            "valueDeclare": "",
+            "viewDeclare": [
+              "detail",
+              "lite"
+            ],
+            "constraint": "req,max=64,re=^[A-Z][A-Z0-9-]*$",
+            "defaultValue": null
+          }
+        },
+        {
+          "name": "name",
+          "showName": "名称",
+          "description": "无默认；拒绝纯空白",
+          "type": {
+            "name": "string",
+            "pkgPath": "",
+            "description": "",
+            "isPtr": false,
+            "elemType": null
+          },
+          "spec": {
+            "fieldName": "name",
+            "primaryKey": false,
+            "valueDeclare": "",
+            "viewDeclare": [
+              "detail",
+              "lite"
+            ],
+            "constraint": "req,max=256",
+            "defaultValue": null
+          }
+        },
+        {
+          "name": "description",
+          "showName": "说明",
+          "description": "无默认",
+          "type": {
+            "name": "string",
+            "pkgPath": "",
+            "description": "",
+            "isPtr": true,
+            "elemType": null
+          },
+          "spec": {
+            "fieldName": "description",
+            "primaryKey": false,
+            "valueDeclare": "",
+            "viewDeclare": [
+              "detail"
+            ],
+            "constraint": "max=2000",
+            "defaultValue": null
+          }
+        },
+        {
+          "name": "sortOrder",
+          "showName": "显示顺序",
+          "description": "0",
+          "type": {
+            "name": "int64",
+            "pkgPath": "",
+            "description": "",
+            "isPtr": false,
+            "elemType": null
+          },
+          "spec": {
+            "fieldName": "sortOrder",
+            "primaryKey": false,
+            "valueDeclare": "",
+            "viewDeclare": [
+              "detail",
+              "lite"
+            ],
+            "constraint": "",
+            "defaultValue": 0
+          }
+        },
+        {
+          "name": "version",
+          "showName": "业务版本",
+          "description": "资源 owner 维护的条件版本，与模型 revision 和执行流程版本独立",
+          "type": {
+            "name": "int64",
+            "pkgPath": "",
+            "description": "",
+            "isPtr": false,
+            "elemType": null
+          },
+          "spec": {
+            "fieldName": "version",
+            "primaryKey": false,
+            "valueDeclare": "",
+            "viewDeclare": [
+              "detail",
+              "lite"
+            ],
+            "constraint": "",
+            "defaultValue": null
+          }
+        }
+      ],
+      "uniqueConstraints": [
+        {
+          "name": "uq_reg2710_sample_code",
+          "fields": [
+            "code"
+          ]
+        }
+      ],
+      "writeRules": {
+        "apiVersion": "magic.entity-write-rules/v1",
+        "versionField": "version",
+        "nonBlank": [
+          "code",
+          "name"
+        ],
+        "immutable": [
+          "code"
+        ]
+      },
+      "blockInfo": [],
+      "serviceExpose": {
+        "enabled": true,
+        "capabilities": [
+          {
+            "key": "query",
+            "enabled": true
+          },
+          {
+            "key": "get",
+            "enabled": true
+          },
+          {
+            "key": "create",
+            "enabled": true
+          },
+          {
+            "key": "update",
+            "enabled": true
+          },
+          {
+            "key": "delete",
+            "enabled": true
+          }
+        ]
+      },
+      "version": "v1.0.0"
+    }
+  ]
+}

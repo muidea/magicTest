@@ -108,7 +108,7 @@ class ReportGatesTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        catalog_path = ROOT.parent / 'docs/acceptance/platform-catalog.json'
+        catalog_path = ROOT / 'acceptance/platform-catalog.json'
         cls.owner = load_owner(catalog_path)
         cls.catalog = json.loads(catalog_path.read_text())
         cls.owner.validate_catalog(cls.catalog)
@@ -457,6 +457,32 @@ class ReportGatesTest(unittest.TestCase):
             self.assertTrue(result['cleaned'])
             self.assertFalse((acceptance2 / 'runs/linked-round').is_symlink())
             self.assertTrue((external / 'keep.txt').is_file())
+
+    def test_reports_root_cleanup_preserves_readme_and_keeps_current_standard_on_abnormal(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            acceptance = root / 'acceptance'
+            acceptance.mkdir()
+            catalog = acceptance / 'platform-catalog.json'
+            catalog.write_text('{}')
+            reports = root / 'reports'
+            (reports / 'runs/2026-11-22-old/standard').mkdir(parents=True)
+            (reports / 'runs/2026-11-22-old/standard/r.json').write_text('old')
+            (reports / 'runs/2026-11-23-cur/standard/s1').mkdir(parents=True)
+            (reports / 'runs/2026-11-23-cur/standard/s1/r.json').write_text('keep')
+            (reports / 'runs/2026-11-23-cur/abnormal/a1').mkdir(parents=True)
+            (reports / 'runs/2026-11-23-cur/abnormal/a1/r.json').write_text('drop')
+            (reports / 'README.md').write_text('# Reports\n')
+            res_abn = cleanup_historical_runs(catalog, reports / 'runs/2026-11-23-cur/abnormal', suite='abnormal', cases=None)
+            self.assertTrue(res_abn['cleaned'])
+            self.assertTrue((reports / 'README.md').is_file())
+            self.assertFalse((reports / 'runs/2026-11-22-old').exists())
+            self.assertFalse((reports / 'runs/2026-11-23-cur/abnormal/a1').exists())
+            self.assertEqual((reports / 'runs/2026-11-23-cur/standard/s1/r.json').read_text(), 'keep')
+            res_std = cleanup_historical_runs(catalog, reports / 'standard', suite='standard', cases=None)
+            self.assertTrue(res_std['cleaned'])
+            self.assertTrue((reports / 'README.md').is_file())
+            self.assertFalse((reports / 'runs').exists())
 
 
 if __name__ == '__main__':

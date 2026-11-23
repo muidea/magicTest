@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "magic.device-fixture/v1",
+  "dataVersion": "device-management/v0.1",
+  "definitionVersion": "device-management/v0.2",
+  "variant": "C",
+  "synthetic": true,
+  "anchor": "2026-10-14T12:00:00Z",
+  "entities": {
+    "location": [
+      {
+        "code": "SITE-01",
+        "name": "园区",
+        "parent": null,
+        "kind": "site",
+        "sortOrder": 0
+      },
+      {
+        "code": "WS-A",
+        "name": "A车间",
+        "parent": "SITE-01",
+        "kind": "workshop",
+        "sortOrder": 0
+      },
+      {
+        "code": "WS-B",
+        "name": "B车间",
+        "parent": "SITE-01",
+        "kind": "workshop",
+        "sortOrder": 1
+      },
+      {
+        "code": "LINE-A1",
+        "name": "LINE-A1",
+        "parent": "WS-A",
+        "kind": "line",
+        "sortOrder": 0
+      },
+      {
+        "code": "LINE-A2",
+        "name": "LINE-A2",
+        "parent": "WS-A",
+        "kind": "line",
+        "sortOrder": 1
+      },
+      {
+        "code": "LINE-B1",
+        "name": "LINE-B1",
+        "parent": "WS-B",
+        "kind": "line",
+        "sortOrder": 0
+      },
+      {
+        "code": "LINE-B2",
+        "name": "LINE-B2",
+        "parent": "WS-B",
+        "kind": "line",
+        "sortOrder": 1
+      }
+    ],
+    "category": [
+      {
+        "code": "CAT-PUMP",
+        "name": "水泵",
+        "sortOrder": 0
+      },
+      {
+        "code": "CAT-MOTOR",
+        "name": "电机",
+        "sortOrder": 1
+      },
+      {
+        "code": "CAT-FAN",
+        "name": "风机",
+        "sortOrder": 2
+      }
+    ],
+    "device": [
+      {
+        "code": "DEV-001",
+        "name": "水泵 001（C租户）",
+        "category": "CAT-PUMP",
+        "location": "LINE-A1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": null,
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      }
+    ],
+    "telemetry": [],
+    "alarm": [],
+    "maintenance": []
+  }
+}

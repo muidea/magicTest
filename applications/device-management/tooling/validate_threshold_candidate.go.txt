@@ -1,0 +1,479 @@
+package modelpackage_test
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/base32"
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+	"time"
+
+	bc "github.com/muidea/magicBase/pkg/common"
+	"github.com/muidea/magicBase/pkg/script"
+	"github.com/muidea/magicBase/pkg/scriptcontract"
+	"github.com/muidea/magicBase/pkg/scripteffect"
+	"github.com/muidea/magicOrm/models"
+	"github.com/muidea/magicOrm/orm"
+	"github.com/muidea/magicOrm/provider"
+	pc "github.com/muidea/magicRunner/internal/modules/kernel/panel/pkg/common"
+	"github.com/muidea/magicRunner/internal/modules/kernel/panel/pkg/modelpackage"
+	"github.com/muidea/magicRunner/internal/pkg/applicationpagecapability"
+	rc "github.com/muidea/magicRunner/pkg/common"
+	"github.com/muidea/magicRunner/pkg/definitionjson"
+)
+
+// Offline only: exercises the production codec and interpreter, without helpers or persistence.
+func TestDeviceThresholdCandidate(t *testing.T) {
+	root := os.Getenv("DEVICE_THRESHOLD_ROOT")
+	fixtureRoot := os.Getenv("DEVICE_THRESHOLD_FIXTURE_ROOT")
+	if fixtureRoot == "" {
+		fixtureRoot = root
+	}
+	readFrom := func(base, name string, target any) {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(base, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = json.Unmarshal(data, target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func(name string, target any) {
+		t.Helper()
+		readFrom(root, name, target)
+	}
+	readFixture := func(name string, target any) {
+		t.Helper()
+		readFrom(fixtureRoot, name, target)
+	}
+	var artifact pc.ApplicationModelArtifact
+	read("definition/candidate.artifact.json", &artifact)
+	var pages rc.ApplicationPageDefinition
+	read("definition/page-definition.artifact.json", &pages)
+	artifact.Pages = &pages
+	files := map[string][]byte{}
+	base := filepath.Join(root, "definition/blocks")
+	err := filepath.WalkDir(base, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		name, err := filepath.Rel(base, path)
+		if err != nil {
+			return err
+		}
+		files[filepath.ToSlash(name)], err = os.ReadFile(path)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact.FunctionBlocks, err = pc.ParseApplicationFunctionBlockFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetsIndexPath := filepath.Join(root, "definition/assets/index.json")
+	if indexBytes, assetErr := os.ReadFile(assetsIndexPath); assetErr == nil {
+		var assets pc.ApplicationPackageAssets
+		if err = json.Unmarshal(indexBytes, &assets); err != nil {
+			t.Fatal(err)
+		}
+		artifact.Assets = &assets
+		if artifact.PackageFiles == nil {
+			artifact.PackageFiles = map[string][]byte{}
+		}
+		for _, item := range assets.Files {
+			raw, readErr := os.ReadFile(filepath.Join(root, "definition", filepath.FromSlash(item.Path)))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			artifact.PackageFiles[item.Path] = raw
+		}
+	} else if !os.IsNotExist(assetErr) {
+		t.Fatal(assetErr)
+	}
+	for _, entity := range artifact.Entities {
+		if err := bc.ValidateEntityConstraints(&entity.Object); err != nil {
+			t.Fatal(err)
+		}
+		if err := entity.Object.Verify(); err != nil {
+			t.Fatal(err)
+		}
+		if err := bc.ValidateEntityWriteRules(&entity.Object, entity.WriteRules); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Use the stable public schema preflight; no database or SQL export.
+	provider := provider.NewRemoteProvider("device-threshold-offline", nil)
+	var telemetry models.Model
+	for _, entity := range artifact.Entities {
+		model, failure := provider.RegisterModel(&entity.Object)
+		if failure != nil {
+			t.Fatal(failure)
+		}
+		if entity.Name == "telemetry" {
+			telemetry = model
+		}
+	}
+	if telemetry == nil || !models.IsInlineReference(telemetry, telemetry.GetField("device")) {
+		t.Fatal("sample identity requires inline reference storage")
+	}
+	if failure := orm.PreflightSchemaChange(context.Background(), nil, telemetry, provider, "threshold_offline"); failure != nil {
+		t.Fatal(failure)
+	}
+
+	built, err := modelpackage.Build(&artifact)
+	if err != nil {
+		t.Fatal("official Build:", err)
+	}
+	parsed, err := modelpackage.Parse(built.Payload)
+	if err != nil {
+		t.Fatal("official Parse:", err)
+	}
+	if !reflect.DeepEqual(parsed.Artifact.FunctionBlocks.Files, files) {
+		t.Fatal("script files changed in package roundtrip")
+	}
+	if len(parsed.Artifact.Entities) != 6 || len(parsed.Artifact.Pages.Pages) != 10 || len(parsed.Artifact.Pages.DataSources) != 12 {
+		t.Fatal("roundtrip lost definitions")
+	}
+	var fixture struct {
+		Rules []any        `json:"rules"`
+		Live  []structCase `json:"liveSequence"`
+		Only  []structCase `json:"scriptOnlyCases"`
+	}
+	readFixture("fixtures/threshold-v3/cases.json", &fixture)
+	source := string(files["telemetry-threshold/main.go"])
+	if err = script.Validate(source, "block.Handle"); err != nil {
+		t.Fatal("production script compile:", err)
+	}
+	// The same declarations used by the UI must generate a runnable sample.
+	var declaration struct {
+		Inputs  []*bc.ScriptParameter `json:"inputs"`
+		Outputs []*bc.ScriptParameter `json:"outputs"`
+	}
+	read("definition/blocks/telemetry-threshold/definition.json", &declaration)
+	if err := bc.ValidateScriptParameterDeclarations(declaration.Inputs, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := bc.ValidateScriptParameterDeclarations(declaration.Outputs, true); err != nil {
+		t.Fatal(err)
+	}
+	exampleInput := bc.EntityValue{}
+	for _, parameter := range declaration.Inputs {
+		if parameter.Example == nil || parameter.Default != nil {
+			t.Fatal("debug sample requires examples without execution defaults")
+		}
+		exampleInput[parameter.Name] = parameter.Example
+	}
+	if err := bc.ValidateScriptParameters(declaration.Inputs, exampleInput); err != nil {
+		t.Fatal(err)
+	}
+	exampleCtx, exampleCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	exampleOutput, _, exampleErr := script.Debug(exampleCtx, source, "block.Handle", exampleInput)
+	exampleCancel()
+	if exampleErr != nil {
+		t.Fatal("declared debug sample:", exampleErr)
+	}
+	if err := bc.ValidateScriptParameters(declaration.Outputs, exampleOutput); err != nil {
+		t.Fatal(err)
+	}
+	for _, parameter := range declaration.Outputs {
+		if parameter.Example == nil || !reflect.DeepEqual(exampleOutput[parameter.Name], parameter.Example) {
+			t.Fatal("output example must match production script result")
+		}
+	}
+	count := 0
+	severityCounts := map[string]int{}
+	for _, suite := range [][]structCase{fixture.Live, fixture.Only} {
+		for _, example := range suite {
+			t.Run(example.Key, func(t *testing.T) {
+				rules := example.Rules
+				if rules == nil {
+					rules = fixture.Rules
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				output, _, err := script.Debug(ctx, source, "block.Handle", map[string]any{"record": example.Record, "rules": rules})
+				if example.ExpectError {
+					if err == nil || len(output) != 0 {
+						t.Fatalf("expected failure without partial output, got %v / %v", output, err)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := json.Marshal(output["alarms"])
+				if err != nil {
+					t.Fatal(err)
+				}
+				var actual []map[string]any
+				if err = json.Unmarshal(data, &actual); err != nil {
+					t.Fatal(err)
+				}
+				if len(actual) != len(example.Expected) {
+					t.Fatalf("candidate count: got %d want %d", len(actual), len(example.Expected))
+				}
+				for i, alarm := range actual {
+					expected := example.Expected[i]
+					for _, key := range []string{"metric", "direction", "severity"} {
+						if alarm[key] != expected[key] {
+							t.Fatalf("%s: %v != %v", key, alarm[key], expected[key])
+						}
+					}
+					var rule map[string]any
+					for _, value := range rules {
+						r := value.(map[string]any)
+						if r["metric"] == alarm["metric"] {
+							rule = r
+						}
+					}
+					for target, origin := range map[string]string{"ruleKey": "key", "ruleVersion": "version", "lower": "lower", "upper": "upper", "unit": "unit"} {
+						if !reflect.DeepEqual(alarm[target], rule[origin]) {
+							t.Fatalf("lost snapshot %s", target)
+						}
+					}
+					observed := example.Record[alarm["metric"].(string)]
+					if str, ok := observed.(string); ok {
+						var numeric float64
+						if _, err = fmt.Sscan(str, &numeric); err != nil {
+							t.Fatal(err)
+						}
+						observed = numeric
+					}
+					if !reflect.DeepEqual(alarm["observedValue"], observed) {
+						t.Fatal("lost observed value")
+					}
+				}
+			})
+		}
+	}
+	for _, example := range fixture.Live {
+		for _, alarm := range example.Expected {
+			count++
+			severityCounts[alarm["severity"].(string)]++
+		}
+	}
+	if count != 9 || severityCounts["major"] != 3 || severityCounts["critical"] != 2 || severityCounts["minor"] != 4 {
+		t.Fatal("unexpected oracle totals")
+	}
+	// A separate, non-activated binding exercises the generic frozen plan and
+	// host mapping. It is not inserted into the current author or runtime model.
+	var binding bc.BlockInfo
+	bindingJSON, err := os.ReadFile(filepath.Join(root, "definition/threshold-effect.binding.design.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := definitionjson.DecodeProjection(bindingJSON, &binding); err != nil {
+		t.Fatal("invalid strict effect design", err)
+	}
+	var sourceModel, targetModel *bc.EntityView
+	for _, entity := range artifact.Entities {
+		view := &bc.EntityView{Object: entity.Object, WriteRules: entity.WriteRules}
+		switch entity.Name {
+		case "telemetry":
+			sourceModel = view
+		case "alarm":
+			targetModel = view
+		}
+	}
+	fn := binding.StageInfo.Functions[bc.Insert]
+	if err := pc.ValidateFileFunctionBlockBindings(artifact.FunctionBlocks, []*bc.BlockInfo{&binding}, sourceModel.Fields); err != nil {
+		t.Fatal("effect structural author binding:", err)
+	}
+	fn.BindScript = &bc.Script{Program: &scriptcontract.Program{EntryFile: "main.go", Entrypoint: "block.Handle", Files: []scriptcontract.SourceFile{{Name: "main.go", Content: source}}}}
+	fn.InputSchema, fn.OutputSchema = declaration.Inputs, declaration.Outputs
+	plan, err := scripteffect.Freeze(sourceModel, targetModel, &binding)
+	if err != nil {
+		t.Fatal("frozen effect plan:", err)
+	}
+	frozenSnapshot, err := plan.Snapshot()
+	if err != nil {
+		t.Fatal("effect snapshot:", err)
+	}
+	restoredPlan, err := scripteffect.Restore(frozenSnapshot)
+	if err != nil || restoredPlan.Digests() != plan.Digests() {
+		t.Fatal("effect snapshot restore:", err)
+	}
+	derived, derivedSeverities := 0, map[string]int{}
+	const deploymentID = "0123456789abcdef0123456789abcdef"
+	const deviceID = "9007199254740995"
+	for index, example := range fixture.Live {
+		record := map[string]any{}
+		for name, value := range example.Record {
+			if name != "deviceCode" {
+				record[name] = value
+			}
+		}
+		record["id"] = json.Number(fmt.Sprint(9007199254741000 + index))
+		record["device"] = json.Number(deviceID)
+		payload, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		creates, err := plan.Calculate(context.Background(), deploymentID, payload)
+		if err != nil || len(creates) != len(example.Expected) {
+			t.Fatalf("%s mapped creates: %v %v", example.Key, creates, err)
+		}
+		replay, err := restoredPlan.Calculate(context.Background(), deploymentID, payload)
+		if err != nil || !reflect.DeepEqual(creates, replay) {
+			t.Fatal("restored snapshot changed candidate creates", err)
+		}
+		for i, create := range creates {
+			derived++
+			fields := map[string]bc.EntityValueWriteField{}
+			for _, field := range create.Fields {
+				fields[field.Name] = field
+			}
+			if create.Entity != "/deviceManagement/alarm" || fields["device"].Reference == nil || fields["device"].Reference.ID != deviceID || fields["status"].Name != "" || fields["version"].Name != "" {
+				t.Fatal("mapping changed target, exact reference or owner-controlled fields")
+			}
+			var severity string
+			if err := json.Unmarshal(fields["severity"].Value, &severity); err != nil || severity != example.Expected[i]["severity"] {
+				t.Fatal("mapped severity mismatch", err)
+			}
+			derivedSeverities[severity]++
+			var descriptionText string
+			if err := json.Unmarshal(fields["description"].Value, &descriptionText); err != nil {
+				t.Fatal(err)
+			}
+			var description map[string]any
+			if err := json.Unmarshal([]byte(descriptionText), &description); err != nil || description["sourceId"] != record["id"].(json.Number).String() {
+				t.Fatal("source trace rounded", err)
+			}
+			instant, err := time.Parse(time.RFC3339Nano, record["sampledAt"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			tuple, err := json.Marshal([]string{deploymentID, deviceID, instant.UTC().Format("2006-01-02T15:04:05.000Z"), example.Expected[i]["metric"].(string), description["ruleKey"].(string), description["ruleVersion"].(string)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256(tuple)
+			expectedCode := "DTA-" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:])
+			if create.Identity != expectedCode {
+				t.Fatal("mapped identity differs from application specification")
+			}
+		}
+	}
+	if derived != 9 || !reflect.DeepEqual(derivedSeverities, severityCounts) {
+		t.Fatal("mapped create totals differ", derived, derivedSeverities)
+	}
+	// The formal package must retain the effect and project the very same
+	// program/model contract consumed by Base. This does not activate it.
+	for _, entity := range artifact.Entities {
+		if entity.Name == "telemetry" {
+			entity.BlockInfo = []*bc.BlockInfo{&binding}
+		}
+	}
+	fn.BindScript, fn.InputSchema, fn.OutputSchema = nil, nil, nil
+	effectPackage, err := modelpackage.Build(&artifact)
+	if err != nil {
+		t.Fatal("complete effect candidate rejected", err)
+	}
+	effectParsed, err := modelpackage.Parse(effectPackage.Payload)
+	if err != nil {
+		t.Fatal("complete effect package cannot be read", err)
+	}
+	if effectParsed.Artifact.Pages.NavigationMode != rc.PageNavigationModeTree {
+		t.Fatalf("expected navigationMode tree, got %q", effectParsed.Artifact.Pages.NavigationMode)
+	}
+	if err := applicationpagecapability.Validate(effectParsed.Artifact.Pages); err != nil {
+		t.Fatal("page capability validation failed:", err)
+	}
+	authViews := make([]*pc.EntityDefinitionView, 0, len(effectParsed.Artifact.Entities))
+	for _, entity := range effectParsed.Artifact.Entities {
+		authViews = append(authViews, entity)
+	}
+	if err := pc.FreezeApplicationAuthorization(effectParsed.Artifact.Application, authViews); err != nil {
+		t.Fatal("freeze application authorization failed:", err)
+	}
+	views := make([]*bc.EntityView, 0, len(effectParsed.Artifact.Entities))
+	for _, entity := range effectParsed.Artifact.Entities {
+		blocks, err := pc.ProjectEntityFunctionBlocks(effectParsed.Artifact.FunctionBlocks, entity)
+		if err != nil {
+			t.Fatal(err)
+		}
+		views = append(views, &bc.EntityView{Object: entity.Object, BlockInfo: blocks, WriteRules: entity.WriteRules})
+	}
+	if err := scripteffect.ValidateRuntimeModels(views); err != nil {
+		t.Fatal("formal effect materialization differs", err)
+	}
+	effectParsed.Artifact.Application.Icon = effectParsed.Icon
+	rebuilt, err := modelpackage.Build(effectParsed.Artifact)
+	if err != nil || !bytes.Equal(rebuilt.Payload, effectPackage.Payload) {
+		t.Fatalf("ZIP rebuild differs: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if result, _, err := script.Debug(ctx, source, "block.Handle", map[string]any{"record": fixture.Live[0].Record, "rules": fixture.Rules}); err == nil || len(result) != 0 {
+		t.Fatal("cancelled evaluation returned success")
+	}
+	if t.Failed() {
+		return
+	}
+	report := map[string]any{"officialCodecRoundtrip": "passed-in-memory-with-reviewed-effect-binding", "productionScriptCompile": "passed", "declaredParameterExample": "passed", "scriptCases": len(fixture.Live) + len(fixture.Only), "cancellation": "passed", "expectedAlarms": count, "severityCounts": severityCounts, "frozenEffectPlan": "passed-offline-calculation-only", "frozenEffectSnapshot": "passed-strict-roundtrip-with-all-ten-samples", "mappedCandidateCreates": derived, "effectDigests": plan.Digests(), "effectPackageAdmission": "passed-complete-model-program-contract", "effectRuntime": "requires-configured-base-and-live-acceptance", "deployment": "not-run", "postgresDDL": "not-exported", "schemaCreatePreflight": "passed-public-orm-contract", "databaseConcurrency": "not-run", "liveReady": false}
+	if output := os.Getenv("DEVICE_THRESHOLD_OUTPUT"); output != "" {
+		if err := os.MkdirAll(filepath.Join(output, "unpacked"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		for name, raw := range effectPackage.Files {
+			target := filepath.Join(output, "unpacked", filepath.FromSlash(name))
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, raw, 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		unpacked, err := modelpackage.ParseUnpacked(os.DirFS(filepath.Join(output, "unpacked")))
+		if err != nil || unpacked.PackageDigest != effectPackage.PackageDigest {
+			t.Fatal("unpacked authorization package differs", err)
+		}
+		if !reflect.DeepEqual(unpacked.Artifact.Application.Authorization, effectPackage.Artifact.Application.Authorization) {
+			t.Fatal("authorization lost during unpacked roundtrip")
+		}
+		if err := os.WriteFile(filepath.Join(output, "package.zip"), effectPackage.Payload, 0644); err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(effectPackage.Payload)
+		if err := os.WriteFile(filepath.Join(output, "SHA256SUMS"), []byte(fmt.Sprintf("%x  package.zip\n", sum)), 0644); err != nil {
+			t.Fatal(err)
+		}
+		report["packageDigest"], report["transportDigest"] = effectPackage.PackageDigest, effectPackage.TransportDigest
+		report["pageDigest"], report["artifactDigest"] = effectPackage.PageDigest, effectPackage.ArtifactDigest
+		report["memberCount"] = len(effectPackage.Files)
+		report["rebuildBytes"] = "passed"
+		checks, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(output, "source-checks.json"), append(checks, '\n'), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(os.Getenv("DEVICE_THRESHOLD_REPORT"), append(data, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type structCase struct {
+	Key         string           `json:"key"`
+	Record      map[string]any   `json:"record"`
+	Rules       []any            `json:"rules"`
+	Expected    []map[string]any `json:"expected"`
+	ExpectError bool             `json:"expectError"`
+}

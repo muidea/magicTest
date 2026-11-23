@@ -42,7 +42,10 @@ def unique_index(items: list[dict], field: str) -> dict:
 
 
 def validate_inventory(inventory: dict, catalog: dict, workspace: Path, platform: Path) -> None:
-    validator = workspace / 'docs/scripts/platform_acceptance.py'
+    validator = ROOT / 'tools/platform_acceptance.py'
+    candidate_validator = workspace / 'magicTest/tools/platform_acceptance.py'
+    if candidate_validator.is_file():
+        validator = candidate_validator
     spec = importlib.util.spec_from_file_location('platform_case_validation', validator)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

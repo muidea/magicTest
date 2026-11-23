@@ -1,0 +1,74 @@
+{
+  "applicationType": "web",
+  "applicationUuid": "a2710271027102710271027102710002",
+  "applicationName": "reg2710-native",
+  "releaseVersion": "1.0.0",
+  "contract": {
+    "apiVersion": "magic.native-orchestration/v1",
+    "components": {
+      "web": {
+        "image": "nginx:1.27-alpine3.20",
+        "ports": {
+          "http": {
+            "containerPort": 80,
+            "protocol": "http"
+          }
+        },
+        "readiness": {
+          "type": "http",
+          "portRef": "http",
+          "path": "/",
+          "timeoutSeconds": 2,
+          "retries": 5
+        },
+        "restart": "unless-stopped"
+      },
+      "secondary": {
+        "image": "nginx:1.27-alpine3.20",
+        "ports": {
+          "http": {
+            "containerPort": 80,
+            "protocol": "http"
+          }
+        },
+        "readiness": {
+          "type": "http",
+          "portRef": "http",
+          "path": "/",
+          "timeoutSeconds": 2,
+          "retries": 5
+        },
+        "restart": "unless-stopped",
+        "dependsOn": [
+          {
+            "componentRef": "web",
+            "condition": "ready",
+            "timeoutSeconds": 30
+          }
+        ]
+      }
+    },
+    "ingresses": {
+      "web": {
+        "componentRef": "web",
+        "portRef": "http",
+        "hostnamePolicy": "targetNamespaceDefault",
+        "pathPrefix": "/reg2710-native/",
+        "pathHandling": "stripPrefix",
+        "tlsPolicy": "required",
+        "authPolicy": "platformAuthenticated"
+      }
+    },
+    "capabilities": {
+      "portalEntries": {
+        "main": {
+          "name": "REG2710 原生回归",
+          "ingressRef": "web",
+          "launchPath": "/",
+          "primary": true,
+          "openMode": "newTab"
+        }
+      }
+    }
+  }
+}

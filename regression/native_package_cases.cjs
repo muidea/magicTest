@@ -88,7 +88,7 @@ async function repeated(h) {
       api: { image: 'postgres:17.7-alpine3.22', environment: { REGRESSION_MARKER: { literal: 'original' } } },
       worker: { image: 'postgres:17.7-alpine3.22', command: ['postgres', '--version'] }
     } } };
-  const draftBody = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, '../docs/scripts/fixtures/platform-regression/fixture-definition-create-request.json')));
+  const draftBody = JSON.parse(h.fs.readFileSync(h.path.resolve(h.root, 'regression/fixtures/platform-regression/fixture-definition-create-request.json')));
   Object.assign(draftBody, { uuid: input.applicationUuid, name: input.applicationName, pkgPrefix: h.state.prefix + 'nativepkg', showName: '原生重复构包草稿', runtimeType: 'packaged-runtime', version: input.releaseVersion,
     storage: { required: false, engine: '', versionConstraint: '', slots: [] }, orchestration: { contract: structuredClone(input.contract) } });
   const app = await h.create(definitions, draftBody, 'definition'), draft = (await h.ok(h.admin, 'GET', definitions + app.id)).value;

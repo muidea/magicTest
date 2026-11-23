@@ -1,0 +1,23 @@
+{
+  "schema": "magic.acceptance.results/v1",
+  "baseline": "platform-2026-10-01",
+  "runId": "填写本轮执行批次",
+  "observedAt": "填写带时区的ISO8601时间",
+  "environment": {
+    "name": "填写验收环境",
+    "fingerprint": "填写目标镜像与配置摘要",
+    "versions": {
+      "magicPanel": "填写不可变镜像ID/摘要",
+      "magicWebPortal": "填写不可变镜像ID/摘要",
+      "magiccas": "填写不可变镜像ID/摘要",
+      "magicbase": "填写不可变镜像ID/摘要",
+      "magicGateway": "填写不可变镜像ID/摘要",
+      "magicFile": "填写不可变镜像ID/摘要",
+      "postgres": "填写不可变镜像ID/摘要",
+      "traefik": "填写不可变镜像ID/摘要"
+    },
+    "configurationDigest": "填写配置摘要（不保存明文配置）"
+  },
+  "results": [],
+  "catalogDigest": "填写当前目录摘要（可从只读环境检查结果复制）"
+}

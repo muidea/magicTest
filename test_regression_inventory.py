@@ -16,8 +16,8 @@ class RegressionInventoryTest(unittest.TestCase):
         self.platform = self.root / "platform"
         self.workspace.mkdir()
         self.platform.mkdir()
-        validator = Path(__file__).resolve().parent.parent / 'docs/scripts/platform_acceptance.py'
-        validator_copy = self.workspace / 'docs/scripts/platform_acceptance.py'
+        validator = Path(__file__).resolve().parent / 'tools/platform_acceptance.py'
+        validator_copy = self.workspace / 'magicTest/tools/platform_acceptance.py'
         validator_copy.parent.mkdir(parents=True)
         validator_copy.write_text(validator.read_text())
         for name in ("cases.json", "app.md", "test.py"):

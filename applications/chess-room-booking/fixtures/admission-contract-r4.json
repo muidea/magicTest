@@ -1,0 +1,583 @@
+{
+  "bookingOrder": {
+    "assertions": [
+      {
+        "key": "store-merchant",
+        "left": [
+          "storeId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "room-store",
+        "left": [
+          "roomId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ]
+      },
+      {
+        "key": "room-merchant",
+        "left": [
+          "roomId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "key": "valid-interval",
+        "field": "startAt",
+        "operator": "lt",
+        "otherField": "endAt"
+      }
+    ]
+  },
+  "bookingRule": {
+    "assertions": [
+      {
+        "key": "store-merchant",
+        "left": [
+          "storeId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "room-store",
+        "left": [
+          "roomId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ],
+        "when": {
+          "field": "roomId",
+          "present": true
+        }
+      },
+      {
+        "key": "room-merchant",
+        "left": [
+          "roomId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ],
+        "when": {
+          "field": "roomId",
+          "present": true
+        }
+      }
+    ],
+    "checks": [
+      {
+        "key": "effective-interval",
+        "field": "effectiveFrom",
+        "operator": "lt",
+        "otherField": "effectiveTo",
+        "when": {
+          "field": "effectiveTo",
+          "present": true
+        }
+      }
+    ]
+  },
+  "bookingSample": {
+    "assertions": [
+      {
+        "key": "store-merchant",
+        "left": [
+          "storeId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "room-store",
+        "left": [
+          "roomId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ]
+      },
+      {
+        "key": "room-merchant",
+        "left": [
+          "roomId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "order-merchant-id",
+        "left": [
+          "orderId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "order-store-id",
+        "left": [
+          "orderId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ]
+      },
+      {
+        "key": "order-room-id",
+        "left": [
+          "orderId",
+          "roomId"
+        ],
+        "right": [
+          "roomId"
+        ]
+      },
+      {
+        "key": "order-start-at",
+        "left": [
+          "orderId",
+          "startAt"
+        ],
+        "right": [
+          "startAt"
+        ]
+      },
+      {
+        "key": "order-end-at",
+        "left": [
+          "orderId",
+          "endAt"
+        ],
+        "right": [
+          "endAt"
+        ]
+      },
+      {
+        "key": "order-status",
+        "left": [
+          "orderId",
+          "status"
+        ],
+        "right": [
+          "status"
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "key": "valid-interval",
+        "field": "startAt",
+        "operator": "lt",
+        "otherField": "endAt"
+      },
+      {
+        "key": "pending-hold",
+        "field": "holdUntil",
+        "operator": "notNull",
+        "when": {
+          "field": "status",
+          "in": [
+            "pending_confirmation",
+            "pending_expired"
+          ]
+        }
+      },
+      {
+        "key": "hold-before-start",
+        "field": "holdUntil",
+        "operator": "lte",
+        "otherField": "startAt",
+        "when": {
+          "field": "status",
+          "in": [
+            "pending_confirmation",
+            "pending_expired"
+          ]
+        }
+      },
+      {
+        "key": "nonpending-no-hold",
+        "field": "holdUntil",
+        "operator": "null",
+        "when": {
+          "field": "status",
+          "in": [
+            "confirmed",
+            "in_use",
+            "merchant_rejected",
+            "customer_canceled",
+            "merchant_canceled",
+            "completed",
+            "no_show"
+          ]
+        }
+      },
+      {
+        "key": "active-no-release",
+        "field": "releasedAt",
+        "operator": "null",
+        "when": {
+          "field": "status",
+          "in": [
+            "pending_confirmation",
+            "confirmed",
+            "in_use"
+          ]
+        }
+      },
+      {
+        "key": "active-no-reason",
+        "field": "releaseReason",
+        "operator": "null",
+        "when": {
+          "field": "status",
+          "in": [
+            "pending_confirmation",
+            "confirmed",
+            "in_use"
+          ]
+        }
+      },
+      {
+        "key": "terminal-release",
+        "field": "releasedAt",
+        "operator": "notNull",
+        "when": {
+          "field": "status",
+          "in": [
+            "merchant_rejected",
+            "customer_canceled",
+            "merchant_canceled",
+            "pending_expired",
+            "completed",
+            "no_show"
+          ]
+        }
+      },
+      {
+        "key": "terminal-reason",
+        "field": "releaseReason",
+        "operator": "nonBlank",
+        "when": {
+          "field": "status",
+          "in": [
+            "merchant_rejected",
+            "customer_canceled",
+            "merchant_canceled",
+            "pending_expired",
+            "completed",
+            "no_show"
+          ]
+        }
+      },
+      {
+        "key": "expired-after-hold",
+        "field": "holdUntil",
+        "operator": "lte",
+        "otherField": "releasedAt",
+        "when": {
+          "field": "status",
+          "in": [
+            "pending_expired"
+          ]
+        }
+      },
+      {
+        "key": "historical-after-start",
+        "field": "startAt",
+        "operator": "lte",
+        "otherField": "releasedAt",
+        "when": {
+          "field": "status",
+          "in": [
+            "completed",
+            "no_show"
+          ]
+        }
+      },
+      {
+        "key": "fixture-sample-key",
+        "field": "sampleKey",
+        "operator": "matches",
+        "pattern": "^FIXTURE-SAMPLE-[A-Za-z0-9_-]+-[A-Za-z0-9_]+$"
+      }
+    ]
+  },
+  "complaint": {
+    "assertions": [
+      {
+        "key": "store-merchant",
+        "left": [
+          "storeId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "order-merchant-id",
+        "left": [
+          "orderId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "order-store-id",
+        "left": [
+          "orderId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ]
+      },
+      {
+        "key": "order-complainant-subject",
+        "left": [
+          "orderId",
+          "customerSubject"
+        ],
+        "right": [
+          "complainantSubject"
+        ]
+      }
+    ],
+    "checks": []
+  },
+  "complaintEntry": {
+    "assertions": [],
+    "checks": []
+  },
+  "customerProfile": {
+    "assertions": [],
+    "checks": []
+  },
+  "merchant": {
+    "assertions": [],
+    "checks": []
+  },
+  "openingException": {
+    "assertions": [
+      {
+        "key": "store-merchant",
+        "left": [
+          "storeId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "room-store",
+        "left": [
+          "roomId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ],
+        "when": {
+          "field": "roomId",
+          "present": true
+        }
+      },
+      {
+        "key": "room-merchant",
+        "left": [
+          "roomId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ],
+        "when": {
+          "field": "roomId",
+          "present": true
+        }
+      }
+    ],
+    "checks": []
+  },
+  "orderEvent": {
+    "assertions": [
+      {
+        "key": "order-status",
+        "left": [
+          "orderId",
+          "status"
+        ],
+        "right": [
+          "toStatus"
+        ]
+      }
+    ],
+    "checks": []
+  },
+  "room": {
+    "assertions": [
+      {
+        "key": "store-merchant",
+        "left": [
+          "storeId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      }
+    ],
+    "checks": []
+  },
+  "roomOccupancy": {
+    "assertions": [
+      {
+        "key": "store-merchant",
+        "left": [
+          "storeId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "room-store",
+        "left": [
+          "roomId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ]
+      },
+      {
+        "key": "room-merchant",
+        "left": [
+          "roomId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "order-merchant-id",
+        "left": [
+          "orderId",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      },
+      {
+        "key": "order-store-id",
+        "left": [
+          "orderId",
+          "storeId"
+        ],
+        "right": [
+          "storeId"
+        ]
+      },
+      {
+        "key": "order-room-id",
+        "left": [
+          "orderId",
+          "roomId"
+        ],
+        "right": [
+          "roomId"
+        ]
+      },
+      {
+        "key": "order-start-at",
+        "left": [
+          "orderId",
+          "startAt"
+        ],
+        "right": [
+          "startAt"
+        ]
+      },
+      {
+        "key": "order-end-at",
+        "left": [
+          "orderId",
+          "endAt"
+        ],
+        "right": [
+          "endAt"
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "key": "valid-interval",
+        "field": "startAt",
+        "operator": "lt",
+        "otherField": "endAt"
+      }
+    ]
+  },
+  "staffAssignment": {
+    "assertions": [
+      {
+        "key": "stores-merchant",
+        "left": [
+          "storeIds",
+          "merchantId"
+        ],
+        "right": [
+          "merchantId"
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "key": "effective-interval",
+        "field": "effectiveFrom",
+        "operator": "lt",
+        "otherField": "effectiveTo",
+        "when": {
+          "field": "effectiveTo",
+          "present": true
+        }
+      }
+    ]
+  },
+  "store": {
+    "assertions": [],
+    "checks": []
+  }
+}

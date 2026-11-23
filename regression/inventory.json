@@ -1,14 +1,14 @@
 {
-  "sourceCatalog": "~/codespace/docs/acceptance/platform-catalog.json",
+  "sourceCatalog": "~/codespace/magicTest/acceptance/platform-catalog.json",
   "scope": "platform-basic",
   "applicationSuites": [
-    "~/codespace/docs/device-management/README.md",
-    "~/codespace/docs/chess-room-booking/README.md"
+    "~/codespace/magicTest/applications/device-management/README.md",
+    "~/codespace/magicTest/applications/chess-room-booking/README.md"
   ],
   "assets": [
     {
       "id": "login-browser",
-      "path": "~/codespace/docs/scripts/live-login-regression.cjs",
+      "path": "~/codespace/magicTest/tools/live-login-regression.cjs",
       "layer": "browser",
       "limitation": "需本机CDP、私密账号文件和候选指纹；缺首次改密、三宽度及CAS独立会话回读。"
     },
@@ -70,7 +70,7 @@
     },
     {
       "id": "key-first-call",
-      "path": "~/codespace/docs/scripts/live-api-key-first-call.cjs",
+      "path": "~/codespace/magicTest/tools/live-api-key-first-call.cjs",
       "layer": "browser-api",
       "limitation": "已有ApiKey签发后首次GET；固定local.vpc、已登录页及清理判定须复核，缺轮换／撤销后拒绝证明。"
     },
@@ -128,7 +128,7 @@
     },
     {
       "id": "evidence-validator",
-      "path": "~/codespace/docs/scripts/platform_acceptance.py",
+      "path": "~/codespace/magicTest/tools/platform_acceptance.py",
       "layer": "tool",
       "limitation": "校验目录及结果证据；不是业务场景执行器。"
     },

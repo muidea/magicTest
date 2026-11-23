@@ -1,0 +1,4090 @@
+{
+  "schemaVersion": "magic.device-fixture/v1",
+  "dataVersion": "device-management/v0.1",
+  "definitionVersion": "device-management/v0.2",
+  "variant": "A",
+  "synthetic": true,
+  "anchor": "2026-10-14T12:00:00Z",
+  "entities": {
+    "location": [
+      {
+        "code": "SITE-01",
+        "name": "园区",
+        "parent": null,
+        "kind": "site",
+        "sortOrder": 0
+      },
+      {
+        "code": "WS-A",
+        "name": "A车间",
+        "parent": "SITE-01",
+        "kind": "workshop",
+        "sortOrder": 0
+      },
+      {
+        "code": "WS-B",
+        "name": "B车间",
+        "parent": "SITE-01",
+        "kind": "workshop",
+        "sortOrder": 1
+      },
+      {
+        "code": "LINE-A1",
+        "name": "LINE-A1",
+        "parent": "WS-A",
+        "kind": "line",
+        "sortOrder": 0
+      },
+      {
+        "code": "LINE-A2",
+        "name": "LINE-A2",
+        "parent": "WS-A",
+        "kind": "line",
+        "sortOrder": 1
+      },
+      {
+        "code": "LINE-B1",
+        "name": "LINE-B1",
+        "parent": "WS-B",
+        "kind": "line",
+        "sortOrder": 0
+      },
+      {
+        "code": "LINE-B2",
+        "name": "LINE-B2",
+        "parent": "WS-B",
+        "kind": "line",
+        "sortOrder": 1
+      }
+    ],
+    "category": [
+      {
+        "code": "CAT-PUMP",
+        "name": "水泵",
+        "sortOrder": 0
+      },
+      {
+        "code": "CAT-MOTOR",
+        "name": "电机",
+        "sortOrder": 1
+      },
+      {
+        "code": "CAT-FAN",
+        "name": "风机",
+        "sortOrder": 2
+      }
+    ],
+    "device": [
+      {
+        "code": "DEV-001",
+        "name": "水泵 001",
+        "category": "CAT-PUMP",
+        "location": "LINE-A1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": null,
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-002",
+        "name": "电机 002",
+        "category": "CAT-MOTOR",
+        "location": "LINE-A1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-002",
+        "commissionedOn": "2024-02-29",
+        "description": ""
+      },
+      {
+        "code": "DEV-003",
+        "name": "二号车间循环冷却系统备用变频驱动电机（长名称展示与省略提示验证设备）",
+        "category": "CAT-FAN",
+        "location": "LINE-A1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-003",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-004",
+        "name": "风机 <b>仅显示文本</b> & 测试",
+        "category": "CAT-PUMP",
+        "location": "LINE-A1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": "DEMO-SN-004",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-005",
+        "name": "电机 005",
+        "category": "CAT-MOTOR",
+        "location": "LINE-A1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-005",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-006",
+        "name": "风机 006",
+        "category": "CAT-FAN",
+        "location": "LINE-A1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-006",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-007",
+        "name": "水泵 007",
+        "category": "CAT-PUMP",
+        "location": "LINE-A2",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": "DEMO-SN-007",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-008",
+        "name": "电机 008",
+        "category": "CAT-MOTOR",
+        "location": "LINE-A2",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-008",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-009",
+        "name": "风机 009",
+        "category": "CAT-FAN",
+        "location": "LINE-A2",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-009",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-010",
+        "name": "水泵 010",
+        "category": "CAT-PUMP",
+        "location": "LINE-A2",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": "DEMO-SN-010",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-011",
+        "name": "电机 011",
+        "category": "CAT-MOTOR",
+        "location": "LINE-A2",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-011",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-012",
+        "name": "风机 012",
+        "category": "CAT-FAN",
+        "location": "LINE-A2",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-012",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-013",
+        "name": "水泵 013",
+        "category": "CAT-PUMP",
+        "location": "LINE-B1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": "DEMO-SN-013",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-014",
+        "name": "电机 014",
+        "category": "CAT-MOTOR",
+        "location": "LINE-B1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-014",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-015",
+        "name": "风机 015",
+        "category": "CAT-FAN",
+        "location": "LINE-B1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-015",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-016",
+        "name": "水泵 016",
+        "category": "CAT-PUMP",
+        "location": "LINE-B1",
+        "lifecycleStatus": "running",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": "DEMO-SN-016",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-017",
+        "name": "电机 017",
+        "category": "CAT-MOTOR",
+        "location": "LINE-B1",
+        "lifecycleStatus": "standby",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-017",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-018",
+        "name": "风机 018",
+        "category": "CAT-FAN",
+        "location": "LINE-B1",
+        "lifecycleStatus": "standby",
+        "connectionStatus": "online",
+        "lastSeenAt": "2026-10-14T11:59:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-018",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-019",
+        "name": "水泵 019",
+        "category": "CAT-PUMP",
+        "location": "LINE-B2",
+        "lifecycleStatus": "standby",
+        "connectionStatus": "offline",
+        "lastSeenAt": "2026-10-13T23:00:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": "DEMO-SN-019",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-020",
+        "name": "电机 020",
+        "category": "CAT-MOTOR",
+        "location": "LINE-B2",
+        "lifecycleStatus": "standby",
+        "connectionStatus": "offline",
+        "lastSeenAt": "2026-10-13T23:00:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-020",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-021",
+        "name": "风机 021",
+        "category": "CAT-FAN",
+        "location": "LINE-B2",
+        "lifecycleStatus": "maintenance",
+        "connectionStatus": "offline",
+        "lastSeenAt": "2026-10-13T23:00:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-021",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-022",
+        "name": "水泵 022",
+        "category": "CAT-PUMP",
+        "location": "LINE-B2",
+        "lifecycleStatus": "maintenance",
+        "connectionStatus": "offline",
+        "lastSeenAt": "2026-10-13T23:00:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-PUMP",
+        "serialNumber": "DEMO-SN-022",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-023",
+        "name": "电机 023",
+        "category": "CAT-MOTOR",
+        "location": "LINE-B2",
+        "lifecycleStatus": "maintenance",
+        "connectionStatus": "offline",
+        "lastSeenAt": "2026-10-13T23:00:00Z",
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-MOTOR",
+        "serialNumber": "DEMO-SN-023",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      },
+      {
+        "code": "DEV-024",
+        "name": "风机 024",
+        "category": "CAT-FAN",
+        "location": "LINE-B2",
+        "lifecycleStatus": "retired",
+        "connectionStatus": "unknown",
+        "lastSeenAt": null,
+        "manufacturer": "虚构样例制造商",
+        "model": "DEMO-CAT-FAN",
+        "serialNumber": "DEMO-SN-024",
+        "commissionedOn": "2024-02-29",
+        "description": "虚构验收样例，不代表真实设备"
+      }
+    ],
+    "telemetry": [
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 21.0,
+        "vibration": 1.1,
+        "loadPercent": 3
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 21.1,
+        "vibration": 1.11,
+        "loadPercent": 5
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 21.2,
+        "vibration": 1.12,
+        "loadPercent": 7
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 21.3,
+        "vibration": 1.1,
+        "loadPercent": 9
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 21.4,
+        "vibration": 1.11,
+        "loadPercent": 11
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 21.5,
+        "vibration": 1.12,
+        "loadPercent": 13
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 21.6,
+        "vibration": 1.1,
+        "loadPercent": 15
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 21.7,
+        "vibration": 1.11,
+        "loadPercent": 17
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 21.8,
+        "vibration": 1.12,
+        "loadPercent": 19
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 21.9,
+        "vibration": 1.1,
+        "loadPercent": 21
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 22.0,
+        "vibration": 1.11,
+        "loadPercent": 23
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 22.1,
+        "vibration": 1.12,
+        "loadPercent": 25
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 22.2,
+        "vibration": 1.1,
+        "loadPercent": 27
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 22.3,
+        "vibration": 1.11,
+        "loadPercent": 29
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 22.4,
+        "vibration": 1.12,
+        "loadPercent": 31
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 22.5,
+        "vibration": 1.1,
+        "loadPercent": 33
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 22.6,
+        "vibration": 1.11,
+        "loadPercent": 35
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 22.7,
+        "vibration": 1.12,
+        "loadPercent": 37
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 22.8,
+        "vibration": 1.1,
+        "loadPercent": 39
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 22.9,
+        "vibration": 1.11,
+        "loadPercent": 41
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 23.0,
+        "vibration": 1.12,
+        "loadPercent": 43
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 23.1,
+        "vibration": 1.1,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 23.2,
+        "vibration": 1.11,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-001",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 23.3,
+        "vibration": 1.12,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 22.0,
+        "vibration": 1.2,
+        "loadPercent": 0
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 22.1,
+        "vibration": 1.21,
+        "loadPercent": 8
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 22.2,
+        "vibration": 1.22,
+        "loadPercent": 10
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 22.3,
+        "vibration": 1.2,
+        "loadPercent": 12
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 22.4,
+        "vibration": 1.21,
+        "loadPercent": 14
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 22.5,
+        "vibration": 1.22,
+        "loadPercent": 16
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 22.6,
+        "vibration": 1.2,
+        "loadPercent": 18
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 22.7,
+        "vibration": 1.21,
+        "loadPercent": 20
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 22.8,
+        "vibration": 1.22,
+        "loadPercent": 22
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 22.9,
+        "vibration": 1.2,
+        "loadPercent": 24
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 23.0,
+        "vibration": 1.21,
+        "loadPercent": 26
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 23.1,
+        "vibration": 1.22,
+        "loadPercent": 28
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 23.2,
+        "vibration": 1.2,
+        "loadPercent": 30
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 23.3,
+        "vibration": 1.21,
+        "loadPercent": 32
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 23.4,
+        "vibration": 1.22,
+        "loadPercent": 34
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 23.5,
+        "vibration": 1.2,
+        "loadPercent": 36
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 23.6,
+        "vibration": 1.21,
+        "loadPercent": 38
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 23.7,
+        "vibration": 1.22,
+        "loadPercent": 40
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 23.8,
+        "vibration": 1.2,
+        "loadPercent": 42
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 23.9,
+        "vibration": 1.21,
+        "loadPercent": 44
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 24.0,
+        "vibration": 1.22,
+        "loadPercent": 46
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 24.1,
+        "vibration": 1.2,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 24.2,
+        "vibration": 1.21,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-002",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 24.3,
+        "vibration": 1.22,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 23.0,
+        "vibration": 1.3,
+        "loadPercent": 9
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 23.1,
+        "vibration": 1.31,
+        "loadPercent": 11
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 23.2,
+        "vibration": 1.32,
+        "loadPercent": 13
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 23.3,
+        "vibration": 1.3,
+        "loadPercent": 15
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 23.4,
+        "vibration": 1.31,
+        "loadPercent": 17
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 23.5,
+        "vibration": 1.32,
+        "loadPercent": 19
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 23.6,
+        "vibration": 1.3,
+        "loadPercent": 21
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 23.7,
+        "vibration": 1.31,
+        "loadPercent": 23
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 23.8,
+        "vibration": 1.32,
+        "loadPercent": 25
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 23.9,
+        "vibration": 1.3,
+        "loadPercent": 27
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 24.0,
+        "vibration": 1.31,
+        "loadPercent": 29
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 24.1,
+        "vibration": 1.32,
+        "loadPercent": 31
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 24.2,
+        "vibration": 1.3,
+        "loadPercent": 33
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 24.3,
+        "vibration": 1.31,
+        "loadPercent": 35
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 24.4,
+        "vibration": 1.32,
+        "loadPercent": 37
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 24.5,
+        "vibration": 1.3,
+        "loadPercent": 39
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 24.6,
+        "vibration": 1.31,
+        "loadPercent": 41
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 24.7,
+        "vibration": 1.32,
+        "loadPercent": 43
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 24.8,
+        "vibration": 1.3,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 24.9,
+        "vibration": 1.31,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 25.0,
+        "vibration": 1.32,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 25.1,
+        "vibration": 1.3,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 25.2,
+        "vibration": 1.31,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-003",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 25.3,
+        "vibration": 1.32,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 24.0,
+        "vibration": 1.4,
+        "loadPercent": 12
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 24.1,
+        "vibration": 1.41,
+        "loadPercent": 14
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 24.2,
+        "vibration": 1.42,
+        "loadPercent": 16
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 24.3,
+        "vibration": 1.4,
+        "loadPercent": 18
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 24.4,
+        "vibration": 1.41,
+        "loadPercent": 20
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 24.5,
+        "vibration": 1.42,
+        "loadPercent": 22
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 24.6,
+        "vibration": 1.4,
+        "loadPercent": 24
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 24.7,
+        "vibration": 1.41,
+        "loadPercent": 26
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 24.8,
+        "vibration": 1.42,
+        "loadPercent": 28
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 24.9,
+        "vibration": 1.4,
+        "loadPercent": 30
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 25.0,
+        "vibration": 1.41,
+        "loadPercent": 32
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 25.1,
+        "vibration": 1.42,
+        "loadPercent": 34
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 25.2,
+        "vibration": 1.4,
+        "loadPercent": 36
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 25.3,
+        "vibration": 1.41,
+        "loadPercent": 38
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 25.4,
+        "vibration": 1.42,
+        "loadPercent": 40
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 25.5,
+        "vibration": 1.4,
+        "loadPercent": 42
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 25.6,
+        "vibration": 1.41,
+        "loadPercent": 44
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 25.7,
+        "vibration": 1.42,
+        "loadPercent": 46
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 25.8,
+        "vibration": 1.4,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 25.9,
+        "vibration": 1.41,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 26.0,
+        "vibration": 1.42,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 26.1,
+        "vibration": 1.4,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 26.2,
+        "vibration": 1.41,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-004",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 26.3,
+        "vibration": 1.42,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 25.0,
+        "vibration": 1.0,
+        "loadPercent": 15
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 25.1,
+        "vibration": 1.01,
+        "loadPercent": 17
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 25.2,
+        "vibration": 1.02,
+        "loadPercent": 19
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 25.3,
+        "vibration": 1.0,
+        "loadPercent": 21
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 25.4,
+        "vibration": 1.01,
+        "loadPercent": 23
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 25.5,
+        "vibration": 1.02,
+        "loadPercent": 25
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 25.6,
+        "vibration": 1.0,
+        "loadPercent": 27
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": null,
+        "vibration": 1.01,
+        "loadPercent": 29
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 25.8,
+        "vibration": 1.02,
+        "loadPercent": 31
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 25.9,
+        "vibration": 1.0,
+        "loadPercent": 33
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 26.0,
+        "vibration": 1.01,
+        "loadPercent": 35
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 26.1,
+        "vibration": 1.02,
+        "loadPercent": 37
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 26.2,
+        "vibration": 1.0,
+        "loadPercent": 39
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 26.3,
+        "vibration": 1.01,
+        "loadPercent": 41
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 26.4,
+        "vibration": 1.02,
+        "loadPercent": 43
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 26.5,
+        "vibration": 1.0,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 26.6,
+        "vibration": 1.01,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 26.7,
+        "vibration": 1.02,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 26.8,
+        "vibration": 1.0,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 26.9,
+        "vibration": 1.01,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 27.0,
+        "vibration": 1.02,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 27.1,
+        "vibration": 1.0,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 27.2,
+        "vibration": 1.01,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-005",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 27.3,
+        "vibration": 1.02,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 26.0,
+        "vibration": 1.1,
+        "loadPercent": 18
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 26.1,
+        "vibration": 1.11,
+        "loadPercent": 20
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 26.2,
+        "vibration": 1.12,
+        "loadPercent": 22
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 26.3,
+        "vibration": 1.1,
+        "loadPercent": 24
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 26.4,
+        "vibration": 1.11,
+        "loadPercent": 26
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 26.5,
+        "vibration": 1.12,
+        "loadPercent": 28
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 26.6,
+        "vibration": 1.1,
+        "loadPercent": 30
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 26.7,
+        "vibration": 1.11,
+        "loadPercent": 32
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 26.8,
+        "vibration": 1.12,
+        "loadPercent": 34
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 26.9,
+        "vibration": 1.1,
+        "loadPercent": 36
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 27.0,
+        "vibration": 1.11,
+        "loadPercent": 38
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 27.1,
+        "vibration": 1.12,
+        "loadPercent": 40
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 27.2,
+        "vibration": 1.1,
+        "loadPercent": 42
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 27.3,
+        "vibration": 1.11,
+        "loadPercent": 44
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 27.4,
+        "vibration": 1.12,
+        "loadPercent": 46
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 27.5,
+        "vibration": 1.1,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 27.6,
+        "vibration": 1.11,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 27.7,
+        "vibration": 1.12,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 27.8,
+        "vibration": 1.1,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 27.9,
+        "vibration": 1.11,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 28.0,
+        "vibration": 1.12,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 28.1,
+        "vibration": 1.1,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 28.2,
+        "vibration": 1.11,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-006",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 28.3,
+        "vibration": 1.12,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 27.0,
+        "vibration": 1.2,
+        "loadPercent": 21
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 27.1,
+        "vibration": 1.21,
+        "loadPercent": 23
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 27.2,
+        "vibration": 1.22,
+        "loadPercent": 25
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 27.3,
+        "vibration": 1.2,
+        "loadPercent": 27
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 27.4,
+        "vibration": 1.21,
+        "loadPercent": 29
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 27.5,
+        "vibration": 1.22,
+        "loadPercent": 31
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 27.6,
+        "vibration": 1.2,
+        "loadPercent": 33
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 27.7,
+        "vibration": 1.21,
+        "loadPercent": 35
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 27.8,
+        "vibration": 1.22,
+        "loadPercent": 37
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 27.9,
+        "vibration": 1.2,
+        "loadPercent": 39
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 28.0,
+        "vibration": 1.21,
+        "loadPercent": 41
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 28.1,
+        "vibration": 1.22,
+        "loadPercent": 43
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 28.2,
+        "vibration": 1.2,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 28.3,
+        "vibration": 1.21,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 28.4,
+        "vibration": 1.22,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 28.5,
+        "vibration": 1.2,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 28.6,
+        "vibration": 1.21,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 28.7,
+        "vibration": 1.22,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 28.8,
+        "vibration": 1.2,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 28.9,
+        "vibration": 1.21,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 29.0,
+        "vibration": 1.22,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 29.1,
+        "vibration": 1.2,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 29.2,
+        "vibration": 1.21,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-007",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 29.3,
+        "vibration": 1.22,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 28.0,
+        "vibration": 1.3,
+        "loadPercent": 24
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 28.1,
+        "vibration": 1.31,
+        "loadPercent": 26
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 28.2,
+        "vibration": 1.32,
+        "loadPercent": 28
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 28.3,
+        "vibration": 1.3,
+        "loadPercent": 30
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 28.4,
+        "vibration": 1.31,
+        "loadPercent": 32
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 28.5,
+        "vibration": 1.32,
+        "loadPercent": 34
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 28.6,
+        "vibration": 1.3,
+        "loadPercent": 36
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 28.7,
+        "vibration": 1.31,
+        "loadPercent": 38
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 28.8,
+        "vibration": 1.32,
+        "loadPercent": 40
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 28.9,
+        "vibration": 1.3,
+        "loadPercent": 42
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 29.0,
+        "vibration": 1.31,
+        "loadPercent": 44
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 29.1,
+        "vibration": 1.32,
+        "loadPercent": 46
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 29.2,
+        "vibration": 1.3,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 29.3,
+        "vibration": 1.31,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 29.4,
+        "vibration": 1.32,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 29.5,
+        "vibration": 1.3,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 29.6,
+        "vibration": 1.31,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 29.7,
+        "vibration": 1.32,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 29.8,
+        "vibration": 1.3,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 29.9,
+        "vibration": 1.31,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 30.0,
+        "vibration": 1.32,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 30.1,
+        "vibration": 1.3,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 30.2,
+        "vibration": 1.31,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-008",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 30.3,
+        "vibration": 1.32,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 29.0,
+        "vibration": 1.4,
+        "loadPercent": 27
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 29.1,
+        "vibration": 1.41,
+        "loadPercent": 29
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 29.2,
+        "vibration": 1.42,
+        "loadPercent": 31
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 29.3,
+        "vibration": 1.4,
+        "loadPercent": 33
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 29.4,
+        "vibration": 1.41,
+        "loadPercent": 35
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 29.5,
+        "vibration": 1.42,
+        "loadPercent": 37
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 29.6,
+        "vibration": 1.4,
+        "loadPercent": 39
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 29.7,
+        "vibration": 1.41,
+        "loadPercent": 41
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 29.8,
+        "vibration": 1.42,
+        "loadPercent": 43
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 29.9,
+        "vibration": 1.4,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 30.0,
+        "vibration": 1.41,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 30.1,
+        "vibration": 1.42,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 30.2,
+        "vibration": 1.4,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 30.3,
+        "vibration": 1.41,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 30.4,
+        "vibration": 1.42,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 30.5,
+        "vibration": 1.4,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 30.6,
+        "vibration": 1.41,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 30.7,
+        "vibration": 1.42,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 30.8,
+        "vibration": 1.4,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 30.9,
+        "vibration": 1.41,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 31.0,
+        "vibration": 1.42,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 31.1,
+        "vibration": 1.4,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 31.2,
+        "vibration": 1.41,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-009",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 31.3,
+        "vibration": 1.42,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 30.0,
+        "vibration": 1.0,
+        "loadPercent": 30
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 30.1,
+        "vibration": 1.01,
+        "loadPercent": 32
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 30.2,
+        "vibration": 1.02,
+        "loadPercent": 34
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 30.3,
+        "vibration": 1.0,
+        "loadPercent": 36
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 30.4,
+        "vibration": 1.01,
+        "loadPercent": 38
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 30.5,
+        "vibration": 1.02,
+        "loadPercent": 40
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 30.6,
+        "vibration": 1.0,
+        "loadPercent": 42
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 30.7,
+        "vibration": 1.01,
+        "loadPercent": 44
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 30.8,
+        "vibration": 1.02,
+        "loadPercent": 46
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 30.9,
+        "vibration": 1.0,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 31.0,
+        "vibration": 1.01,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 31.1,
+        "vibration": 1.02,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 31.2,
+        "vibration": 1.0,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 31.3,
+        "vibration": 1.01,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 31.4,
+        "vibration": 1.02,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 31.5,
+        "vibration": 1.0,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 31.6,
+        "vibration": 1.01,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 31.7,
+        "vibration": 1.02,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 31.8,
+        "vibration": 1.0,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 31.9,
+        "vibration": 1.01,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 32.0,
+        "vibration": 1.02,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 32.1,
+        "vibration": 1.0,
+        "loadPercent": 72
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 32.2,
+        "vibration": 1.01,
+        "loadPercent": 74
+      },
+      {
+        "device": "DEV-010",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 32.3,
+        "vibration": 1.02,
+        "loadPercent": 76
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 31.0,
+        "vibration": 1.1,
+        "loadPercent": 33
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 31.1,
+        "vibration": 1.11,
+        "loadPercent": 35
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 31.2,
+        "vibration": 1.12,
+        "loadPercent": 37
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 31.3,
+        "vibration": 1.1,
+        "loadPercent": 39
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 31.4,
+        "vibration": 1.11,
+        "loadPercent": 41
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 31.5,
+        "vibration": 1.12,
+        "loadPercent": 43
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 31.6,
+        "vibration": 1.1,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 31.7,
+        "vibration": 1.11,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 31.8,
+        "vibration": 1.12,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 31.9,
+        "vibration": 1.1,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 32.0,
+        "vibration": 1.11,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 32.1,
+        "vibration": 1.12,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 32.2,
+        "vibration": 1.1,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 32.3,
+        "vibration": 1.11,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 32.4,
+        "vibration": 1.12,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 32.5,
+        "vibration": 1.1,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 32.6,
+        "vibration": 1.11,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 32.7,
+        "vibration": 1.12,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 32.8,
+        "vibration": 1.1,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 32.9,
+        "vibration": 1.11,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 33.0,
+        "vibration": 1.12,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 33.1,
+        "vibration": 1.1,
+        "loadPercent": 75
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 33.2,
+        "vibration": 1.11,
+        "loadPercent": 77
+      },
+      {
+        "device": "DEV-011",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 33.3,
+        "vibration": 1.12,
+        "loadPercent": 79
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 32.0,
+        "vibration": 1.2,
+        "loadPercent": 36
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 32.1,
+        "vibration": 1.21,
+        "loadPercent": 38
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 32.2,
+        "vibration": 1.22,
+        "loadPercent": 40
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 32.3,
+        "vibration": 1.2,
+        "loadPercent": 42
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 32.4,
+        "vibration": 1.21,
+        "loadPercent": 44
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 32.5,
+        "vibration": 1.22,
+        "loadPercent": 46
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 32.6,
+        "vibration": 1.2,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 32.7,
+        "vibration": 1.21,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 32.8,
+        "vibration": 1.22,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 32.9,
+        "vibration": 1.2,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 33.0,
+        "vibration": 1.21,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 33.1,
+        "vibration": 1.22,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 33.2,
+        "vibration": 1.2,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 33.3,
+        "vibration": 1.21,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 33.4,
+        "vibration": 1.22,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 33.5,
+        "vibration": 1.2,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 33.6,
+        "vibration": 1.21,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 33.7,
+        "vibration": 1.22,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 33.8,
+        "vibration": 1.2,
+        "loadPercent": 72
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 33.9,
+        "vibration": 1.21,
+        "loadPercent": 74
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 34.0,
+        "vibration": 1.22,
+        "loadPercent": 76
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 34.1,
+        "vibration": 1.2,
+        "loadPercent": 78
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 34.2,
+        "vibration": 1.21,
+        "loadPercent": 80
+      },
+      {
+        "device": "DEV-012",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 34.3,
+        "vibration": 1.22,
+        "loadPercent": 82
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 33.0,
+        "vibration": 1.3,
+        "loadPercent": 39
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 33.1,
+        "vibration": 1.31,
+        "loadPercent": 41
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 33.2,
+        "vibration": 1.32,
+        "loadPercent": 43
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 33.3,
+        "vibration": 1.3,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 33.4,
+        "vibration": 1.31,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 33.5,
+        "vibration": 1.32,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 33.6,
+        "vibration": 1.3,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 33.7,
+        "vibration": 1.31,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 33.8,
+        "vibration": 1.32,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 33.9,
+        "vibration": 1.3,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 34.0,
+        "vibration": 1.31,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 34.1,
+        "vibration": 1.32,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 34.2,
+        "vibration": 1.3,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 34.3,
+        "vibration": 1.31,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 34.4,
+        "vibration": 1.32,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 34.5,
+        "vibration": 1.3,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 34.6,
+        "vibration": 1.31,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 34.7,
+        "vibration": 1.32,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 34.8,
+        "vibration": 1.3,
+        "loadPercent": 75
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 34.9,
+        "vibration": 1.31,
+        "loadPercent": 77
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 35.0,
+        "vibration": 1.32,
+        "loadPercent": 79
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 35.1,
+        "vibration": 1.3,
+        "loadPercent": 81
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 35.2,
+        "vibration": 1.31,
+        "loadPercent": 83
+      },
+      {
+        "device": "DEV-013",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 35.3,
+        "vibration": 1.32,
+        "loadPercent": 85
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 34.0,
+        "vibration": 1.4,
+        "loadPercent": 42
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 34.1,
+        "vibration": 1.41,
+        "loadPercent": 44
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 34.2,
+        "vibration": 1.42,
+        "loadPercent": 46
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 34.3,
+        "vibration": 1.4,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 34.4,
+        "vibration": 1.41,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 34.5,
+        "vibration": 1.42,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 34.6,
+        "vibration": 1.4,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 34.7,
+        "vibration": 1.41,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 34.8,
+        "vibration": 1.42,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 34.9,
+        "vibration": 1.4,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 35.0,
+        "vibration": 1.41,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 35.1,
+        "vibration": 1.42,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 35.2,
+        "vibration": 1.4,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 35.3,
+        "vibration": 1.41,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 35.4,
+        "vibration": 1.42,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 35.5,
+        "vibration": 1.4,
+        "loadPercent": 72
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 35.6,
+        "vibration": 1.41,
+        "loadPercent": 74
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 35.7,
+        "vibration": 1.42,
+        "loadPercent": 76
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 35.8,
+        "vibration": 1.4,
+        "loadPercent": 78
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 35.9,
+        "vibration": 1.41,
+        "loadPercent": 80
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 36.0,
+        "vibration": 1.42,
+        "loadPercent": 82
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 36.1,
+        "vibration": 1.4,
+        "loadPercent": 84
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 36.2,
+        "vibration": 1.41,
+        "loadPercent": 86
+      },
+      {
+        "device": "DEV-014",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 36.3,
+        "vibration": 1.42,
+        "loadPercent": 88
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 35.0,
+        "vibration": 1.0,
+        "loadPercent": 45
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 35.1,
+        "vibration": 1.01,
+        "loadPercent": 47
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 35.2,
+        "vibration": 1.02,
+        "loadPercent": 49
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 35.3,
+        "vibration": 1.0,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 35.4,
+        "vibration": 1.01,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 35.5,
+        "vibration": 1.02,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 35.6,
+        "vibration": 1.0,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 35.7,
+        "vibration": 1.01,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 35.8,
+        "vibration": 1.02,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 35.9,
+        "vibration": 1.0,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 36.0,
+        "vibration": 1.01,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 36.1,
+        "vibration": 1.02,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 36.2,
+        "vibration": 1.0,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 36.3,
+        "vibration": 1.01,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 36.4,
+        "vibration": 1.02,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 36.5,
+        "vibration": 1.0,
+        "loadPercent": 75
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 36.6,
+        "vibration": 1.01,
+        "loadPercent": 77
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 36.7,
+        "vibration": 1.02,
+        "loadPercent": 79
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 36.8,
+        "vibration": 1.0,
+        "loadPercent": 81
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 36.9,
+        "vibration": 1.01,
+        "loadPercent": 83
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 37.0,
+        "vibration": 1.02,
+        "loadPercent": 85
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 37.1,
+        "vibration": 1.0,
+        "loadPercent": 87
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 37.2,
+        "vibration": 1.01,
+        "loadPercent": 89
+      },
+      {
+        "device": "DEV-015",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 37.3,
+        "vibration": 1.02,
+        "loadPercent": 91
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 36.0,
+        "vibration": 1.1,
+        "loadPercent": 48
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 36.1,
+        "vibration": 1.11,
+        "loadPercent": 50
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 36.2,
+        "vibration": 1.12,
+        "loadPercent": 52
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 36.3,
+        "vibration": 1.1,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 36.4,
+        "vibration": 1.11,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 36.5,
+        "vibration": 1.12,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 36.6,
+        "vibration": 1.1,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 36.7,
+        "vibration": 1.11,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 36.8,
+        "vibration": 1.12,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 36.9,
+        "vibration": 1.1,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 37.0,
+        "vibration": 1.11,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 37.1,
+        "vibration": 1.12,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 37.2,
+        "vibration": 1.1,
+        "loadPercent": 72
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 37.3,
+        "vibration": 1.11,
+        "loadPercent": 74
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 37.4,
+        "vibration": 1.12,
+        "loadPercent": 76
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 37.5,
+        "vibration": 1.1,
+        "loadPercent": 78
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 37.6,
+        "vibration": 1.11,
+        "loadPercent": 80
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 37.7,
+        "vibration": 1.12,
+        "loadPercent": 82
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 37.8,
+        "vibration": 1.1,
+        "loadPercent": 84
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 37.9,
+        "vibration": 1.11,
+        "loadPercent": 86
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 38.0,
+        "vibration": 1.12,
+        "loadPercent": 88
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 38.1,
+        "vibration": 1.1,
+        "loadPercent": 90
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 38.2,
+        "vibration": 1.11,
+        "loadPercent": 92
+      },
+      {
+        "device": "DEV-016",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 38.3,
+        "vibration": 1.12,
+        "loadPercent": 94
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 37.0,
+        "vibration": 1.2,
+        "loadPercent": 51
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 37.1,
+        "vibration": 1.21,
+        "loadPercent": 53
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 37.2,
+        "vibration": 1.22,
+        "loadPercent": 55
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 37.3,
+        "vibration": 1.2,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 37.4,
+        "vibration": 1.21,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 37.5,
+        "vibration": 1.22,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 37.6,
+        "vibration": 1.2,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 37.7,
+        "vibration": 1.21,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 37.8,
+        "vibration": 1.22,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 37.9,
+        "vibration": 1.2,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 38.0,
+        "vibration": 1.21,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 38.1,
+        "vibration": 1.22,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 38.2,
+        "vibration": 1.2,
+        "loadPercent": 75
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 38.3,
+        "vibration": 1.21,
+        "loadPercent": 77
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 38.4,
+        "vibration": 1.22,
+        "loadPercent": 79
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 38.5,
+        "vibration": 1.2,
+        "loadPercent": 81
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 38.6,
+        "vibration": 1.21,
+        "loadPercent": 83
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 38.7,
+        "vibration": 1.22,
+        "loadPercent": 85
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 38.8,
+        "vibration": 1.2,
+        "loadPercent": 87
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 38.9,
+        "vibration": 1.21,
+        "loadPercent": 89
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 39.0,
+        "vibration": 1.22,
+        "loadPercent": 91
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 39.1,
+        "vibration": 1.2,
+        "loadPercent": 93
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 39.2,
+        "vibration": 1.21,
+        "loadPercent": 95
+      },
+      {
+        "device": "DEV-017",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 39.3,
+        "vibration": 1.22,
+        "loadPercent": 97
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 38.0,
+        "vibration": 1.3,
+        "loadPercent": 54
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 38.1,
+        "vibration": 1.31,
+        "loadPercent": 56
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 38.2,
+        "vibration": 1.32,
+        "loadPercent": 58
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 38.3,
+        "vibration": 1.3,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 38.4,
+        "vibration": 1.31,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 38.5,
+        "vibration": 1.32,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 38.6,
+        "vibration": 1.3,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 38.7,
+        "vibration": 1.31,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 38.8,
+        "vibration": 1.32,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 38.9,
+        "vibration": 1.3,
+        "loadPercent": 72
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 39.0,
+        "vibration": 1.31,
+        "loadPercent": 74
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 39.1,
+        "vibration": 1.32,
+        "loadPercent": 76
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T00:00:00Z",
+        "temperature": 39.2,
+        "vibration": 1.3,
+        "loadPercent": 78
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T01:00:00Z",
+        "temperature": 39.3,
+        "vibration": 1.31,
+        "loadPercent": 80
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T02:00:00Z",
+        "temperature": 39.4,
+        "vibration": 1.32,
+        "loadPercent": 82
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T03:00:00Z",
+        "temperature": 39.5,
+        "vibration": 1.3,
+        "loadPercent": 84
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T04:00:00Z",
+        "temperature": 39.6,
+        "vibration": 1.31,
+        "loadPercent": 86
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T05:00:00Z",
+        "temperature": 39.7,
+        "vibration": 1.32,
+        "loadPercent": 88
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T06:00:00Z",
+        "temperature": 39.8,
+        "vibration": 1.3,
+        "loadPercent": 90
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T07:00:00Z",
+        "temperature": 39.9,
+        "vibration": 1.31,
+        "loadPercent": 92
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T08:00:00Z",
+        "temperature": 40.0,
+        "vibration": 1.32,
+        "loadPercent": 94
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T09:00:00Z",
+        "temperature": 40.1,
+        "vibration": 1.3,
+        "loadPercent": 96
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T10:00:00Z",
+        "temperature": 40.2,
+        "vibration": 1.31,
+        "loadPercent": 98
+      },
+      {
+        "device": "DEV-018",
+        "sampledAt": "2026-10-14T11:00:00Z",
+        "temperature": 40.3,
+        "vibration": 1.32,
+        "loadPercent": 100
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 39.0,
+        "vibration": 1.4,
+        "loadPercent": 57
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 39.1,
+        "vibration": 1.41,
+        "loadPercent": 59
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 39.2,
+        "vibration": 1.42,
+        "loadPercent": 61
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 39.3,
+        "vibration": 1.4,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 39.4,
+        "vibration": 1.41,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 39.5,
+        "vibration": 1.42,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 39.6,
+        "vibration": 1.4,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 39.7,
+        "vibration": 1.41,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 39.8,
+        "vibration": 1.42,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 39.9,
+        "vibration": 1.4,
+        "loadPercent": 75
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 40.0,
+        "vibration": 1.41,
+        "loadPercent": 77
+      },
+      {
+        "device": "DEV-019",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 40.1,
+        "vibration": 1.42,
+        "loadPercent": 79
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 40.0,
+        "vibration": 1.0,
+        "loadPercent": 60
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 40.1,
+        "vibration": 1.01,
+        "loadPercent": 62
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 40.2,
+        "vibration": 1.02,
+        "loadPercent": 64
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 40.3,
+        "vibration": 1.0,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 40.4,
+        "vibration": 1.01,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 40.5,
+        "vibration": 1.02,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 40.6,
+        "vibration": 1.0,
+        "loadPercent": 72
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 40.7,
+        "vibration": 1.01,
+        "loadPercent": 74
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 40.8,
+        "vibration": 1.02,
+        "loadPercent": 76
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 40.9,
+        "vibration": 1.0,
+        "loadPercent": 78
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 41.0,
+        "vibration": 1.01,
+        "loadPercent": 80
+      },
+      {
+        "device": "DEV-020",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 41.1,
+        "vibration": 1.02,
+        "loadPercent": 82
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 41.0,
+        "vibration": 1.1,
+        "loadPercent": 63
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 41.1,
+        "vibration": 1.11,
+        "loadPercent": 65
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 41.2,
+        "vibration": 1.12,
+        "loadPercent": 67
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 41.3,
+        "vibration": 1.1,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 41.4,
+        "vibration": 1.11,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 41.5,
+        "vibration": 1.12,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 41.6,
+        "vibration": 1.1,
+        "loadPercent": 75
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 41.7,
+        "vibration": 1.11,
+        "loadPercent": 77
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 41.8,
+        "vibration": 1.12,
+        "loadPercent": 79
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 41.9,
+        "vibration": 1.1,
+        "loadPercent": 81
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 42.0,
+        "vibration": 1.11,
+        "loadPercent": 83
+      },
+      {
+        "device": "DEV-021",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 42.1,
+        "vibration": 1.12,
+        "loadPercent": 85
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 42.0,
+        "vibration": 1.2,
+        "loadPercent": 66
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 42.1,
+        "vibration": 1.21,
+        "loadPercent": 68
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 42.2,
+        "vibration": 1.22,
+        "loadPercent": 70
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 42.3,
+        "vibration": 1.2,
+        "loadPercent": 72
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 42.4,
+        "vibration": 1.21,
+        "loadPercent": 74
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 42.5,
+        "vibration": 1.22,
+        "loadPercent": 76
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 42.6,
+        "vibration": 1.2,
+        "loadPercent": 78
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 42.7,
+        "vibration": 1.21,
+        "loadPercent": 80
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 42.8,
+        "vibration": 1.22,
+        "loadPercent": 82
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 42.9,
+        "vibration": 1.2,
+        "loadPercent": 84
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 43.0,
+        "vibration": 1.21,
+        "loadPercent": 86
+      },
+      {
+        "device": "DEV-022",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 43.1,
+        "vibration": 1.22,
+        "loadPercent": 88
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T12:00:00Z",
+        "temperature": 43.0,
+        "vibration": 1.3,
+        "loadPercent": 69
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T13:00:00Z",
+        "temperature": 43.1,
+        "vibration": 1.31,
+        "loadPercent": 71
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T14:00:00Z",
+        "temperature": 43.2,
+        "vibration": 1.32,
+        "loadPercent": 73
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T15:00:00Z",
+        "temperature": 43.3,
+        "vibration": 1.3,
+        "loadPercent": 75
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T16:00:00Z",
+        "temperature": 43.4,
+        "vibration": 1.31,
+        "loadPercent": 77
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T17:00:00Z",
+        "temperature": 43.5,
+        "vibration": 1.32,
+        "loadPercent": 79
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T18:00:00Z",
+        "temperature": 43.6,
+        "vibration": 1.3,
+        "loadPercent": 81
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T19:00:00Z",
+        "temperature": 43.7,
+        "vibration": 1.31,
+        "loadPercent": 83
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T20:00:00Z",
+        "temperature": 43.8,
+        "vibration": 1.32,
+        "loadPercent": 85
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T21:00:00Z",
+        "temperature": 43.9,
+        "vibration": 1.3,
+        "loadPercent": 87
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T22:00:00Z",
+        "temperature": 44.0,
+        "vibration": 1.31,
+        "loadPercent": 89
+      },
+      {
+        "device": "DEV-023",
+        "sampledAt": "2026-10-13T23:00:00Z",
+        "temperature": 44.1,
+        "vibration": 1.32,
+        "loadPercent": 91
+      }
+    ],
+    "alarm": [
+      {
+        "code": "ALM-001",
+        "device": "DEV-001",
+        "title": "水泵 DEV-001 ALM-001",
+        "severity": "critical",
+        "status": "open",
+        "occurredAt": "2026-10-13T13:00:00Z",
+        "acknowledgedAt": null,
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-002",
+        "device": "DEV-002",
+        "title": "电机 DEV-002 ALM-002",
+        "severity": "critical",
+        "status": "acknowledged",
+        "occurredAt": "2026-10-13T14:00:00Z",
+        "acknowledgedAt": "2026-10-13T14:05:00Z",
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-003",
+        "device": "DEV-002",
+        "title": "电机 DEV-002 ALM-003",
+        "severity": "major",
+        "status": "open",
+        "occurredAt": "2026-10-13T15:00:00Z",
+        "acknowledgedAt": null,
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-004",
+        "device": "DEV-003",
+        "title": "风机 DEV-003 ALM-004",
+        "severity": "major",
+        "status": "open",
+        "occurredAt": "2026-10-13T16:00:00Z",
+        "acknowledgedAt": null,
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-005",
+        "device": "DEV-007",
+        "title": "水泵 DEV-007 ALM-005",
+        "severity": "major",
+        "status": "acknowledged",
+        "occurredAt": "2026-10-13T17:00:00Z",
+        "acknowledgedAt": "2026-10-13T17:05:00Z",
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-006",
+        "device": "DEV-008",
+        "title": "电机 DEV-008 ALM-006",
+        "severity": "major",
+        "status": "resolved",
+        "occurredAt": "2026-10-13T18:00:00Z",
+        "acknowledgedAt": "2026-10-13T18:05:00Z",
+        "resolvedAt": "2026-10-13T18:10:00Z",
+        "resolution": "虚构处理说明：已完成样例故障复核",
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-007",
+        "device": "DEV-012",
+        "title": "风机 DEV-012 ALM-007",
+        "severity": "minor",
+        "status": "open",
+        "occurredAt": "2026-10-13T19:00:00Z",
+        "acknowledgedAt": null,
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-008",
+        "device": "DEV-016",
+        "title": "水泵 DEV-016 ALM-008",
+        "severity": "minor",
+        "status": "open",
+        "occurredAt": "2026-10-13T20:00:00Z",
+        "acknowledgedAt": null,
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-009",
+        "device": "DEV-019",
+        "title": "水泵 DEV-019 ALM-009",
+        "severity": "minor",
+        "status": "open",
+        "occurredAt": "2026-10-13T21:00:00Z",
+        "acknowledgedAt": null,
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-010",
+        "device": "DEV-021",
+        "title": "风机 DEV-021 ALM-010",
+        "severity": "minor",
+        "status": "acknowledged",
+        "occurredAt": "2026-10-13T22:00:00Z",
+        "acknowledgedAt": "2026-10-13T22:05:00Z",
+        "resolvedAt": null,
+        "resolution": null,
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-011",
+        "device": "DEV-022",
+        "title": "水泵 DEV-022 ALM-011",
+        "severity": "minor",
+        "status": "resolved",
+        "occurredAt": "2026-10-13T23:00:00Z",
+        "acknowledgedAt": "2026-10-13T23:05:00Z",
+        "resolvedAt": "2026-10-13T23:10:00Z",
+        "resolution": "虚构处理说明：已完成样例故障复核",
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      },
+      {
+        "code": "ALM-012",
+        "device": "DEV-023",
+        "title": "电机 DEV-023 ALM-012",
+        "severity": "minor",
+        "status": "resolved",
+        "occurredAt": "2026-10-14T00:00:00Z",
+        "acknowledgedAt": "2026-10-14T00:05:00Z",
+        "resolvedAt": "2026-10-14T00:10:00Z",
+        "resolution": "虚构处理说明：已完成样例故障复核",
+        "description": "虚构告警；主体由获准初始化 owner 注入，不伪造真实人员"
+      }
+    ],
+    "maintenance": [
+      {
+        "code": "MNT-001",
+        "device": "DEV-001",
+        "kind": "inspection",
+        "performedAt": "2026-10-06T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 001",
+        "cost": 0,
+        "notes": "仅用于独立私有实例验收"
+      },
+      {
+        "code": "MNT-002",
+        "device": "DEV-001",
+        "kind": "service",
+        "performedAt": "2026-10-07T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 002",
+        "cost": null,
+        "notes": "仅用于独立私有实例验收"
+      },
+      {
+        "code": "MNT-003",
+        "device": "DEV-002",
+        "kind": "inspection",
+        "performedAt": "2026-10-08T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 003",
+        "cost": 300,
+        "notes": "仅用于独立私有实例验收"
+      },
+      {
+        "code": "MNT-004",
+        "device": "DEV-003",
+        "kind": "repair",
+        "performedAt": "2026-10-09T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 004",
+        "cost": 400,
+        "notes": "仅用于独立私有实例验收"
+      },
+      {
+        "code": "MNT-005",
+        "device": "DEV-007",
+        "kind": "service",
+        "performedAt": "2026-10-10T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 005",
+        "cost": 500,
+        "notes": "仅用于独立私有实例验收"
+      },
+      {
+        "code": "MNT-006",
+        "device": "DEV-007",
+        "kind": "inspection",
+        "performedAt": "2026-10-11T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 006",
+        "cost": 600,
+        "notes": "仅用于独立私有实例验收"
+      },
+      {
+        "code": "MNT-007",
+        "device": "DEV-021",
+        "kind": "repair",
+        "performedAt": "2026-10-12T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 007",
+        "cost": 700,
+        "notes": "仅用于独立私有实例验收"
+      },
+      {
+        "code": "MNT-008",
+        "device": "DEV-023",
+        "kind": "service",
+        "performedAt": "2026-10-13T12:00:00Z",
+        "technician": "模拟维护员",
+        "summary": "虚构维护记录 008",
+        "cost": 800,
+        "notes": "仅用于独立私有实例验收"
+      }
+    ]
+  }
+}

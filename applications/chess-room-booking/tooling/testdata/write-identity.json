@@ -1,0 +1,12 @@
+{
+  "identity": {
+    "deploymentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifactDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "namespace": "panel",
+    "runtimeApplicationUuid": "fixture-runtime",
+    "installationId": 9007199254740993,
+    "generation": 1,
+    "executionEpoch": 1
+  },
+  "operationId": "cccccccccccccccccccccccccccccccc"
+}

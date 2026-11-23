@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "magic.device-fixture-manifest/v1",
+  "synthetic": true,
+  "files": {
+    "A.json": {
+      "size": 106113,
+      "digest": "sha256:18897b2a70c9f8317b7eadcf647a0a8ce42b028154bca3648ac0b35dcdf2cfdb"
+    },
+    "B.json": {
+      "size": 3209,
+      "digest": "sha256:192607d2a865cde9040804624d5a1a2209d631387e92c435bff65f2f98786d9b"
+    },
+    "C.json": {
+      "size": 2155,
+      "digest": "sha256:7261c3cd01e9bd19cd19fffaf5f4f5195260f5510813aae60be34340f851a8c1"
+    }
+  },
+  "initialization": "not-run",
+  "live": "not-run"
+}

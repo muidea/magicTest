@@ -1,0 +1,334 @@
+package modelpackage
+
+import (
+	"bytes"
+	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	bc "github.com/muidea/magicBase/pkg/common"
+	panelcommon "github.com/muidea/magicRunner/internal/modules/kernel/panel/pkg/common"
+)
+
+// Export an explicitly unsupported page-contract candidate, without changing
+// admission or adding documentation/source archives to the model ZIP.
+func TestExportDeviceManagementDefinitionCandidate(t *testing.T) {
+	input, pageInput, output := os.Getenv("DEVICE_CANDIDATE_SOURCE"), os.Getenv("DEVICE_PAGE_SOURCE"), os.Getenv("DEVICE_CANDIDATE_OUTPUT")
+	if input == "" || pageInput == "" || output == "" {
+		t.Fatal("model source, page source and output are required")
+	}
+	payload, err := os.ReadFile(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encode := func(value any) []byte {
+		t.Helper()
+		data, err := marshalCanonical(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return data
+	}
+	// Page definitions are independent of application/entity definitions.
+	pages, err := os.ReadFile(pageInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pageWire map[string]json.RawMessage
+	if err := json.Unmarshal(pages, &pageWire); err != nil {
+		t.Fatal(err)
+	}
+	pages = encode(pageWire)
+	var pageHeader struct {
+		SchemaVersion   string            `json:"schemaVersion"`
+		ApplicationKey  string            `json:"applicationKey"`
+		ApplicationUUID string            `json:"applicationUuid"`
+		ModelRevision   int64             `json:"modelRevision"`
+		Pages           []json.RawMessage `json:"pages"`
+		Sources         []json.RawMessage `json:"dataSources"`
+	}
+	if err := json.Unmarshal(pages, &pageHeader); err != nil {
+		t.Fatal(err)
+	}
+	if pageHeader.SchemaVersion != "magic.application-ui/v1" || len(pageHeader.Pages) != 10 || len(pageHeader.Sources) != 11 {
+		t.Fatal("incomplete page contract")
+	}
+	source := &panelcommon.ApplicationModelArtifact{}
+	if err := decodeStrict(payload, source); err != nil {
+		t.Fatalf("independent application/entity source must decode: %v", err)
+	}
+	if source.Application.UIMeta != nil || pageHeader.ApplicationKey != source.ApplicationKey || pageHeader.ApplicationUUID != source.ApplicationUUID || pageHeader.ModelRevision != source.Version {
+		t.Fatal("page source is not separated or is bound to another model")
+	}
+	artifact, err := clonePortableArtifact(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifact.ApplicationKey != "device-management" || len(artifact.Entities) != 6 {
+		t.Fatal("unexpected model identity")
+	}
+	fields := 0
+	for _, entity := range artifact.Entities {
+		if err := bc.ValidateEntityConstraints(&entity.Object); err != nil {
+			t.Fatal(err)
+		}
+		if err := entity.Object.Verify(); err != nil {
+			t.Fatal(err)
+		}
+		fields += len(entity.Fields)
+	}
+	if fields != 57 {
+		t.Fatal("unexpected field count")
+	}
+	_, baseBuildErr := Build(artifact)
+	const expectedRelationError = "code:4, message:实体关联存在循环依赖，请使用单向关联或中间实体"
+	if baseBuildErr == nil || baseBuildErr.Error() != expectedRelationError {
+		t.Fatalf("relation admission changed: %v", baseBuildErr)
+	}
+	blockFiles, blockDigests, blockCount, sourceCount, multiFileCount := collectCandidateFunctionBlocks(t, os.Getenv("DEVICE_BLOCK_SOURCE"), artifact)
+	blockJSON := encode(blockDigests)
+	applicationJSON := encode(artifact.Application)
+	modelInput := struct {
+		RuntimeType    string                              `json:"runtimeType"`
+		Application    json.RawMessage                     `json:"application"`
+		Entities       []*panelcommon.EntityDefinitionView `json:"entities"`
+		Pages          json.RawMessage                     `json:"pages"`
+		FunctionBlocks json.RawMessage                     `json:"functionBlocks"`
+	}{artifact.RuntimeType, applicationJSON, artifact.Entities, pages, blockJSON}
+	modelDigest := digest(encode(&modelInput))
+	artifact.ArtifactDigest = modelDigest
+	const candidateApplicationPath = "application/metadata.json"
+	manifest := &Manifest{
+		APIVersion: APIVersion, Kind: Kind, RuntimeType: artifact.RuntimeType,
+		Application:   &ApplicationIdentity{UUID: artifact.ApplicationUUID, Key: artifact.ApplicationKey, DisplayName: artifact.Application.ShowName, Version: artifact.Application.Version, ModelRevision: artifact.Version},
+		Compatibility: &Compatibility{PlatformAPI: "magic.platform/v1"},
+		Content:       &Content{Application: candidateApplicationPath, Checksums: checksumsPath, Entities: []*EntityContent{}, ModelDigest: modelDigest, ArtifactDigest: modelDigest},
+		Requirements: []*Requirement{
+			{Kind: "ui-contract", Key: "magic.application-ui", Version: "v1"},
+			{Kind: "function-block-contract", Key: "magic.application-function-blocks", Version: "v1"},
+		},
+	}
+	const pagesPath = "application/pages/definition.json"
+	files := map[string][]byte{candidateApplicationPath: applicationJSON, pagesPath: pages}
+	for name, data := range blockFiles {
+		files[name] = data
+	}
+	for _, entity := range artifact.Entities {
+		key := entityKey(entity)
+		name := "application/entities/" + path.Base(key) + ".json"
+		if filepath.Dir(name) != "application/entities" {
+			t.Fatalf("entity package member is not flat: %s", name)
+		}
+		manifest.Content.Entities = append(manifest.Content.Entities, &EntityContent{Key: key, Path: name})
+		files[name] = encode(entity)
+	}
+	// Declare the separate page entry and its digest in a candidate extension.
+	// Production v2 remains unchanged and must reject the unknown content field.
+	var manifestWire map[string]json.RawMessage
+	if err := json.Unmarshal(encode(manifest), &manifestWire); err != nil {
+		t.Fatal(err)
+	}
+	var contentWire map[string]json.RawMessage
+	if err := json.Unmarshal(manifestWire["content"], &contentWire); err != nil {
+		t.Fatal(err)
+	}
+	contentWire["pages"] = encode(pagesPath)
+	contentWire["functionBlocks"] = encode("application/blocks/index.json")
+	contentWire["functionBlocksDigest"] = encode(digest(blockJSON))
+	contentWire["pageDigest"] = encode(digest(pages))
+	manifestWire["content"] = encode(contentWire)
+	manifestJSON := encode(manifestWire)
+	files[manifestPath] = manifestJSON
+	// Keep editable package members readable. The ZIP and unpacked tree use the
+	// same exact bytes; semantic digests continue to use compact JSON above.
+	prettyJSON := func(data []byte) []byte {
+		t.Helper()
+		var result bytes.Buffer
+		if err := json.Indent(&result, data, "", "  "); err != nil {
+			t.Fatal(err)
+		}
+		return append(result.Bytes(), '\n')
+	}
+	for name, data := range files {
+		if _, blockFile := blockFiles[name]; !blockFile {
+			files[name] = prettyJSON(data)
+		}
+	}
+	checksums := checksumsFor(files)
+	files[checksumsPath] = prettyJSON(encode(checksums))
+	archive, err := writeArchive(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, parseErr := Parse(archive)
+	if parseErr == nil || !strings.Contains(parseErr.Error(), `unknown field "functionBlocks"`) {
+		t.Fatalf("candidate must report unsupported separate page member declaration: %v", parseErr)
+	}
+	write := func(name string, data []byte) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(output, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("device-management-0.1.0-dev.1-definition-candidate.zip", archive)
+	for name, data := range files {
+		if err := os.MkdirAll(filepath.Join(output, "unpacked", filepath.Dir(name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(filepath.Join("unpacked", name), data)
+	}
+	write("candidate.canonical-artifact.json", encode(artifact))
+	write("page-definition.canonical-artifact.json", pages)
+	packageInput := struct {
+		Manifest  json.RawMessage `json:"manifest"`
+		Checksums *Checksums      `json:"checksums"`
+	}{manifestJSON, checksums}
+	report := map[string]any{
+		"status": "blocked", "published": false, "installable": false,
+		"applicationKey": artifact.ApplicationKey, "applicationUuid": artifact.ApplicationUUID,
+		"businessVersion": artifact.Application.Version, "modelRevision": artifact.Version, "revisionOrigin": "local-candidate-not-platform-published",
+		"entityCount": len(artifact.Entities), "fieldCount": fields, "pageCount": len(pageHeader.Pages), "dataSourceCount": len(pageHeader.Sources),
+		"pageContract": pageHeader.SchemaVersion, "pageContractStatus": "separate-page-members-not-supported-by-current-runtime",
+		"parseAccepted": false, "parseError": parseErr.Error(), "modelSourceDecodeAccepted": true, "baseModelBuildError": baseBuildErr.Error(),
+		"modelDigest": modelDigest, "artifactDigest": modelDigest, "packageDigest": digest(encode(&packageInput)), "transportDigest": digest(archive),
+		"functionBlocksDigest": digest(blockJSON), "functionBlockCount": blockCount, "scriptSourceFileCount": sourceCount,
+		"multiFileFunctionBlockCount": multiFileCount, "multiFileScriptRuntimeSupported": false,
+		"functionBlockValidation": "source-syntax-and-entrypoint; single-source blocks also use current library validator; no execution",
+		"pageDigest":              digest(pages), "pageDefinitionMember": pagesPath, "applicationMetadataMember": candidateApplicationPath, "pageMetadataSeparated": true, "unpackedDefinitionIncluded": true,
+		"customPagesInModelZip": true, "pagesIncludedInModelDigest": true, "nestedArchive": false, "designDocumentsInModelZip": false,
+		"businessCommandBindingsImplemented": false, "telemetryCompositeUniquenessImplemented": false, "liveValidation": "not-run",
+	}
+	pretty, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write("validation-report.json", append(pretty, '\n'))
+	t.Logf("single model ZIP: 6 entities, 57 fields, 10 pages, 11 sources; %s", digest(archive))
+}
+
+// Multi-file source organization is a candidate package contract. Syntax and
+// entrypoint checks do not claim the current single-source interpreter can run it.
+func collectCandidateFunctionBlocks(t *testing.T, root string, artifact *panelcommon.ApplicationModelArtifact) (map[string][]byte, map[string]string, int, int, int) {
+	t.Helper()
+	if root == "" {
+		t.Fatal("function block source directory is required")
+	}
+	read := func(name string) []byte {
+		t.Helper()
+		b, e := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		if e != nil {
+			t.Fatal(e)
+		}
+		return b
+	}
+	var index struct {
+		SchemaVersion   string `json:"schemaVersion"`
+		ApplicationKey  string `json:"applicationKey"`
+		ApplicationUUID string `json:"applicationUuid"`
+		ModelRevision   int64  `json:"modelRevision"`
+		Definitions     []struct {
+			Key        string `json:"key"`
+			Definition string `json:"definition"`
+		} `json:"definitions"`
+	}
+	if err := decodeStrict(read("index.json"), &index); err != nil {
+		t.Fatal(err)
+	}
+	if index.SchemaVersion != "magic.application-function-blocks/v1" || index.ApplicationKey != artifact.ApplicationKey || index.ApplicationUUID != artifact.ApplicationUUID || index.ModelRevision != artifact.Version || index.Definitions == nil {
+		t.Fatal("invalid function block index")
+	}
+	sourceCount, multiFileCount := 0, 0
+	for _, entry := range index.Definitions {
+		var definition struct {
+			Key         string   `json:"key"`
+			Name        string   `json:"name"`
+			Description string   `json:"description,omitempty"`
+			Language    string   `json:"language"`
+			SourceFiles []string `json:"sourceFiles"`
+			Entrypoint  struct {
+				File     string `json:"file"`
+				Function string `json:"function"`
+			} `json:"entrypoint"`
+			Inputs  []*bc.ScriptParameter `json:"inputs"`
+			Outputs []*bc.ScriptParameter `json:"outputs"`
+		}
+		if err := decodeStrict(read(entry.Definition), &definition); err != nil {
+			t.Fatal(err)
+		}
+		if definition.Key != entry.Key || definition.Language != "go" || len(definition.SourceFiles) == 0 || definition.Inputs == nil || definition.Outputs == nil {
+			t.Fatal("invalid function block definition")
+		}
+		if err := bc.ValidateScriptParameterDeclarations(definition.Inputs, false); err != nil {
+			t.Fatal(err)
+		}
+		if err := bc.ValidateScriptParameterDeclarations(definition.Outputs, true); err != nil {
+			t.Fatal(err)
+		}
+		foundEntry, packageName := false, ""
+		for _, name := range definition.SourceFiles {
+			sourceCount++
+			source := read(name)
+			file, err := parser.ParseFile(token.NewFileSet(), name, source, parser.AllErrors)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if packageName != "" && packageName != file.Name.Name {
+				t.Fatal("mixed script packages in one function block")
+			}
+			packageName = file.Name.Name
+			if name == definition.Entrypoint.File {
+				for _, decl := range file.Decls {
+					if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && definition.Entrypoint.Function == file.Name.Name+"."+fn.Name.Name {
+						foundEntry = true
+					}
+				}
+			}
+		}
+		if !foundEntry {
+			t.Fatal("script entrypoint does not exist")
+		}
+		if len(definition.SourceFiles) == 1 {
+			d := &bc.ScriptBlockDefinition{Key: definition.Key, Name: definition.Name, Description: definition.Description, Script: bc.Script{ScriptContent: string(read(definition.SourceFiles[0])), FunctionName: definition.Entrypoint.Function}, Inputs: definition.Inputs, Outputs: definition.Outputs}
+			if err := panelcommon.ValidateFunctionBlockLibrary([]*bc.ScriptBlockDefinition{d}); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			multiFileCount++
+		}
+	}
+	files, digests := map[string][]byte{}, map[string]string{}
+	err := filepath.WalkDir(root, func(name string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			t.Fatal("script symlinks are not allowed")
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, e := filepath.Rel(root, name)
+		if e != nil {
+			return e
+		}
+		data, e := os.ReadFile(name)
+		if e != nil {
+			return e
+		}
+		path := "application/blocks/" + filepath.ToSlash(rel)
+		files[path] = data
+		digests[path] = digest(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files, digests, len(index.Definitions), sourceCount, multiFileCount
+}

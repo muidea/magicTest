@@ -1,0 +1,4 @@
+{
+  "fields": {"name": "水泵（模拟接入验证）"},
+  "expectedFields": {"name": "水泵"}
+}
