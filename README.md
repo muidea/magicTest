@@ -5,7 +5,7 @@ Node.js浏览器工具统一使用用户级Playwright `1.65.0`（入口为`~/.lo
 本仓库与[模型与文档源仓库 magicPlatform](~/dataspace/magicPlatform/README.md)配合即可在任意干净环境独立完成平台与双应用验证：
 
 - [验收用例目录与台账](~/codespace/magicTest/acceptance/README.md)：唯一用例目录 `platform-catalog.json`、生成视图与中断运行手册。
-- [模拟应用验证套件](~/codespace/magicTest/applications/README.md)：设备管理与棋牌室预订夹具、离线校验器、模拟器与[双应用联合 E2E](~/codespace/magicTest/applications/live_e2e/README.md)；权威模型包位于[模型应用资产目录](~/dataspace/magicPlatform/apps/models/README.md)。
+- [模拟应用验证套件](~/codespace/magicTest/applications/README.md)：设备管理与棋牌室预订夹具、离线校验器、模拟器、[跨机模拟应用冷启动](~/codespace/magicTest/applications/live_e2e/bootstrap_simulated_apps.py)、[远端模拟包导出器](~/codespace/magicTest/tools/export_remote_sim_bundle.py)与[双应用联合 E2E](~/codespace/magicTest/applications/live_e2e/README.md)；权威模型包位于[模型应用资产目录](~/dataspace/magicPlatform/apps/models/README.md)，跨机流程见[跨机器部署与验证操作指南](~/dataspace/magicPlatform/docs/technical/cross-machine-deployment-and-verification-guide.md)。
 - [本地验收报告目录](~/codespace/magicTest/reports/README.md)：默认输出目录（本地报告不提交 Git，全量回归前自动清理旧轮次）。
 
 平台基本功能以交付可重复执行的完整场景、逐条用例及配套脚本为目标，统一要求见[平台全量功能回归说明](~/dataspace/magicPlatform/docs/technical/platform-functional-regression.md)，两个模拟应用单列。正式回归材料只描述当前功能、环境准备、操作断言、清理和执行方式，不包含过去的临时阶段记录。

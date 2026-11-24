@@ -10,9 +10,30 @@
 python3 -B ~/codespace/magicTest/applications/live_e2e/run_dual_apps_e2e.py --dry-run
 ```
 
-## 2. 新环境部署后在线验证
+## 2. 新环境部署后一键冷启动（导入、开通订阅与造数）
 
-1. 在新部署环境的 Panel 分别导入并安装设备管理官方包[设备管理正式包](~/dataspace/magicPlatform/apps/models/device-management/package/package.zip)与棋牌室预订官方包[棋牌室预订正式包](~/dataspace/magicPlatform/apps/models/chess-room-booking/package/package.zip)，按各自设计配置对应 Gateway 订阅与 CAS 角色绑定。
+新环境通过 `deployment-health.sh` 就绪后，可使用 [bootstrap_simulated_apps.py](~/codespace/magicTest/applications/live_e2e/bootstrap_simulated_apps.py) 一次性或分步完成官方包导入安装、Portal 订阅与 API Key 开通、棋牌室最小权限账号与 PKCE Action Token 签发、双模拟器造数及只读回读校验：
+
+```bash
+# 离线检查与执行计划预览
+python3 -B ~/codespace/magicTest/applications/live_e2e/bootstrap_simulated_apps.py \
+  all --base-url https://panel.local.vpc --state-dir ~/.local/state/magic-sim --dry-run
+
+# 全流程冷启动（已有 ready 实例时必须显式传 --reuse-existing）
+python3 -B ~/codespace/magicTest/applications/live_e2e/bootstrap_simulated_apps.py \
+  all \
+  --base-url https://panel.local.vpc \
+  --admin-password-file ~/.config/magic-sim/admin-password \
+  --ca-file ~/dataspace/magicPlatform/services/secret/tls/tls.crt --trust-leaf \
+  --state-dir ~/.local/state/magic-sim \
+  --reuse-existing
+```
+
+跨机器免完整源码携带模型与模拟器工具时，可通过 [export_remote_sim_bundle.py](~/codespace/magicTest/tools/export_remote_sim_bundle.py) 导出只读运行包；全流程操作规范与常见 Live 陷阱见[跨机器部署与验证操作指南](~/dataspace/magicPlatform/docs/technical/cross-machine-deployment-and-verification-guide.md)。
+
+## 3. 新环境部署后联合 Live E2E
+
+1. 在新部署环境的 Panel 分别导入并安装设备管理官方包[设备管理正式包](~/dataspace/magicPlatform/apps/models/device-management/package/package.zip)与棋牌室预订官方包[棋牌室预订正式包](~/dataspace/magicPlatform/apps/models/chess-room-booking/package/package.zip)，按各自设计配置对应 Gateway 订阅与 CAS 角色绑定（或直接执行上方 `bootstrap_simulated_apps.py`）。
 2. 先通过[设备管理模拟器](~/codespace/magicTest/applications/device-management/tooling/simulator.py)初始化只写 ApiKey 的运行配置，并按本机 `0600` 文件准备棋牌室 ApiKey 与 Apps Bearer token。
 3. 执行联合 Live E2E：
 
@@ -27,10 +48,11 @@ python3 -B ~/codespace/magicTest/applications/live_e2e/run_dual_apps_e2e.py \
   --ca-file ~/dataspace/magicPlatform/services/secret/tls/tls.crt --trust-leaf
 ```
 
-## 3. 相关说明
+## 4. 相关说明
 
 - [设备管理验证套件](~/codespace/magicTest/applications/device-management/README.md)
 - [棋牌室预订验证套件](~/codespace/magicTest/applications/chess-room-booking/README.md)
+- [跨机器部署与验证操作指南](~/dataspace/magicPlatform/docs/technical/cross-machine-deployment-and-verification-guide.md)
 - [测试目录与运行目录说明](~/codespace/magicTest/reports/README.md)
 
 [返回模拟应用目录](~/codespace/magicTest/applications/README.md)
