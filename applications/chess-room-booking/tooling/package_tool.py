@@ -48,6 +48,9 @@ def validate_source(root=MODEL_ROOT):
             read_json(path)
     profile = read_json(root / 'definition/profile.json')
     app = read_json(base / 'metadata.json')
+    catalog = str(app.get('catalog', '')).strip()
+    if not catalog or catalog.lower() == 'inner':
+        raise ValueError('application catalog must be non-empty and not inner')
     pages = read_json(base / 'pages/definition.json')
     blocks = read_json(base / 'blocks/index.json')
     identity = (app['name'], app['uuid'], profile['modelRevision'])

@@ -266,6 +266,18 @@ class PackageSafetyTests(unittest.TestCase):
             self.assertEqual(item['expectedValues']['actorSubject'], sample_updated_by[item['sourceKey']])
             self.assertEqual(item['expectedValues']['actorSubject'], 'simulator:live-stream')
 
+    def test_empty_or_reserved_catalog_is_rejected(self):
+        for bad in ('', '  ', 'inner', 'INNER'):
+            with self.subTest(catalog=bad), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                shutil.copytree(package.MODEL_ROOT / 'definition', root / 'definition')
+                meta_path = root / 'definition/application/metadata.json'
+                meta = package.read_json(meta_path)
+                meta['catalog'] = bad
+                meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+                with self.assertRaisesRegex(ValueError, 'catalog'):
+                    package.validate_source(root)
+
 
 if __name__ == '__main__':
     unittest.main()

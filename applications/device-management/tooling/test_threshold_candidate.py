@@ -68,6 +68,21 @@ class ThresholdDraftBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'no injected alarms'):
             validate(self.root)
 
+    def test_rejects_empty_or_reserved_catalog(self):
+        for bad in ('', '  ', 'inner', 'INNER'):
+            with self.subTest(catalog=bad):
+                tmp = tempfile.TemporaryDirectory(prefix='threshold-catalog-test-')
+                self.addCleanup(tmp.cleanup)
+                root = Path(tmp.name)
+                shutil.copytree(self.root / 'definition', root / 'definition')
+                shutil.copytree(self.root / 'fixtures', root / 'fixtures')
+                path = root / 'definition/candidate.artifact.json'
+                data = json.loads(path.read_text())
+                data['application']['catalog'] = bad
+                path.write_text(json.dumps(data))
+                with self.assertRaisesRegex(ValueError, 'catalog'):
+                    validate(root)
+
     def test_legacy_export_cli_refuses_before_changing_packages(self):
         package_root = MODEL_ROOT / 'package'
         before = {p: p.read_bytes() for p in package_root.rglob('*') if p.is_file()}

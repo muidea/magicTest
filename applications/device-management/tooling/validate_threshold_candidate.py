@@ -22,6 +22,9 @@ def validate(definition_root, fixture_root=None):
     read = lambda name: json.loads((definition_root / name).read_text())
     read_fixture = lambda name: json.loads((fixture_root / name).read_text())
     artifact = read('definition/candidate.artifact.json')
+    catalog = str(artifact.get('application', {}).get('catalog', '')).strip()
+    if not catalog or catalog.lower() == 'inner':
+        raise ValueError('application catalog must be non-empty and not inner')
     plan = read('definition/threshold-execution.design.json')
     fixture = read_fixture('fixtures/threshold-v3/cases.json')
     bootstrap = read_fixture('fixtures/threshold-v3/bootstrap.json')
