@@ -206,7 +206,7 @@ async function imageInventory(h) {
     const compose = [];
     for (const [directory, env] of pairs) for (const file of walk(path.join(r.config.platformRoot, directory)).filter(v => v.endsWith('/docker-compose.yaml'))) {
       const envFile = path.join(r.config.platformRoot, env);
-      if (fs.existsSync(envFile)) compose.push(...references(execFileSync('docker-compose', ['--env-file', envFile, '-f', file, 'config', '--images'], opts), true));
+      if (fs.existsSync(envFile)) compose.push(...references(execFileSync('docker', ['compose', '--env-file', envFile, '-f', file, 'config', '--images'], opts), true));
     }
     assertInventory(actual, compose, nativeImages);
     const resolved = actual.map(reference => {
