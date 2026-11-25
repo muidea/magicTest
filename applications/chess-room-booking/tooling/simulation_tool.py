@@ -4,6 +4,7 @@ import argparse
 import base64
 import fcntl
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -137,6 +138,31 @@ def _tls_context(ca_file=None, trust_leaf=False):
     return context
 
 
+def _make_https_handler(context):
+    target = (os.environ.get('MAGICTEST_TARGET_ADDRESS') or '').strip()
+    if not target:
+        return HTTPSHandler(context=context)
+
+    class _TargetHTTPSHandler(HTTPSHandler):
+        def https_open(self, req):
+            class _SniConn(http.client.HTTPSConnection):
+                def __init__(self, host, port=None, **kwargs):
+                    parsed = urlsplit(f'https://{host}')
+                    self._sni_host = parsed.hostname or host
+                    super().__init__(target, port=parsed.port or port or 443, **kwargs)
+
+                def connect(self):
+                    sock = self._create_connection((self.host, self.port), self.timeout, self.source_address)
+                    if self._tunnel_host:
+                        self.sock = sock
+                        self._tunnel()
+                    self.sock = self._context.wrap_socket(sock, server_hostname=self._sni_host)
+
+            return self.do_open(_SniConn, req, context=self._context)
+
+    return _TargetHTTPSHandler(context=context)
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *_args, **_kwargs):
         raise Failure('Gateway redirect refused')
@@ -145,7 +171,7 @@ class NoRedirect(HTTPRedirectHandler):
 class Gateway:
     def __init__(self, url, key, ca_file=None, trust_leaf=False):
         self.url, self.key = endpoint(url), key
-        self.opener = build_opener(NoRedirect(), HTTPSHandler(context=_tls_context(ca_file, trust_leaf)))
+        self.opener = build_opener(NoRedirect(), _make_https_handler(_tls_context(ca_file, trust_leaf)))
         self.requests, self.last = 0, 0.0
 
     def call(self, entity, operation, value_id=None, fields=None, query=None):
@@ -219,7 +245,7 @@ class ActionClient:
         self.url = action_endpoint(url)
         self.token = token
         self.application_key = application_key
-        self.opener = build_opener(NoRedirect(), HTTPSHandler(context=_tls_context(ca_file, trust_leaf)))
+        self.opener = build_opener(NoRedirect(), _make_https_handler(_tls_context(ca_file, trust_leaf)))
         self.requests, self.last = 0, 0.0
 
     def execute(self, scope, entity, action, record_id, expected_version, operation_id, fields=None):

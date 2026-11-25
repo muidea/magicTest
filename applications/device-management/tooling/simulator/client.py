@@ -1,8 +1,10 @@
 """Bounded HTTPS Gateway client using only a subscription ApiKey."""
+import http.client
+import os
 import ssl
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 from .common import Failure, OPERATIONS, dumps, gateway_result, home_path, identity, require, secret, strict_json
 from .config import endpoint
@@ -19,6 +21,31 @@ class RemoteFailure(Failure):
         super().__init__(f'Gateway request failed (HTTP {status}, business code {code}); response body withheld')
 
 
+def _make_https_handler(context):
+    target = (os.environ.get('MAGICTEST_TARGET_ADDRESS') or '').strip()
+    if not target:
+        return HTTPSHandler(context=context)
+
+    class _TargetHTTPSHandler(HTTPSHandler):
+        def https_open(self, req):
+            class _SniConn(http.client.HTTPSConnection):
+                def __init__(self, host, port=None, **kwargs):
+                    parsed = urlsplit(f'https://{host}')
+                    self._sni_host = parsed.hostname or host
+                    super().__init__(target, port=parsed.port or port or 443, **kwargs)
+
+                def connect(self):
+                    sock = self._create_connection((self.host, self.port), self.timeout, self.source_address)
+                    if self._tunnel_host:
+                        self.sock = sock
+                        self._tunnel()
+                    self.sock = self._context.wrap_socket(sock, server_hostname=self._sni_host)
+
+            return self.do_open(_SniConn, req, context=self._context)
+
+    return _TargetHTTPSHandler(context=context)
+
+
 class Gateway:
     def __init__(self, config, journal):
         self.config, self.journal = config, journal
@@ -29,7 +56,7 @@ class Gateway:
             require(hasattr(ssl, 'VERIFY_X509_PARTIAL_CHAIN'), 'TLS leaf-anchor verification unsupported by this Python/OpenSSL')
             # The configured local cert is an explicit trust anchor; hostname verification stays enabled.
             context.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
-        self.opener = build_opener(NoRedirect(), HTTPSHandler(context=context))
+        self.opener = build_opener(NoRedirect(), _make_https_handler(context))
         self.last_request = 0.0
 
     def call(self, entity, operation, fields=None, value_id=None, query=None):

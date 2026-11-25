@@ -2,9 +2,11 @@
 """Bootstrap, provision, seed, and verify simulated apps (device-management & chess-room-booking) against a live magicPlatform."""
 from __future__ import annotations
 
+from collections.abc import Callable
 import argparse
 import base64
 import hashlib
+import http.client
 from http.cookiejar import CookieJar
 import json
 import os
@@ -173,6 +175,31 @@ def _encode_multipart_file(field_name: str, filename: str, payload: bytes, conte
     return header + payload + footer, f"multipart/form-data; boundary={boundary}"
 
 
+def _make_https_handler(ssl_context: ssl.SSLContext, target_address: str | None = None) -> HTTPSHandler:
+    target = (target_address or os.environ.get("MAGICTEST_TARGET_ADDRESS") or "").strip()
+    if not target:
+        return HTTPSHandler(context=ssl_context)
+
+    class _TargetHTTPSHandler(HTTPSHandler):
+        def https_open(self, req):
+            class _SniConn(http.client.HTTPSConnection):
+                def __init__(self, host, port=None, **kwargs):
+                    parsed = urlsplit(f"https://{host}")
+                    self._sni_host = parsed.hostname or host
+                    super().__init__(target, port=parsed.port or port or 443, **kwargs)
+
+                def connect(self):
+                    sock = self._create_connection((self.host, self.port), self.timeout, self.source_address)
+                    if self._tunnel_host:
+                        self.sock = sock
+                        self._tunnel()
+                    self.sock = self._context.wrap_socket(sock, server_hostname=self._sni_host)
+
+            return self.do_open(_SniConn, req, context=self._context)
+
+    return _TargetHTTPSHandler(context=ssl_context)
+
+
 class HttpSession:
     """HTTP client managing explicit redirect hops, optional CookieJar, and Origin enforcement."""
 
@@ -183,11 +210,12 @@ class HttpSession:
         *,
         use_cookies: bool = True,
         timeout: int = 30,
+        target_address: str | None = None,
     ):
         self.base_url = validate_base_url(base_url)
         self.timeout = timeout
         self.cookie_jar = CookieJar() if use_cookies else None
-        handlers: list[Any] = [_NoRedirectHandler(), HTTPSHandler(context=ssl_context)]
+        handlers: list[Any] = [_NoRedirectHandler(), _make_https_handler(ssl_context, target_address)]
         if self.cookie_jar is not None:
             handlers.append(HTTPCookieProcessor(self.cookie_jar))
         self.opener = build_opener(*handlers)
@@ -298,6 +326,60 @@ class HttpSession:
         return str(upload_ref)
 
 
+def _resolve_cas_login_prompt(
+    session: HttpSession,
+    current_url: str,
+    status: int,
+    body: bytes,
+    *,
+    namespace: str,
+) -> tuple[dict[str, Any], str]:
+    parsed = urlsplit(current_url)
+    if parsed.path.endswith("/login/cas"):
+        tx_id = parse_qs(parsed.query).get("transaction", [""])[0]
+        if not tx_id:
+            raise BootstrapError(f"CAS SPA login redirect missing transaction: {current_url}")
+        status, _, body = session.raw_request(
+            "GET",
+            f"/oauth/login?{urlencode({'transaction': tx_id})}",
+            headers={"Accept": "application/json"},
+        )
+        current_url = urljoin(session.base_url + "/", f"/oauth/login?{urlencode({'transaction': tx_id})}")
+        parsed = urlsplit(current_url)
+    if status not in (200, 401):
+        raise BootstrapError(f"GET {current_url} returned unexpected HTTP {status}")
+    try:
+        prompt = json.loads(body.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise BootstrapError(f"CAS /oauth/login did not return valid JSON prompt (HTTP {status})") from exc
+    if prompt.get("interaction") not in ("login", "password_change"):
+        raise BootstrapError(f"unsupported CAS login interaction state: {prompt.get('interaction')!r}")
+    csrf_token = prompt.get("csrfToken") or ""
+    tx_id = prompt.get("transaction") or parse_qs(parsed.query).get("transaction", [""])[0]
+    eff_ns = prompt.get("namespace") or namespace
+    if not csrf_token or not tx_id:
+        raise BootstrapError("CAS login prompt missing csrfToken or transaction")
+    return prompt, eff_ns
+
+
+def _list_all_pages(session: HttpSession, base_path: str, page_size: int = 200) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    page_num = 1
+    sep = "&" if "?" in base_path else "?"
+    while True:
+        doc = session.proxy_json(
+            "GET",
+            f"{base_path}{sep}{urlencode({'_pageNum': page_num, '_pageSize': page_size})}",
+        )
+        batch = doc.get("values") or []
+        rows.extend(batch)
+        pagination = doc.get("pagination") or {}
+        if not pagination.get("hasMore") or len(batch) < page_size:
+            break
+        page_num += 1
+    return rows
+
+
 def authenticate_bff_session(
     session: HttpSession,
     *,
@@ -311,20 +393,10 @@ def authenticate_bff_session(
         headers={"Accept": "application/json"},
     )
     parsed = urlsplit(current_url)
-    if parsed.path.endswith("/oauth/login") or "interaction" in body.decode("utf-8", "ignore"):
-        if status not in (200, 401):
-            raise BootstrapError(f"GET {current_url} returned unexpected HTTP {status}")
-        try:
-            prompt = json.loads(body.decode("utf-8"))
-        except json.JSONDecodeError as exc:
-            raise BootstrapError(f"CAS /oauth/login did not return valid JSON prompt (HTTP {status})") from exc
-        if prompt.get("interaction") != "login":
-            raise BootstrapError(f"unsupported CAS login interaction state: {prompt.get('interaction')!r}")
+    if parsed.path.endswith("/oauth/login") or parsed.path.endswith("/login/cas") or "interaction" in body.decode("utf-8", "ignore"):
+        prompt, eff_ns = _resolve_cas_login_prompt(session, current_url, status, body, namespace=namespace)
         csrf_token = prompt.get("csrfToken") or ""
         tx_id = prompt.get("transaction") or parse_qs(parsed.query).get("transaction", [""])[0]
-        eff_ns = prompt.get("namespace") or namespace
-        if not csrf_token or not tx_id:
-            raise BootstrapError("CAS login prompt missing csrfToken or transaction")
 
         form_bytes = urlencode({
             "transaction": tx_id,
@@ -332,7 +404,6 @@ def authenticate_bff_session(
             "account": account,
             "password": password,
             "csrf_token": csrf_token,
-            "remember": "false",
         }).encode("utf-8")
         post_status, post_headers, post_body = session.raw_request(
             "POST",
@@ -363,8 +434,9 @@ def acquire_pkce_access_token(
     password: str,
     client_id: str,
     redirect_uri: str,
-    scope: str = "openid profile",
+    scope: str = "openid profile magicrunner.usage.apps.data.execute",
     timeout: int = 30,
+    on_password_changed: Callable[[str], None] | None = None,
 ) -> str:
     """Acquire an OAuth2 S256 PKCE + nonce Access Token with cookie-free /oauth/token exchange."""
     browser = HttpSession(base_url, ssl_context, use_cookies=True, timeout=timeout)
@@ -391,58 +463,126 @@ def acquire_pkce_access_token(
         stop_prefixes=(callback_prefix,),
     )
 
-    def maybe_complete_consent(next_loc: str) -> str:
-        c_url, c_status, c_hdrs, c_body = browser.follow_redirects(
-            next_loc,
-            headers={"Accept": "application/json"},
-            stop_prefixes=(callback_prefix,),
-        )
-        if c_url.startswith(callback_prefix):
-            return c_url
-        if urlsplit(c_url).path.endswith("/oauth/consent") and c_status == 200:
-            consent_doc = json.loads(c_body.decode("utf-8"))
-            c_csrf = consent_doc.get("csrfToken") or ""
-            c_tx = consent_doc.get("transaction") or parse_qs(urlsplit(c_url).query).get("transaction", [""])[0]
-            consent_form = urlencode({
-                "transaction": c_tx,
-                "namespace": namespace,
-                "csrf_token": c_csrf,
-                "decision": "approve",
-            }).encode("utf-8")
-            p_status, p_hdrs, p_body = browser.raw_request(
-                "POST",
-                "/oauth/consent",
-                data=consent_form,
-                headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+    def complete_interactive(next_loc: str) -> str:
+        loc = next_loc
+        for _ in range(6):
+            c_url, c_status, _, c_body = browser.follow_redirects(
+                loc,
+                headers={"Accept": "application/json"},
+                stop_prefixes=(callback_prefix,),
             )
-            if p_status not in (301, 302, 303, 307, 308):
-                raise BootstrapError(f"POST /oauth/consent failed HTTP {p_status}: {p_body.decode('utf-8', 'replace')[:300]}")
-            return p_hdrs.get("Location") or ""
-        return c_url
+            if c_url.startswith(callback_prefix):
+                return c_url
+            c_parsed = urlsplit(c_url)
+            if c_parsed.path.endswith("/oauth/login") or c_parsed.path.endswith("/login/cas"):
+                c_prompt, c_ns = _resolve_cas_login_prompt(browser, c_url, c_status, c_body, namespace=namespace)
+                if c_prompt.get("interaction") != "password_change":
+                    raise BootstrapError("CAS returned login prompt again after credential submission")
+                new_pw = "SimOp!" + secrets.token_urlsafe(18)
+                p_tx = c_prompt.get("transaction") or parse_qs(c_parsed.query).get("transaction", [""])[0]
+                p_csrf = c_prompt.get("csrfToken") or ""
+                pw_form = urlencode({
+                    "transaction": p_tx,
+                    "namespace": c_ns,
+                    "password": new_pw,
+                    "password_confirm": new_pw,
+                    "csrf_token": p_csrf,
+                }).encode("utf-8")
+                pw_status, pw_hdrs, pw_body = browser.raw_request(
+                    "POST",
+                    "/oauth/password/change",
+                    data=pw_form,
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "application/json",
+                        "Origin": browser.base_url,
+                    },
+                )
+                if pw_status not in (301, 302, 303, 307, 308):
+                    raise BootstrapError(
+                        f"POST /oauth/password/change failed HTTP {pw_status}: {pw_body.decode('utf-8', 'replace')[:300]}"
+                    )
+                if on_password_changed is not None:
+                    on_password_changed(new_pw)
+                loc = pw_hdrs.get("Location") or ""
+                continue
+
+            if not c_parsed.path.endswith("/oauth/consent"):
+                qs = parse_qs(c_parsed.query)
+                tx_q = qs.get("transaction", [""])[0]
+                ns_q = qs.get("namespace", [namespace])[0]
+                if tx_q and c_status == 200 and not c_body.lstrip().startswith(b"{"):
+                    c_status, _, c_body = browser.raw_request(
+                        "GET",
+                        f"/oauth/consent?{urlencode({'transaction': tx_q, 'namespace': ns_q})}",
+                        headers={"Accept": "application/json"},
+                    )
+                    c_url = urljoin(
+                        browser.base_url + "/",
+                        f"/oauth/consent?{urlencode({'transaction': tx_q, 'namespace': ns_q})}",
+                    )
+                    c_parsed = urlsplit(c_url)
+
+            if c_parsed.path.endswith("/oauth/consent") and c_status == 200:
+                consent_doc = json.loads(c_body.decode("utf-8"))
+                c_csrf = consent_doc.get("csrfToken") or ""
+                c_tx = consent_doc.get("transaction") or parse_qs(c_parsed.query).get("transaction", [""])[0]
+                c_ns = consent_doc.get("namespace") or parse_qs(c_parsed.query).get("namespace", [namespace])[0]
+                consent_form = urlencode({
+                    "transaction": c_tx,
+                    "namespace": c_ns,
+                    "csrf_token": c_csrf,
+                    "decision": "approve",
+                }).encode("utf-8")
+                p_status, p_hdrs, p_body = browser.raw_request(
+                    "POST",
+                    "/oauth/consent",
+                    data=consent_form,
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "application/json",
+                        "Origin": browser.base_url,
+                    },
+                )
+                if p_status not in (301, 302, 303, 307, 308):
+                    raise BootstrapError(
+                        f"POST /oauth/consent failed HTTP {p_status}: {p_body.decode('utf-8', 'replace')[:300]}"
+                    )
+                loc = p_hdrs.get("Location") or ""
+                continue
+
+            raise BootstrapError(f"unexpected OAuth post-login interaction URL {c_url} (HTTP {c_status})")
+        raise BootstrapError("too many interactive OAuth hops without callback")
 
     if not cur_url.startswith(callback_prefix):
-        if not urlsplit(cur_url).path.endswith("/oauth/login"):
+        cur_path = urlsplit(cur_url).path
+        if not (cur_path.endswith("/oauth/login") or cur_path.endswith("/login/cas")):
             raise BootstrapError(f"unexpected OAuth authorize stop URL {cur_url} (HTTP {status})")
-        prompt = json.loads(body.decode("utf-8"))
+        prompt, eff_ns = _resolve_cas_login_prompt(browser, cur_url, status, body, namespace=namespace)
+        if prompt.get("interaction") != "login":
+            raise BootstrapError(f"unexpected initial CAS authorize interaction: {prompt.get('interaction')!r}")
         csrf_token = prompt.get("csrfToken") or ""
         tx_id = prompt.get("transaction") or parse_qs(urlsplit(cur_url).query).get("transaction", [""])[0]
         form_bytes = urlencode({
             "transaction": tx_id,
-            "namespace": prompt.get("namespace") or namespace,
+            "namespace": eff_ns,
             "account": account,
             "password": password,
             "csrf_token": csrf_token,
-            "remember": "false",
         }).encode("utf-8")
         p_status, p_hdrs, p_body = browser.raw_request(
             "POST",
             "/oauth/login",
             data=form_bytes,
-            headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "Origin": browser.base_url,
+            },
         )
         if p_status not in (301, 302, 303, 307, 308):
             raise BootstrapError(f"OAuth PKCE login failed HTTP {p_status}: {p_body.decode('utf-8', 'replace')[:300]}")
-        cur_url = maybe_complete_consent(p_hdrs.get("Location") or "")
+        cur_url = complete_interactive(p_hdrs.get("Location") or "")
 
     cb_qs = parse_qs(urlsplit(cur_url).query)
     if cb_qs.get("error"):
@@ -553,6 +693,7 @@ def ensure_installations(
                     "action": "reused",
                     "installationId": matched.get("id"),
                     "deploymentId": matched.get("deploymentId"),
+                    "runtimeApplicationUuid": (matched.get("receipt") or {}).get("runtimeApplicationUuid"),
                     "status": status,
                 }
                 continue
@@ -579,7 +720,7 @@ def ensure_installations(
                 raise
 
         package_id = int(pkg["id"])
-        source_digest = str(pkg.get("digest") or pkg.get("sourceDigest") or "")
+        source_digest = str(pkg.get("artifactDigest") or pkg.get("digest") or pkg.get("sourceDigest") or "")
         storage_opts = session.proxy_json(
             "GET",
             "/api/v1/web/proxy/panel/application/installations/storage-options/?"
@@ -655,41 +796,276 @@ def ensure_installations(
             "action": "installed",
             "installationId": final_inst.get("id"),
             "deploymentId": final_inst.get("deploymentId"),
+            "runtimeApplicationUuid": (final_inst.get("receipt") or {}).get("runtimeApplicationUuid"),
             "status": "ready",
         }
     return result
+
+
+def _resolve_ready_installations(
+    session: HttpSession,
+    apps: list[str],
+    installations: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    resolved: dict[str, dict[str, Any]] = {}
+    need_fetch = False
+    for app_key in apps:
+        row = (installations or {}).get(app_key) or {}
+        if row.get("deploymentId") and row.get("runtimeApplicationUuid"):
+            resolved[app_key] = {
+                "deploymentId": str(row["deploymentId"]),
+                "runtimeApplicationUuid": str(row["runtimeApplicationUuid"]),
+            }
+        else:
+            need_fetch = True
+    if not need_fetch:
+        return resolved
+
+    rows = _list_all_pages(session, "/api/v1/web/proxy/panel/application/installations/")
+    for app_key in apps:
+        if app_key in resolved:
+            continue
+        spec = APP_SPECS[app_key]
+        matched = next(
+            (r for r in rows if r.get("applicationUuid") == spec["uuid"] and r.get("status") == "ready"),
+            None,
+        )
+        if matched is None:
+            raise BootstrapError(f"ready installation not found for {app_key}")
+        dep_id = str(matched.get("deploymentId") or "")
+        rt_uuid = str((matched.get("receipt") or {}).get("runtimeApplicationUuid") or "")
+        if not dep_id or not rt_uuid:
+            raise BootstrapError(f"ready installation for {app_key} missing deploymentId or runtimeApplicationUuid")
+        resolved[app_key] = {"deploymentId": dep_id, "runtimeApplicationUuid": rt_uuid}
+    return resolved
+
+
+def _select_preferred_template(
+    templates: list[dict[str, Any]],
+    *,
+    subject_type: str,
+    deployment_id: str,
+    preferred_keys: tuple[str, ...],
+    required_role_keys: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
+    app_module = f"/applications/{deployment_id}"
+    candidates = [
+        t for t in templates
+        if t.get("subjectType") == subject_type
+        and int(t.get("status") or 0) == 2
+        and (
+            any(r.get("module") == app_module for r in (t.get("roleRefs") or []))
+            or deployment_id in str(t.get("key") or "")
+        )
+        and all(
+            any(r.get("module") == app_module and r.get("key") == req for r in (t.get("roleRefs") or []))
+            for req in required_role_keys
+        )
+    ]
+    for pref in preferred_keys:
+        hit = next((t for t in candidates if pref in str(t.get("key") or "")), None)
+        if hit is not None:
+            return hit
+    return candidates[0] if candidates else None
+
+
+def _ensure_endpoint_role_binding(
+    session: HttpSession,
+    *,
+    namespace: str,
+    deployment_id: str,
+    endpoint_id: int,
+    templates: list[dict[str, Any]],
+) -> str:
+    ep_tpl = _select_preferred_template(
+        templates,
+        subject_type="endpoint",
+        deployment_id=deployment_id,
+        preferred_keys=("collector", "channel-ingestor"),
+    )
+    if ep_tpl is None:
+        raise BootstrapError(f"no enabled CAS endpoint role template found for deployment {deployment_id}")
+    ep_tpl_key = str(ep_tpl["key"])
+
+    ep = session.proxy_json(
+        "GET",
+        f"/api/v1/web/proxy/cas/namespaces/{namespace}/endpoints/{endpoint_id}",
+    ).get("value") or {}
+    owner_account_id = int((ep.get("account") or {}).get("id") or 0)
+    if owner_account_id <= 0:
+        raise BootstrapError(f"CAS endpoint {endpoint_id} missing owning account id")
+
+    acc = session.proxy_json(
+        "GET",
+        f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/{owner_account_id}",
+    ).get("value") or {}
+    app_module = f"/applications/{deployment_id}"
+    effective_roles = {(r.get("module"), r.get("key")) for r in (acc.get("effectiveRoles") or [])}
+    needed_roles = {
+        (r.get("module"), r.get("key"))
+        for r in (ep_tpl.get("roleRefs") or [])
+        if r.get("module") == app_module
+    }
+    if not needed_roles.issubset(effective_roles):
+        acc_tpl = _select_preferred_template(
+            templates,
+            subject_type="account",
+            deployment_id=deployment_id,
+            preferred_keys=("operator", "master-data", "platform-ops", "store-manager"),
+            required_role_keys=("application-data-write",),
+        )
+        if acc_tpl is None:
+            raise BootstrapError(
+                f"no enabled CAS account role template covering application-data-write found for deployment {deployment_id}"
+            )
+        acc_tpl_key = str(acc_tpl["key"])
+        existing_keys = [str(ref["key"]) for ref in (acc.get("templateRefs") or []) if ref.get("key")]
+        if acc_tpl_key not in existing_keys:
+            existing_keys.append(acc_tpl_key)
+        tpl_by_key = {str(t.get("key") or ""): t for t in templates}
+        bindings = _list_all_pages(
+            session,
+            f"/api/v1/web/proxy/cas/namespaces/{namespace}/subject-role-bindings/?"
+            + urlencode({"subjectId": f"{owner_account_id}|=", "subjectType": "account|="}),
+        )
+        app_scopes: list[dict[str, Any]] = []
+        seen_scope_keys: set[str] = set()
+        for b in bindings:
+            if b.get("sourceType") == "template" and int(b.get("status") or 0) == 2 and b.get("applicationAccess"):
+                skey = str(b.get("sourceKey") or "")
+                if skey and skey in existing_keys and skey not in seen_scope_keys:
+                    app_scopes.append({"templateKey": skey, "applicationAccess": b["applicationAccess"]})
+                    seen_scope_keys.add(skey)
+        for key in existing_keys:
+            if key in seen_scope_keys:
+                continue
+            tpl_obj = tpl_by_key.get(key) or {}
+            if tpl_obj.get("applicationAccess"):
+                app_scopes.append({
+                    "templateKey": key,
+                    "applicationAccess": [{"applicationUuid": deployment_id, "accessLevel": "manager"}],
+                })
+                seen_scope_keys.add(key)
+        session.proxy_json(
+            "PUT",
+            f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/{owner_account_id}/role-templates",
+            payload={"roleTemplateKeys": existing_keys, "applicationScopes": app_scopes},
+        )
+
+    session.proxy_json(
+        "PUT",
+        f"/api/v1/web/proxy/cas/namespaces/{namespace}/endpoints/{endpoint_id}/role-templates",
+        payload={"roleTemplateKeys": [ep_tpl_key]},
+    )
+    return ep_tpl_key
 
 
 def ensure_portal_subscriptions_and_keys(
     session: HttpSession,
     secrets_dir: Path,
     *,
+    namespace: str,
     apps: list[str],
+    installations: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    svc_rows = session.proxy_json("GET", "/api/v1/web/proxy/portal/services/?_pageSize=200").get("values") or []
+    resolved_installations = _resolve_ready_installations(session, apps, installations)
+    panel_svcs = _list_all_pages(session, "/api/v1/web/proxy/panel/hub/services/")
+    panel_pubs = _list_all_pages(session, "/api/v1/web/proxy/panel/hub/publications/")
+    panel_caps: list[dict[str, Any]] | None = None
+    role_templates = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/role-templates/")
     out: dict[str, dict[str, Any]] = {}
 
     for app_key in apps:
         spec = APP_SPECS[app_key]
-        svc = next(
-            (
-                row for row in svc_rows
-                if row.get("key") in spec["serviceKeys"] or row.get("hostedBy") == spec["uuid"]
-            ),
-            None,
-        )
+        inst = resolved_installations[app_key]
+        deployment_id = inst["deploymentId"]
+        runtime_app_uuid = inst["runtimeApplicationUuid"]
+
+        svc = next((row for row in panel_svcs if row.get("key") in spec["serviceKeys"]), None)
+        pub: dict[str, Any] | None = None
         if svc is None:
-            raise BootstrapError(f"Portal service not found for {app_key}; ensure installation is ready & service published")
+            if panel_caps is None:
+                panel_caps = _list_all_pages(session, "/api/v1/web/proxy/panel/hub/capabilitys/")
+            matched_caps = [
+                c for c in panel_caps
+                if c.get("providerType") == "application"
+                and c.get("providerKey") == runtime_app_uuid
+                and int(c.get("status") or 0) == 1
+            ]
+            cap_ids = sorted(int(c["id"]) for c in matched_caps)
+            if not cap_ids:
+                raise BootstrapError(
+                    f"no enabled source capabilities found for {app_key} (runtimeApplicationUuid={runtime_app_uuid})"
+                )
+            svc_key_desired = spec["serviceKeys"][0]
+            converge_doc = session.proxy_json(
+                "POST",
+                "/api/v1/web/proxy/panel/hub/services/generated/converge/",
+                payload={
+                    "items": [{
+                        "service": {
+                            "key": svc_key_desired,
+                            "name": svc_key_desired,
+                            "showName": spec["instanceName"],
+                        },
+                        "capabilityIDs": cap_ids,
+                        "publication": {
+                            "status": 1,
+                            "visibleScope": namespace,
+                            "allowSubscription": True,
+                            "requireApproval": False,
+                            "maxSubscriptions": 10,
+                            "maxQPS": 50,
+                            "dailyQuota": 100000,
+                        },
+                    }]
+                },
+            )
+            converged_items = converge_doc.get("values") or []
+            if not converged_items:
+                raise BootstrapError(f"generated service convergence for {app_key} returned no item")
+            svc = converged_items[0].get("service") or {}
+            pub = converged_items[0].get("publication") or {}
         svc_id = int(svc["id"])
         svc_key = str(svc["key"])
 
+        if pub is None:
+            pub = next((p for p in panel_pubs if int((p.get("service") or {}).get("id") or 0) == svc_id), None)
+        if pub is None:
+            pub = session.proxy_json(
+                "POST",
+                "/api/v1/web/proxy/panel/hub/publications/",
+                payload={
+                    "service": {"id": svc_id},
+                    "status": 1,
+                    "visibleScope": namespace,
+                    "allowSubscription": True,
+                    "requireApproval": False,
+                    "maxSubscriptions": 10,
+                    "maxQPS": 50,
+                    "dailyQuota": 100000,
+                },
+            ).get("value") or {}
+        pub_id = int(pub["id"])
+        if int(pub.get("status") or 0) != 2:
+            session.proxy_json(
+                "PUT",
+                f"/api/v1/web/proxy/panel/hub/publication/publish/{pub_id}",
+                payload={},
+            )
+
+        portal_svcs = _list_all_pages(session, "/api/v1/web/proxy/portal/services/")
+        portal_svc = next((row for row in portal_svcs if int(row.get("id") or 0) == svc_id), None)
+        if portal_svc is None:
+            raise BootstrapError(f"Portal service id={svc_id} ({svc_key}) not visible after publication")
+
         sub_action = "existing"
-        if not (svc.get("leaseTerm") or {}).get("id"):
+        if int((portal_svc.get("leaseTerm") or {}).get("status") or 0) != 2:
             request_id = uuid.uuid4().hex
             sub_res = session.proxy_json(
                 "POST",
                 "/api/v1/web/proxy/portal/service/subscriptions/",
-                payload={"requestId": request_id, "service": svc_id, "leaseTerm": 0},
+                payload={"requestId": request_id, "service": svc_id, "leaseTerm": 1},
             )
             outcome = sub_res.get("value") or {}
             if outcome.get("phase") not in (None, "complete"):
@@ -705,17 +1081,38 @@ def ensure_portal_subscriptions_and_keys(
 
         key_path = secrets_dir / f"{app_key}.api-key"
         key_action = "reused_local"
+        endpoint_id = 0
         if not key_path.exists():
             cred_doc = session.proxy_json(
                 "POST",
                 "/api/v1/web/proxy/portal/service/credentials/",
                 payload={"service": svc_id, "name": f"bootstrap-{app_key}-{secrets.token_hex(4)}"},
             )
-            api_key = str(cred_doc.get("apiKey") or ((cred_doc.get("value") or {}).get("apiKey") or ""))
+            cred_val = cred_doc.get("value") or {}
+            endpoint_id = int(cred_val.get("endpointId") or 0)
+            api_key = str(cred_doc.get("apiKey") or cred_val.get("apiKey") or "")
             if not api_key:
                 raise BootstrapError(f"credential creation for {svc_key} returned no apiKey")
             write_secret_file(key_path, api_key)
             key_action = "created"
+
+        if endpoint_id <= 0:
+            cred_rows = _list_all_pages(
+                session,
+                f"/api/v1/web/proxy/portal/service/credentials/?service={svc_id}",
+            )
+            active_cred = next((r for r in cred_rows if int(r.get("endpointId") or 0) > 0), None)
+            if active_cred is None:
+                raise BootstrapError(f"no Portal credential with endpointId found for service id={svc_id}")
+            endpoint_id = int(active_cred["endpointId"])
+
+        ep_tpl_key = _ensure_endpoint_role_binding(
+            session,
+            namespace=namespace,
+            deployment_id=deployment_id,
+            endpoint_id=endpoint_id,
+            templates=role_templates,
+        )
 
         out[app_key] = {
             "serviceId": svc_id,
@@ -723,6 +1120,8 @@ def ensure_portal_subscriptions_and_keys(
             "subscription": sub_action,
             "apiKeyStatus": key_action,
             "apiKeyFile": str(key_path),
+            "endpointId": endpoint_id,
+            "endpointTemplateKey": ep_tpl_key,
         }
     return out
 
@@ -732,37 +1131,30 @@ def ensure_crb_operator_token(
     secrets_dir: Path,
     *,
     namespace: str,
+    deployment_id: str,
     operator_account: str,
     operator_password: str,
     ssl_context: ssl.SSLContext,
+    on_password_changed: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     crb_uuid = APP_SPECS["chess-room-booking"]["uuid"]
-    templates = session.proxy_json(
-        "GET",
-        f"/api/v1/web/proxy/cas/namespaces/{namespace}/role-templates/?_pageSize=200",
-    ).get("values") or []
-    preferred = ("platform-ops", "store-manager", "frontdesk")
-    chosen_template = None
-    for cand_key in preferred:
-        chosen_template = next(
-            (
-                t for t in templates
-                if t.get("subjectType") == "account"
-                and (cand_key in str(t.get("key") or ""))
-                and (crb_uuid in str(t.get("key") or "") or any(
-                    a.get("applicationUuid") == crb_uuid for a in (t.get("applicationAccess") or [])
-                ))
-            ),
-            None,
-        )
-        if chosen_template:
-            break
+    templates = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/role-templates/")
+    chosen_template = _select_preferred_template(
+        templates,
+        subject_type="account",
+        deployment_id=deployment_id,
+        preferred_keys=("platform-ops", "store-manager", "frontdesk"),
+    )
     if chosen_template is None:
         chosen_template = next(
             (
                 t for t in templates
                 if t.get("subjectType") == "account"
-                and any(a.get("applicationUuid") == crb_uuid for a in (t.get("applicationAccess") or []))
+                and int(t.get("status") or 0) == 2
+                and (
+                    crb_uuid in str(t.get("key") or "")
+                    or any(a.get("applicationUuid") == crb_uuid for a in (t.get("applicationAccess") or []))
+                )
             ),
             None,
         )
@@ -770,10 +1162,7 @@ def ensure_crb_operator_token(
         raise BootstrapError(f"no chess-room-booking account role template found in namespace {namespace}")
     tpl_key = str(chosen_template["key"])
 
-    accounts = session.proxy_json(
-        "GET",
-        f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/?_pageSize=200",
-    ).get("values") or []
+    accounts = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/")
     acc = next((a for a in accounts if a.get("account") == operator_account), None)
     if acc is None:
         created = session.proxy_json(
@@ -792,25 +1181,23 @@ def ensure_crb_operator_token(
         acc = created.get("value") or {}
     acc_id = int(acc["id"])
 
+    app_scopes = (
+        [{"templateKey": tpl_key, "applicationAccess": [{"applicationUuid": deployment_id, "accessLevel": "manager"}]}]
+        if chosen_template.get("applicationAccess")
+        else []
+    )
     session.proxy_json(
         "PUT",
         f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/{acc_id}/role-templates",
         payload={
             "roleTemplateKeys": [tpl_key],
-            "applicationScopes": [
-                {
-                    "templateKey": tpl_key,
-                    "applicationAccess": [{"applicationUuid": crb_uuid, "accessLevel": "manager"}],
-                }
-            ],
+            "applicationScopes": app_scopes,
         },
     )
 
+    desired_scopes = "openid profile magicrunner.usage.apps.data.execute"
     redirect_uri = f"{session.base_url}/oauth/callback"
-    clients = session.proxy_json(
-        "GET",
-        f"/api/v1/web/proxy/cas/namespaces/{namespace}/oauth/clients/?_pageSize=200",
-    ).get("values") or []
+    clients = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/oauth/clients/")
     client = next(
         (c for c in clients if c.get("name") == "crb-sim-pkce-client" and c.get("clientType") == "public"),
         None,
@@ -827,7 +1214,7 @@ def ensure_crb_operator_token(
                 "authenticationNamespaces": [namespace],
                 "redirectUris": [redirect_uri],
                 "grantTypes": ["authorization_code"],
-                "allowedScopes": "openid profile",
+                "allowedScopes": desired_scopes,
                 "scopeDescription": "Least-privilege chess-room-booking simulator token",
                 "audience": "api://magicrunner",
                 "requirePKCE": True,
@@ -836,6 +1223,28 @@ def ensure_crb_operator_token(
                 "endpointId": 0,
             },
         ).get("value") or {}
+    else:
+        existing_scopes = set(str(client.get("allowedScopes") or "").split())
+        if "magicrunner.usage.apps.data.execute" not in existing_scopes or client.get("audience") != "api://magicrunner":
+            client = session.proxy_json(
+                "PUT",
+                f"/api/v1/web/proxy/cas/namespaces/{namespace}/oauth/clients/{client['clientId']}",
+                payload={
+                    "expectedVersion": int(client.get("version") or 1),
+                    "name": client.get("name") or "crb-sim-pkce-client",
+                    "developerName": client.get("developerName") or "magicTest",
+                    "authenticationNamespaces": client.get("authenticationNamespaces") or [namespace],
+                    "redirectUris": client.get("redirectUris") or [redirect_uri],
+                    "grantTypes": client.get("grantTypes") or ["authorization_code"],
+                    "allowedScopes": desired_scopes,
+                    "scopeDescription": client.get("scopeDescription") or "Least-privilege chess-room-booking simulator token",
+                    "audience": "api://magicrunner",
+                    "requirePKCE": bool(client.get("requirePKCE", True)),
+                    "status": int(client.get("status") or 2),
+                    "description": client.get("description") or "PKCE client for least-privilege CRB simulation actions",
+                    "endpointId": int(client.get("endpointId") or 0),
+                },
+            ).get("value") or client
     client_id = str(client["clientId"])
 
     token = acquire_pkce_access_token(
@@ -846,8 +1255,9 @@ def ensure_crb_operator_token(
         password=operator_password,
         client_id=client_id,
         redirect_uri=redirect_uri,
-        scope="openid profile",
+        scope=desired_scopes,
         timeout=session.timeout,
+        on_password_changed=on_password_changed,
     )
     token_path = secrets_dir / "crb-operator.token"
     write_secret_file(token_path, token)
@@ -903,13 +1313,17 @@ def run_seed_and_verify(
     trust_leaf: bool,
     cycles: int,
     anchor_utc: str | None,
+    target_address: str | None = None,
 ) -> dict[str, Any]:
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "MAGICPLATFORM_ROOT": str(platform_root)}
+    if target_address and target_address.strip():
+        env["MAGICTEST_TARGET_ADDRESS"] = target_address.strip()
     results: dict[str, Any] = {}
 
     if "device-management" in apps:
         dm_tool = APPLICATIONS_ROOT / "device-management/tooling/simulator.py"
-        dm_run_dir = ensure_private_dir(state_dir / "runs/device-management")
+        runs_dir = ensure_private_dir(state_dir / "runs")
+        dm_run_dir = runs_dir / "device-management"
         dm_cfg = dm_run_dir / "config.json"
         dm_key_file = Path(services_info["device-management"]["apiKeyFile"]) if "device-management" in services_info else (secrets_dir / "device-management.api-key")
         dm_svc_key = services_info.get("device-management", {}).get("serviceKey", "device_management_service")
@@ -1013,6 +1427,7 @@ def build_dry_run_plan(args: argparse.Namespace, platform_root: Path, apps: list
         "mode": "dry-run",
         "command": args.command,
         "baseUrl": base_url,
+        "targetAddress": (args.target_address or "").strip() or None,
         "namespace": args.namespace,
         "reuseExisting": bool(args.reuse_existing),
         "stateDir": str(args.state_dir.expanduser()),
@@ -1038,6 +1453,7 @@ def main(argv: list[str] | None = None) -> int:
     common.add_argument("--state-dir", type=Path, default=Path("~/.local/state/magicTest/bootstrap"), help="0700 working state dir")
     common.add_argument("--ca-file", type=Path, default=None, help="TLS CA / leaf certificate file")
     common.add_argument("--trust-leaf", action="store_true", help="Trust --ca-file as a self-signed leaf certificate")
+    common.add_argument("--target-address", default=os.environ.get("MAGICTEST_TARGET_ADDRESS") or None, help="Optional target IP/host override while preserving Host and TLS SNI")
     common.add_argument("--reuse-existing", action="store_true", help="Explicitly allow reusing already-ready installations")
     common.add_argument("--apps", default="device-management,chess-room-booking", help="Comma-separated simulated app keys")
     common.add_argument("--cycles", type=int, default=2, help="device-management live-stream cycles (default: 2)")
@@ -1059,6 +1475,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(build_dry_run_plan(args, platform_root, apps), ensure_ascii=False, indent=2))
         return 0
 
+    target_address = (args.target_address or "").strip() or None
+    if target_address:
+        os.environ["MAGICTEST_TARGET_ADDRESS"] = target_address
     state_dir = ensure_private_dir(args.state_dir)
     secrets_dir = ensure_private_dir(state_dir / "secrets")
     ssl_ctx = make_ssl_context(args.ca_file, trust_leaf=args.trust_leaf)
@@ -1066,6 +1485,7 @@ def main(argv: list[str] | None = None) -> int:
     summary: dict[str, Any] = {
         "command": args.command,
         "baseUrl": base_url,
+        "targetAddress": target_address,
         "namespace": args.namespace,
         "reuseExisting": bool(args.reuse_existing),
         "apps": apps,
@@ -1089,9 +1509,17 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.command in ("all", "provision-access") and session is not None:
-        services_info = ensure_portal_subscriptions_and_keys(session, secrets_dir, apps=apps)
+        installations_info = summary.get("installations")
+        services_info = ensure_portal_subscriptions_and_keys(
+            session,
+            secrets_dir,
+            namespace=args.namespace,
+            apps=apps,
+            installations=installations_info,
+        )
         summary["portal"] = services_info
         if "chess-room-booking" in apps:
+            crb_inst = _resolve_ready_installations(session, ["chess-room-booking"], installations_info)["chess-room-booking"]
             op_pw_path = secrets_dir / f"{args.operator_account}.password"
             if args.operator_password_file is not None:
                 op_pw = read_secret_file(args.operator_password_file, label="operator password")
@@ -1105,9 +1533,11 @@ def main(argv: list[str] | None = None) -> int:
                 session,
                 secrets_dir,
                 namespace=args.namespace,
+                deployment_id=crb_inst["deploymentId"],
                 operator_account=args.operator_account,
                 operator_password=op_pw,
                 ssl_context=ssl_ctx,
+                on_password_changed=lambda new_pw, p=op_pw_path: write_secret_file(p, new_pw),
             )
 
     if args.command in ("all", "seed-data", "verify"):
@@ -1123,6 +1553,7 @@ def main(argv: list[str] | None = None) -> int:
             trust_leaf=args.trust_leaf,
             cycles=args.cycles,
             anchor_utc=args.anchor_utc,
+            target_address=target_address,
         )
 
     summary_path = state_dir / "bootstrap-summary.json"
