@@ -5,6 +5,7 @@ const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
 const crypto = require('node:crypto');
+const { resolveConnectHost } = require('./remote_target.cjs');
 const limit = 16 * 1024 * 1024;
 function privateFile(filename, maxBytes) {
   const home = require('node:os').homedir();
@@ -38,7 +39,7 @@ function loadConfig(filename) {
 function getSnapshot(c, query = '') {
   if (!['', '?_pageSize=1', '?namespace=panel', '?instanceId=' + encodeURIComponent(c.instanceId)].includes(query)) throw Error('Only finite read-only snapshot probes are supported');
   const target = new URL('/api/v1/panel/runtime-execution/snapshot/' + query, c.origin), connect = new URL(target);
-  if (connect.hostname.endsWith('.local.vpc')) connect.hostname = '127.0.0.1';
+  connect.hostname = resolveConnectHost(connect.hostname);
   return new Promise((resolve, reject) => {
     let timer;
     const fail = () => { clearTimeout(timer); reject(Error('Runtime machine GET failed; no retry, credential or owner response body in diagnostic')); };

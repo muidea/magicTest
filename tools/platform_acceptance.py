@@ -4,11 +4,14 @@ import argparse
 from collections import Counter
 from datetime import datetime, timezone
 import hashlib
+import http.client
 import json
 from pathlib import Path
 import re
+import ssl
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 STATUSES = {'passed', 'failed', 'blocked', 'untested'}
@@ -117,18 +120,26 @@ def validate_results(catalog, results, base):
     require(results.get('catalogDigest') == digest(catalog), 'catalogue changed; review cases and rerun affected scope')
     env = results.get('environment', {})
     require(nonempty(env.get('name')), 'missing environment name')
+    is_remote = env.get('mode') == 'remote-https'
     for key in ('fingerprint', 'configurationDigest'):
         require(isinstance(env.get(key), str) and re.fullmatch(r'sha256:[0-9a-f]{64}', env[key]), 'missing immutable ' + key)
-    versions = env.get('versions', {})
-    require(all(name in versions for name in CORE), 'missing deployed component versions')
-    require(all(isinstance(v, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', v) for v in versions.values()), 'tags alone are not version evidence')
-    require(env['fingerprint'] == digest({'versions': versions, 'configurationDigest': env['configurationDigest']}), 'environment fingerprint mismatch')
+    if is_remote:
+        require(nonempty(env.get('origin')) and env['origin'].startswith('https://'), 'remote-https mode requires explicit HTTPS origin')
+        require(env['fingerprint'] == digest({'mode': 'remote-https', 'origin': env['origin'], 'configurationDigest': env['configurationDigest']}),
+                'environment fingerprint mismatch')
+    else:
+        versions = env.get('versions', {})
+        require(all(name in versions for name in CORE), 'missing deployed component versions')
+        require(all(isinstance(v, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', v) for v in versions.values()), 'tags alone are not version evidence')
+        require(env['fingerprint'] == digest({'versions': versions, 'configurationDigest': env['configurationDigest']}), 'environment fingerprint mismatch')
     output = {}
     for item in entries:
         cid = item.get('caseId')
         require(cid in cases, 'unknown result case')
         suite = item.get('suite')
         require(suite in {p['suite'] for p in cases[cid]['execution']}, 'unknown result execution suite')
+        if is_remote and cid == 'F059-001' and item.get('status') == 'passed':
+            raise ValueError('remote-https mode cannot mark Docker container check F059-001 as passed')
         result_key = (cid, suite)
         require(result_key not in output, 'duplicate result branch; preserve prior attempts separately')
         require(item.get('status') in STATUSES, 'invalid result status')
@@ -315,6 +326,135 @@ def capture_health(catalog, directory):
                                          'sha256': 'sha256:' + hashlib.sha256(evidence.read_bytes()).hexdigest()}]}]}
     if not passed:
         result['results'][0].update(reason='核心容器未运行或健康检查未通过', defectId='ENV-CORE-HEALTH')
+    target = directory / 'results.json'
+    target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
+    return target
+
+
+class _SniHTTPSConnection(http.client.HTTPSConnection):
+    """Connect to an explicit IP/address while preserving TLS SNI for the target hostname."""
+
+    def __init__(self, connect_host, sni_host, port, *, context, timeout):
+        super().__init__(connect_host, port=port, context=context, timeout=timeout)
+        self._sni_host = sni_host
+
+    def connect(self):
+        sock = self._create_connection((self.host, self.port), self.timeout, self.source_address)
+        if self._tunnel_host:
+            self.sock = sock
+            self._tunnel()
+        self.sock = self._context.wrap_socket(sock, server_hostname=self._sni_host)
+
+
+def _build_remote_ssl_context(*, ca_file=None, insecure=False):
+    if insecure:
+        ctx = ssl._create_unverified_context()
+        return ctx, 'insecure'
+    if ca_file:
+        ctx = ssl.create_default_context(cafile=str(Path(ca_file).expanduser()))
+        if hasattr(ssl, 'VERIFY_X509_PARTIAL_CHAIN'):
+            ctx.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
+        return ctx, f'custom-ca:{Path(ca_file).name}'
+    return ssl.create_default_context(), 'system-ca'
+
+
+def capture_remote_health(catalog, directory, *, origin, target_address=None, ca_file=None, insecure=False, timeout=10):
+    """Read-only remote HTTPS baseline without local Docker daemon inspection."""
+    parsed = urlsplit(origin)
+    require(parsed.scheme == 'https' and bool(parsed.hostname) and not parsed.username and not parsed.password,
+            'remote-https health check requires an explicit HTTPS origin without userinfo')
+    connect_host = str(target_address).strip() if target_address else parsed.hostname
+    port = parsed.port or 443
+    host_header = parsed.netloc
+    context, tls_mode = _build_remote_ssl_context(ca_file=ca_file, insecure=insecure)
+
+    probe_specs = (
+        ('http_portal_root', '/', None),
+        ('http_oidc_discovery', '/api/v1/cas/.well-known/openid-configuration', 'issuer'),
+        ('http_oidc_jwks', '/api/v1/cas/oauth/jwks', 'keys'),
+        ('http_web_branding', '/api/v1/web/branding/', None),
+    )
+    probes = []
+    issuer = ''
+    jwks_keys = []
+    branding_status = None
+    for name, route, required_key in probe_specs:
+        conn = _SniHTTPSConnection(connect_host, parsed.hostname, port, context=context, timeout=timeout)
+        entry = {'name': name, 'path': route, 'passed': False, 'status': None}
+        try:
+            conn.request('GET', route, headers={'Host': host_header, 'Accept': 'application/json'})
+            resp = conn.getresponse()
+            body = resp.read(1024 * 1024)
+            entry['status'] = resp.status
+            if name == 'http_web_branding':
+                branding_status = resp.status
+            if resp.status == 200:
+                if required_key:
+                    payload = json.loads(body.decode('utf-8'))
+                    if isinstance(payload, dict) and payload.get(required_key):
+                        entry['passed'] = True
+                        if name == 'http_oidc_discovery':
+                            issuer = str(payload['issuer'])
+                        elif name == 'http_oidc_jwks' and isinstance(payload['keys'], list):
+                            jwks_keys = sorted(
+                                f"{k.get('kid', '')}:{k.get('kty', '')}:{k.get('alg', '')}"
+                                for k in payload['keys'] if isinstance(k, dict)
+                            )
+                else:
+                    entry['passed'] = True
+        except Exception as exc:
+            entry['error'] = f'{type(exc).__name__}: {exc}'
+        finally:
+            conn.close()
+        probes.append(entry)
+
+    passed = all(p['passed'] for p in probes)
+    observed = datetime.now(timezone.utc).isoformat()
+    directory.mkdir(parents=True, exist_ok=True)
+    evidence = directory / 'remote-health.json'
+    evidence.write_text(json.dumps({
+        'observedAt': observed,
+        'origin': origin,
+        'targetAddress': connect_host if target_address else None,
+        'tlsVerification': tls_mode,
+        'issuer': issuer,
+        'jwksKeys': jwks_keys,
+        'probes': probes,
+    }, ensure_ascii=False, indent=2) + '\n')
+    config_digest = digest({
+        'origin': origin,
+        'issuer': issuer,
+        'jwksKeys': jwks_keys,
+        'brandingStatus': branding_status,
+    })
+    fingerprint = digest({'mode': 'remote-https', 'origin': origin, 'configurationDigest': config_digest})
+    env = {
+        'name': 'remote-https',
+        'mode': 'remote-https',
+        'origin': origin,
+        'targetAddress': connect_host if target_address else None,
+        'tlsVerification': tls_mode,
+        'configurationDigest': config_digest,
+        'fingerprint': fingerprint,
+    }
+    result = {
+        'schema': 'magic.acceptance.results/v1',
+        'baseline': catalog['baseline'],
+        'catalogDigest': digest(catalog),
+        'runId': 'remote-health-' + observed,
+        'environment': env,
+        'remoteHealth': {
+            'passed': passed,
+            'origin': origin,
+            'probes': probes,
+            'evidence': {
+                'kind': 'live',
+                'path': evidence.name,
+                'sha256': 'sha256:' + hashlib.sha256(evidence.read_bytes()).hexdigest(),
+            },
+        },
+        'results': [],
+    }
     target = directory / 'results.json'
     target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n')
     return target

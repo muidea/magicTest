@@ -244,6 +244,47 @@ class AcceptanceEvidenceTests(unittest.TestCase):
                 self.assertEqual(subject.main(), 2)
         self.assertEqual(json.loads(target.read_text())['counts']['blocked'], 75)
 
+    def test_remote_https_validation_and_f059_honesty_gate(self):
+        proof = self.root / 'remote-proof.json'
+        proof.write_text('{"checked":true}\n')
+        cfg = subject.digest({'origin': 'https://panel.example.com', 'issuer': 'https://panel.example.com/api/v1/cas', 'jwksKeys': ['k1:RSA:RS256'], 'brandingStatus': 200})
+        fp = subject.digest({'mode': 'remote-https', 'origin': 'https://panel.example.com', 'configurationDigest': cfg})
+        remote = {
+            'schema': 'magic.acceptance.results/v1',
+            'baseline': self.catalog['baseline'],
+            'catalogDigest': subject.digest(self.catalog),
+            'runId': 'remote-test',
+            'environment': {
+                'name': 'remote-https',
+                'mode': 'remote-https',
+                'origin': 'https://panel.example.com',
+                'targetAddress': '10.0.0.2',
+                'tlsVerification': 'system-ca',
+                'configurationDigest': cfg,
+                'fingerprint': fp,
+            },
+            'results': [{
+                'caseId': 'F001-004',
+                'suite': 'standard',
+                'status': 'passed',
+                'method': 'browser',
+                'environmentFingerprint': fp,
+                'role': 'admin',
+                'namespace': 'panel',
+                'resource': 'rg1',
+                'observedAt': '2026-11-25T00:00:00+00:00',
+                'actual': 'Remote browser login passed',
+                'evidence': [{'kind': 'browser', 'path': proof.name, 'sha256': 'sha256:' + hashlib.sha256(proof.read_bytes()).hexdigest()}],
+            }],
+        }
+        entries = subject.validate_results(self.catalog, remote, self.root)
+        self.assertIn(('F001-004', 'standard'), entries)
+        remote['results'][0]['caseId'] = 'F059-001'
+        remote['results'][0]['method'] = 'live'
+        remote['results'][0]['evidence'][0]['kind'] = 'live'
+        with self.assertRaisesRegex(ValueError, 'F059-001'):
+            subject.validate_results(self.catalog, remote, self.root)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -51,15 +51,69 @@ function controlledUpstream() {
       held.set(marker, gate); return gate;
     } };
 }
+function splitHostPort(spec) {
+  const raw = String(spec || '').trim();
+  if (!raw) throw Error('Empty upstream endpoint specification');
+  if (raw.startsWith('[')) {
+    const end = raw.indexOf(']');
+    if (end < 0) throw Error('Invalid IPv6 host:port specification');
+    const host = raw.slice(1, end), rest = raw.slice(end + 1);
+    if (!rest) return { host, port: 0 };
+    if (!/^:\d+$/.test(rest)) throw Error('Invalid port in IPv6 endpoint');
+    return { host, port: Number(rest.slice(1)) };
+  }
+  const idx = raw.lastIndexOf(':');
+  if (idx > 0 && raw.indexOf(':') === idx) {
+    const portText = raw.slice(idx + 1);
+    if (!/^\d+$/.test(portText)) throw Error('Invalid upstream port: ' + portText);
+    return { host: raw.slice(0, idx), port: Number(portText) };
+  }
+  return { host: raw, port: 0 };
+}
+function parseUpstreamEndpoint(bindSpec, advertiseSpec) {
+  if (!bindSpec && !advertiseSpec) return null;
+  const bind = bindSpec ? splitHostPort(bindSpec) : null;
+  const rawAdv = String(advertiseSpec || '').trim();
+  if (!bind) throw Error('controlledUpstreamBind is required when controlledUpstreamAdvertise is set');
+  if (!Number.isSafeInteger(bind.port) || bind.port < 0 || bind.port > 65535) throw Error('Invalid controlledUpstreamBind port');
+  if (!rawAdv && ['0.0.0.0', '::', '*'].includes(bind.host)) throw Error('controlledUpstreamAdvertise is required when binding wildcard address');
+  return {
+    bindHost: bind.host,
+    bindPort: bind.port,
+    formatAddress(actualPort) {
+      if (!rawAdv) return 'http://' + (bind.host.includes(':') ? '[' + bind.host + ']' : bind.host) + ':' + actualPort;
+      if (/^https?:\/\//.test(rawAdv)) {
+        const parsed = new URL(rawAdv);
+        if (!parsed.port || parsed.port === '0') parsed.port = String(actualPort);
+        return parsed.origin;
+      }
+      const adv = splitHostPort(rawAdv);
+      const host = adv.host.includes(':') ? '[' + adv.host + ']' : adv.host;
+      return 'http://' + host + ':' + (adv.port > 0 ? adv.port : actualPort);
+    },
+  };
+}
 async function upstream(h) {
   if (h.serviceUpstream) return h.serviceUpstream;
-  const networks = JSON.parse(execFileSync('docker', ['inspect', 'magicGateway', '--format', '{{json .NetworkSettings.Networks}}'], { encoding: 'utf8' }));
-  const gateways = [...new Set(Object.values(networks).map(n => n.Gateway).filter(Boolean))];
-  if (gateways.length !== 1) throw new h.Blocked('Controlled upstream requires one actual Gateway Docker bridge address');
+  const remoteSpec = parseUpstreamEndpoint(h.controlledUpstreamBind, h.controlledUpstreamAdvertise);
+  let listenHost, listenPort = 0, formatAddress;
+  if (remoteSpec) {
+    listenHost = remoteSpec.bindHost;
+    listenPort = remoteSpec.bindPort;
+    formatAddress = remoteSpec.formatAddress;
+  } else if (h.executionMode === 'remote-https') {
+    throw new h.Blocked('REMOTE-UPSTREAM-REQUIRED: 跨机外部服务回调需在配置中指定 controlledUpstreamBind 与 controlledUpstreamAdvertise（须由目标机 magicGateway 可达）');
+  } else {
+    const networks = JSON.parse(execFileSync('docker', ['inspect', 'magicGateway', '--format', '{{json .NetworkSettings.Networks}}'], { encoding: 'utf8' }));
+    const gateways = [...new Set(Object.values(networks).map(n => n.Gateway).filter(Boolean))];
+    if (gateways.length !== 1) throw new h.Blocked('Controlled upstream requires one actual Gateway Docker bridge address');
+    listenHost = gateways[0];
+    formatAddress = port => 'http://' + listenHost + ':' + port;
+  }
   const up = controlledUpstream(), server = up.server;
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, gateways[0], resolve); });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(listenPort, listenHost, resolve); });
   h.teardowns.push(async () => { up.releaseAll(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
-  return h.serviceUpstream = { ...up, address: 'http://' + gateways[0] + ':' + server.address().port };
+  return h.serviceUpstream = { ...up, address: formatAddress(server.address().port) };
 }
 async function fixture(h, suffix, policy = {}, ownerName = 'tenantAdmin', contractSpec) {
   const owner = h[ownerName];
@@ -176,4 +230,4 @@ async function succeeds(h, actor, f, c) {
   const result = await call(h, actor, f, c.apiKey, c.scheme), received = f.up.requests.filter(x => x.marker === result.marker);
   h.check('Real Gateway invokes controlled upstream exactly once with the original request marker', result.status === 200 && result.data.marker === result.marker && received.length === 1 && received[0].method === 'GET' && received[0].path === '/probe' && !received[0].authorizationPresent, { response: result, upstream: received });
 }
-module.exports = { fixture, subscribe, credential, rotate, retireCredential, credentialRows, cleanupSubscription, cleanupCredential, retire, call, succeeds, services, publications, subscriptions, controlledUpstream };
+module.exports = { fixture, subscribe, credential, rotate, retireCredential, credentialRows, cleanupSubscription, cleanupCredential, retire, call, succeeds, services, publications, subscriptions, controlledUpstream, upstream, parseUpstreamEndpoint };

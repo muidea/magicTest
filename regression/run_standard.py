@@ -211,7 +211,7 @@ def ensure_delivery_fixture(fixture_config_path, directory):
     return True
 
 
-def finish(owner, catalog, before, after, browser, directory, browser_exit, suite='standard'):
+def finish(owner, catalog, before, after, browser, directory, browser_exit, suite='standard', *, execution_mode='local', excluded_cases=()):
     same_candidate = before['environment'] == after['environment']
     cleanup_files = sorted((directory / 'browser/attempts').glob('*/cleanup.json'))
     cleanup = [{'path': str(p.relative_to(directory)),
@@ -223,41 +223,86 @@ def finish(owner, catalog, before, after, browser, directory, browser_exit, suit
               'results': [relocate(e, 'browser') for e in browser.get('results', [])]}
     # Health is an independent real handler, never a substitute for browser cases.
     selected = {entry['caseId'] for entry in result['results']}
-    if same_candidate and 'F059-001' in selected:
+    if execution_mode != 'remote-https' and same_candidate and 'F059-001' in selected:
         result['results'] = [e for e in result['results'] if e['caseId'] != 'F059-001']
         result['results'].append(relocate(after['results'][0], 'health-after'))
     save(directory / 'results.json', result)
     entries = owner.validate_results(catalog, result, directory)
     report = owner.summarize(catalog, entries, suite)
     report['environment'] = before['environment']
+    if execution_mode == 'remote-https':
+        healthy = bool(before.get('remoteHealth', {}).get('passed') and after.get('remoteHealth', {}).get('passed'))
+    else:
+        healthy = before['results'][0]['status'] == after['results'][0]['status'] == 'passed'
     report['executionGates'] = {
+        'executionMode': execution_mode,
         'sameDeploymentBeforeAfter': same_candidate,
-        'healthyBeforeAfter': before['results'][0]['status'] == after['results'][0]['status'] == 'passed',
+        'healthyBeforeAfter': healthy,
         'browserExit': browser_exit,
         'currentBrowserResourcesCleaned': cleaned,
         'cleanupEvidence': cleanup,
+        'excludedCases': list(excluded_cases),
         'historicalInfrastructureRegistry': 'not reconciled by browser runner; isolated-ops handlers must prove their own lifecycle',
     }
     report['caseComplete'] = report['complete']
     gates = report['executionGates']
     report['complete'] = report['complete'] and same_candidate and cleaned and gates['healthyBeforeAfter'] and browser_exit == 0
+    if execution_mode == 'remote-https':
+        browser_entries = result['results']
+        report['remoteScopeComplete'] = (
+            bool(browser_entries)
+            and all(entry.get('status') == 'passed' for entry in browser_entries)
+            and same_candidate
+            and cleaned
+            and gates['healthyBeforeAfter']
+            and browser_exit == 0
+        )
     report['catalogCoverage']['complete'] = report['catalogCoverage']['complete'] and report['complete']
     save(directory / 'report.json', report)
     return report
 
 
+def _load_remote_profile():
+    script = ROOT / 'regression/remote_profile.py'
+    spec = importlib.util.spec_from_file_location('remote_profile', script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', default=os.getenv('MAGICTEST_REGRESSION_CONFIG'),
-                        help='private JSON: credentials, output; optional catalog, cases, chrome')
+                        help='private JSON: credentials, output; optional catalog, cases, chrome, executionMode, targetAddress')
     parser.add_argument('--suite', choices=['standard', 'abnormal'], default='standard',
                         help='execution suite to run: standard (positive default) or abnormal')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     config = json.loads(Path(args.config).expanduser().read_text()) if args.config else {}
-    unknown = set(config) - {'credentials', 'output', 'catalog', 'cases', 'chrome', 'fileUploadMaxBytes', 'deliveryFixtureConfig', 'databaseFixtureMode', 'runtimeSnapshotConfig'}
+    unknown = set(config) - {
+        'credentials', 'output', 'catalog', 'cases', 'chrome', 'fileUploadMaxBytes',
+        'deliveryFixtureConfig', 'databaseFixtureMode', 'runtimeSnapshotConfig',
+        'executionMode', 'targetAddress', 'caFile', 'insecureTls',
+        'controlledUpstreamBind', 'controlledUpstreamAdvertise', 'excludeHostCoupled',
+    }
     if unknown:
         raise ValueError('Unknown regression config fields: ' + ', '.join(sorted(unknown)))
+    execution_mode = config.get('executionMode', 'local')
+    if execution_mode not in ('local', 'remote-https'):
+        raise ValueError('executionMode must be local or remote-https')
+    if 'targetAddress' in config and (not isinstance(config['targetAddress'], str) or not config['targetAddress'].strip()):
+        raise ValueError('targetAddress requires a non-empty host or IP string')
+    if 'caFile' in config and (not isinstance(config['caFile'], str) or not config['caFile'].strip()):
+        raise ValueError('caFile requires a non-empty certificate path')
+    if 'insecureTls' in config and type(config['insecureTls']) is not bool:
+        raise ValueError('insecureTls must be a boolean')
+    if 'excludeHostCoupled' in config and type(config['excludeHostCoupled']) is not bool:
+        raise ValueError('excludeHostCoupled must be a boolean')
+    for key in ('controlledUpstreamBind', 'controlledUpstreamAdvertise'):
+        if key in config and (not isinstance(config[key], str) or not config[key].strip()):
+            raise ValueError(f'{key} requires a non-empty endpoint string')
+    if execution_mode == 'remote-https' and (config.get('deliveryFixtureConfig') or config.get('runtimeSnapshotConfig')):
+        raise ValueError('remote-https mode does not support host-local deliveryFixtureConfig or runtimeSnapshotConfig')
     if 'fileUploadMaxBytes' in config and (type(config['fileUploadMaxBytes']) is not int or not 1 <= config['fileUploadMaxBytes'] <= 1024 ** 3):
         raise ValueError('fileUploadMaxBytes requires the verified positive deployment content limit within the 1 GiB tool budget')
     if 'databaseFixtureMode' in config and (config['databaseFixtureMode'] not in ['bounded', 'isolated-tmpfs-only'] or config['databaseFixtureMode'] == 'isolated-tmpfs-only' and not config.get('deliveryFixtureConfig')):
@@ -274,9 +319,22 @@ def main():
     suite_ids = {c['id'] for c in catalog['cases'] if c['required'] and any(p['suite'] == args.suite for p in c['execution'])}
     if cases is not None and (not isinstance(cases, list) or not cases or any(not isinstance(c, str) or c not in suite_ids for c in cases) or len(cases) != len(set(cases))):
         raise ValueError(f'cases must be distinct required {args.suite} case IDs')
-    command = ['node', str(ROOT / 'regression/standard.cjs'), '--catalog', str(catalog_path), '--suite', args.suite]
+    excluded_cases = []
+    if execution_mode == 'remote-https' and cases is None and config.get('excludeHostCoupled', True):
+        include_upstream = bool(config.get('controlledUpstreamBind') or config.get('controlledUpstreamAdvertise'))
+        excluded_cases = _load_remote_profile().excluded_for_remote(args.suite, include_upstream=include_upstream)
+    command = ['node', str(ROOT / 'regression/standard.cjs'), '--catalog', str(catalog_path), '--suite', args.suite,
+               '--execution-mode', execution_mode]
     if cases:
         command += ['--cases', ','.join(cases)]
+    if excluded_cases:
+        command += ['--exclude', ','.join(excluded_cases)]
+    if 'targetAddress' in config:
+        command += ['--target-address', config['targetAddress'].strip()]
+    if 'controlledUpstreamBind' in config:
+        command += ['--controlled-upstream-bind', config['controlledUpstreamBind'].strip()]
+    if 'controlledUpstreamAdvertise' in config:
+        command += ['--controlled-upstream-advertise', config['controlledUpstreamAdvertise'].strip()]
     if 'fileUploadMaxBytes' in config:
         command += ['--file-upload-max-bytes', str(config['fileUploadMaxBytes'])]
     if 'deliveryFixtureConfig' in config:
@@ -294,7 +352,7 @@ def main():
     if not credentials.is_file():
         raise ValueError('Credentials file does not exist')
     with environment_lock(credentials):
-        return execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite=args.suite)
+        return execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite=args.suite, excluded_cases=excluded_cases)
 
 
 def cleanup_historical_runs(catalog_path, output_root, *, suite='standard', cases=None):
@@ -392,7 +450,8 @@ def cleanup_historical_runs(catalog_path, output_root, *, suite='standard', case
     }
 
 
-def execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite='standard'):
+def execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite='standard', excluded_cases=()):
+    execution_mode = config.get('executionMode', 'local')
     history_cleanup = cleanup_historical_runs(catalog_path, config['output'], suite=suite, cases=cases)
     if history_cleanup.get('cleaned'):
         print(
@@ -407,20 +466,35 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     print('Evidence: ' + str(directory), flush=True)
     print('Private recovery state (retained outside repositories): ' + str(private), flush=True)
     inputs = tool_hashes()
-    save(directory / 'inputs.json', {'suite': suite, 'selectedCases': cases or f'all required {suite} branches',
+    save(directory / 'inputs.json', {'suite': suite, 'executionMode': execution_mode,
+                                    'selectedCases': cases or f'all required {suite} branches',
+                                    'excludedCases': list(excluded_cases),
                                     'historyCleanup': history_cleanup,
                                     'catalogDigest': owner.digest(catalog), 'toolHashes': inputs,
                                     'fileUploadMaxBytes': config.get('fileUploadMaxBytes'),
+                                    'targetAddress': config.get('targetAddress'),
                                     'runtimeSnapshotConfigDigest': 'sha256:' + hashlib.sha256(Path(config['runtimeSnapshotConfig']).expanduser().read_bytes()).hexdigest() if config.get('runtimeSnapshotConfig') else None,
                                     'databaseFixtureMode': config.get('databaseFixtureMode', 'bounded'),
                                     'coordination': 'exclusive local origin lock held through preflight, mutations, cleanup and report',
                                     'credentials': 'external private file, not archived',
                                     'deliveryFixtureConfigDigest': 'sha256:' + hashlib.sha256(Path(config['deliveryFixtureConfig']).expanduser().read_bytes()).hexdigest() if config.get('deliveryFixtureConfig') else None})
-    before_path = owner.capture_health(catalog, directory / 'health-before')
-    before = json.loads(before_path.read_text())
-    if before['results'][0]['status'] != 'passed':
-        save(directory / 'preflight.json', {'status': 'blocked', 'reason': 'Core health preflight failed; browser mutations not started'})
-        return 2
+    if execution_mode == 'remote-https':
+        origin = json.loads(credentials.read_text()).get('origin', '')
+        before_path = owner.capture_remote_health(
+            catalog, directory / 'health-before', origin=origin,
+            target_address=config.get('targetAddress'), ca_file=config.get('caFile'),
+            insecure=bool(config.get('insecureTls', False)),
+        )
+        before = json.loads(before_path.read_text())
+        if not before.get('remoteHealth', {}).get('passed'):
+            save(directory / 'preflight.json', {'status': 'blocked', 'reason': 'Remote HTTPS health preflight failed; browser mutations not started'})
+            return 2
+    else:
+        before_path = owner.capture_health(catalog, directory / 'health-before')
+        before = json.loads(before_path.read_text())
+        if before['results'][0]['status'] != 'passed':
+            save(directory / 'preflight.json', {'status': 'blocked', 'reason': 'Core health preflight failed; browser mutations not started'})
+            return 2
     if config.get('deliveryFixtureConfig'):
         fixture_config_path = Path(config['deliveryFixtureConfig']).expanduser().resolve()
         if not ensure_delivery_fixture(fixture_config_path, directory):
@@ -430,14 +504,23 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     if config.get('chrome'):
         command += ['--chrome', str(Path(config['chrome']).expanduser())]
     browser_exit = run_browser(command, private, directory)
-    after_path = owner.capture_health(catalog, directory / 'health-after')
+    if execution_mode == 'remote-https':
+        after_path = owner.capture_remote_health(
+            catalog, directory / 'health-after', origin=origin,
+            target_address=config.get('targetAddress'), ca_file=config.get('caFile'),
+            insecure=bool(config.get('insecureTls', False)),
+        )
+    else:
+        after_path = owner.capture_health(catalog, directory / 'health-after')
     after = json.loads(after_path.read_text())
     browser_path = directory / 'browser/results.json'
     browser = json.loads(browser_path.read_text()) if browser_path.exists() else {}
-    report = finish(owner, catalog, before, after, browser, directory, browser_exit, suite=suite)
+    report = finish(owner, catalog, before, after, browser, directory, browser_exit, suite=suite, execution_mode=execution_mode, excluded_cases=excluded_cases)
     print(json.dumps({'counts': report['counts'], 'complete': report['complete'],
+                      'remoteScopeComplete': report.get('remoteScopeComplete'),
                       'executionGates': report['executionGates']}, ensure_ascii=False))
-    return 0 if report['complete'] else 2
+    success = report['complete'] if execution_mode != 'remote-https' else bool(report.get('remoteScopeComplete'))
+    return 0 if success else 2
 
 
 if __name__ == '__main__':

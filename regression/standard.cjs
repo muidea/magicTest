@@ -14,6 +14,7 @@ const { cleanupNegativeMutation } = require('./negative_mutations.cjs');
 const { readDirectory } = require('./directory.cjs');
 const { tenantPortalKeys } = require('./platform_profiles.cjs');
 const { createResource, deleteResource } = require('./resource_lifecycle.cjs');
+const { baseDomainFromOrigin, browserHostResolverArgs } = require('./remote_target.cjs');
 const root = path.resolve(__dirname, '..');
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -63,6 +64,10 @@ async function main() {
   const credentials = JSON.parse(fs.readFileSync(options.credentials));
   const origin = credentials.origin;
   if (!origin || new URL(origin).protocol !== 'https:') throw Error('Credentials need an explicit HTTPS origin');
+  if (options['target-address']) {
+    process.env.MAGICTEST_TARGET_ADDRESS = options['target-address'];
+    process.env.MAGICTEST_BASE_DOMAIN = baseDomainFromOrigin(origin);
+  }
   const catalog = JSON.parse(fs.readFileSync(options.catalog || path.join(root, 'acceptance/platform-catalog.json')));
   const baseline = JSON.parse(fs.readFileSync(options['baseline-health']));
   const selected = selectCases(catalog);
@@ -79,7 +84,7 @@ async function main() {
     try { fs.fsyncSync(directory); } finally { fs.closeSync(directory); }
   };
   persist();
-  const browser = await chromium.launch({ executablePath: options.chrome || chromium.executablePath(), headless: true, args: ['--no-sandbox', '--no-proxy-server', '--host-resolver-rules=MAP *.local.vpc 127.0.0.1'] });
+  const browser = await chromium.launch({ executablePath: options.chrome || chromium.executablePath(), headless: true, args: ['--no-sandbox', '--no-proxy-server', ...browserHostResolverArgs(origin, options['target-address'])] });
   // Direct original-state recovery may reuse the private directory. The
   // orchestrator always creates a fresh one and rejects a preexisting marker.
   if (!fs.existsSync(path.join(priv, 'browser-started.json'))) fs.writeFileSync(path.join(priv, 'browser-started.json'), JSON.stringify({ launched: true }), { mode: 0o600, flag: 'wx' });
@@ -270,6 +275,10 @@ async function main() {
     deliveryFixtureConfig: options['delivery-fixture-config'],
     databaseFixtureMode: options['database-fixture-mode'],
     runtimeSnapshotConfig: options['runtime-snapshot-config'],
+    executionMode: options['execution-mode'] || 'local',
+    targetAddress: options['target-address'],
+    controlledUpstreamBind: options['controlled-upstream-bind'],
+    controlledUpstreamAdvertise: options['controlled-upstream-advertise'],
     directory(actor, route, options) { return readDirectory(h, actor, route, options); },
     need(key) { if (!state.fixtures[key]) throw new Blocked('Missing current-run fixture: ' + key); return state.fixtures[key]; },
     async gone(collection, id) { const r = await api(admin, 'GET', collection + id); check('Owner confirms target absent', r.data?.error?.code === 2 && r.data.value == null, r); },

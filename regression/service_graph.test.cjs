@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { subscribe, cleanupSubscription, cleanupCredential, rotate, call, succeeds } = require('./service_graph.cjs');
+const { subscribe, cleanupSubscription, cleanupCredential, rotate, call, succeeds, upstream, parseUpstreamEndpoint } = require('./service_graph.cjs');
 const { chromium } = require('./playwright.cjs');
 function harness(mode) {
   const requests = [], actor = { identity: { account: 'member', namespace: 'test' }, origin: 'https://test.example' };
@@ -97,4 +97,29 @@ test('subscription retains its real second-tenant owner and cleanup refuses a di
   delete f.h.otherTenantAdmin;
   await assert.rejects(cleanupSubscription(f.h, s.resource), /Exact original.*owner session/);
   assert.equal(f.requests.filter(r => r.method === 'DELETE').length, 0);
+});
+
+test('remote upstream binds explicit address without docker and blocks unconfigured remote-https', async () => {
+  await assert.rejects(
+    upstream({ executionMode: 'remote-https', Blocked: Error, teardowns: [] }),
+    /REMOTE-UPSTREAM-REQUIRED/,
+  );
+  const spec = parseUpstreamEndpoint('127.0.0.1:0', '10.99.0.2');
+  assert.equal(spec.bindHost, '127.0.0.1');
+  assert.equal(spec.bindPort, 0);
+  assert.equal(spec.formatAddress(45678), 'http://10.99.0.2:45678');
+
+  const teardowns = [];
+  const up = await upstream({
+    executionMode: 'remote-https',
+    controlledUpstreamBind: '127.0.0.1:0',
+    controlledUpstreamAdvertise: 'http://test-runner.internal',
+    Blocked: Error,
+    teardowns,
+  });
+  try {
+    assert.match(up.address, /^http:\/\/test-runner\.internal:\d+$/);
+  } finally {
+    for (const fn of teardowns) await fn();
+  }
 });

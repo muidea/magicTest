@@ -3,6 +3,7 @@
 // has separate OS DNS and does not inherit Chromium host-resolver-rules.
 const { request } = require('./playwright.cjs');
 const { isDeepStrictEqual: same } = require('node:util');
+const { resolveConnectHost } = require('./remote_target.cjs');
 async function ownerExchange(actor, method, route, body, observe, mode = 'json', readIdentity) {
   if (!actor?.identity || !actor.context || !route.startsWith('/') || route.startsWith('//')) throw Error('Owner request requires original browser identity and same-origin route');
   const origin = actor.origin, identity = structuredClone(actor.identity);
@@ -10,7 +11,7 @@ async function ownerExchange(actor, method, route, body, observe, mode = 'json',
   const target = new URL(endpoint, origin);
   if (target.origin !== origin) throw Error('Owner route resolves outside original origin');
   const connect = new URL(target);
-  if (connect.hostname.endsWith('.local.vpc')) connect.hostname = '127.0.0.1';
+  connect.hostname = resolveConnectHost(connect.hostname);
   const cookies = await actor.context.cookies(target.href);
   const cookieKey = c => c.name + '\n' + c.path;
   if (new Set(cookies.map(cookieKey)).size !== cookies.length) throw Error('Ambiguous owner cookies; no request sent');

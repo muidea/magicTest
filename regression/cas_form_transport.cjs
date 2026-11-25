@@ -1,5 +1,6 @@
 // Transport only the browser's original CAS form. No synthesized command or retry.
 const { isDeepStrictEqual: same } = require('node:util');
+const { resolveConnectHost } = require('./remote_target.cjs');
 async function withOriginalCasForms(actor, { journal, persist, record = () => {} }, action) {
   const { page, origin } = actor, identity = structuredClone(actor.identity);
   const targetOrigin = new URL(origin);
@@ -25,7 +26,7 @@ async function withOriginalCasForms(actor, { journal, persist, record = () => {}
       journal.push(intent); persist();
       if (actor.origin !== origin || !same(actor.identity, identity)) throw Error('Original CAS actor changed before dispatch');
       const connect = new URL(url);
-      if (connect.hostname.endsWith('.local.vpc')) connect.hostname = '127.0.0.1';
+      connect.hostname = resolveConnectHost(connect.hostname);
       const response = await r.fetch({ url: connect.href, method: 'POST', headers: { ...headers, host: url.host }, postData: body, maxRedirects: 0, maxRetries: 0, timeout: 30000 });
       intent.status = response.status(); intent.phase = 'response-received'; persist();
       await r.fulfill({ response });

@@ -7,6 +7,7 @@ const authority = require('./application_authority_cases.cjs');
 const metadata = require('./definition_metadata_cases.cjs');
 const { runtimeRead } = require('./owner_transport.cjs');
 const { portalBasicProfileSet } = require('./platform_profiles.cjs');
+const { resolveConnectHost } = require('./remote_target.cjs');
 const readers = [
   { kind: 'operation-logs', permission: 'builtin-operation-logs.read', role: 'application-operation-logs-reader' },
   { kind: 'counters', permission: 'builtin-counters.read', role: 'application-counters-reader' },
@@ -69,7 +70,7 @@ const denied = r => [200, 401, 403].includes(r?.status) && r.data?.error?.code =
 async function bearerRead(origin, route, identity, token) {
   const { request } = require('./playwright.cjs');
   const url = new URL('/api/v1' + route, origin), connect = new URL(url);
-  if (connect.hostname.endsWith('.local.vpc')) connect.hostname = '127.0.0.1';
+  connect.hostname = resolveConnectHost(connect.hostname);
   const wire = Object.fromEntries(['namespace', 'deploymentId', 'installationId', 'runtimeApplicationUuid', 'generation', 'executionEpoch', 'artifactDigest'].map(k => [k, identity[k]]));
   const transport = await request.newContext({ ignoreHTTPSErrors: true });
   try {

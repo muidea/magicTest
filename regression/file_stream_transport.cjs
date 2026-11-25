@@ -5,6 +5,7 @@ const http = require('node:http');
 const https = require('node:https');
 const { once } = require('node:events');
 const { isDeepStrictEqual: same } = require('node:util');
+const { resolveConnectHost } = require('./remote_target.cjs');
 const budget = 1024 * 1024 * 1024 + 1;
 const block = Buffer.alloc(64 * 1024);
 for (let i = 0; i < block.length; i++) block[i] = i % 251;
@@ -62,7 +63,7 @@ async function transfer(actor, method, route, file, observe = () => {}) {
   if (body) Object.assign(headers, { 'Content-Type': 'multipart/form-data; boundary=' + body.boundary, 'Content-Length': String(body.length) });
   let timer, request, response, requestError, sent = 0;
   const completed = new Promise((resolve, reject) => {
-    request = (target.protocol === 'https:' ? https : http).request({ protocol: target.protocol, hostname: target.hostname.endsWith('.local.vpc') ? '127.0.0.1' : target.hostname,
+    request = (target.protocol === 'https:' ? https : http).request({ protocol: target.protocol, hostname: resolveConnectHost(target.hostname),
       port: target.port || undefined, servername: target.hostname, path: endpoint, method, headers, rejectUnauthorized: false, agent: false }, resolve);
     request.on('error', error => { requestError = error; reject(error); });
     timer = setTimeout(() => request.destroy(Error('Original finite file transfer exceeded 180 seconds; outcome unknown, never retry')), 180000);

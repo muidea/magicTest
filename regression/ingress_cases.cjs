@@ -2,6 +2,7 @@
 const tls = require('node:tls');
 const https = require('node:https');
 const crypto = require('node:crypto');
+const { resolveConnectHost } = require('./remote_target.cjs');
 function certificateAt(host, port, servername) {
  return new Promise((resolve,reject)=>{
   const socket=tls.connect({host,port,servername,rejectUnauthorized:false});
@@ -19,7 +20,7 @@ function strictMismatch(host,port,servername,ca) {
  });
 }
 async function certificateMismatch(h) {
- const origin=new URL(h.credentials.origin),host=origin.hostname.endsWith('.local.vpc')?'127.0.0.1':origin.hostname,port=Number(origin.port||443);
+ const origin=new URL(h.credentials.origin),host=resolveConnectHost(origin.hostname),port=Number(origin.port||443);
  const peer=await certificateAt(host,port,origin.hostname),servername='regression-'+crypto.randomBytes(16).toString('hex')+'.invalid';
  const error=tls.checkServerIdentity(servername,peer);
  h.check('Actual ingress certificate does not cover the independent mismatched Host fixture',error?.code==='ERR_TLS_CERT_ALTNAME_INVALID',{certificateFingerprint:peer.fingerprint256,subjectAltName:peer.subjectaltname,fixtureHost:servername});

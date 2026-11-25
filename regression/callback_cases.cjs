@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const { withOriginalCasForms } = require('./cas_form_transport.cjs');
 const { ownerRequest } = require('./owner_transport.cjs');
 const { waitLoginForm } = require('./login_readiness.cjs');
+const { resolveConnectHost } = require('./remote_target.cjs');
 const callbackPath = '/api/v1/web/auth/callback';
 const authorizePaths = ['/oauth/authorize', '/api/v1/cas/oauth/authorize'];
 function authorizationVariant(original, origin, mode) {
@@ -30,7 +31,7 @@ async function withOriginalAuthorizationEntry(actor, mode, hooks, action) {
       if (journal.authorizations.length || request.method() !== 'GET' || !request.isNavigationRequest() || request.frame() !== page.mainFrame()) throw Error('Exact original BFF login navigation required once');
       journal.entry = { originalURL: request.url(), outcome: 'unknown' }; persist();
       const target = new URL(request.url()), connect = new URL(target);
-      if (connect.hostname.endsWith('.local.vpc')) connect.hostname = '127.0.0.1';
+      connect.hostname = resolveConnectHost(connect.hostname);
       const response = await route.fetch({ url: connect.href, headers: { ...await request.allHeaders(), host: target.host }, maxRedirects: 0, maxRetries: 0, timeout: 30000 });
       journal.entry.status = response.status(); journal.entry.outcome = 'response-received'; persist();
       if (response.status() !== 302 || !response.headers().location) throw Error('Original BFF must supply one real authorization redirect');

@@ -51,7 +51,15 @@ python3 -B run_tests.py --target platform-abnormal --dry-run
 MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json python3 -B run_tests.py --target platform-abnormal
 ```
 
-配置可选`catalog`（唯一用例目录）、`cases`（所选分组的用例ID数组，省略即全量）、`chrome`（已安装浏览器）和`fileUploadMaxBytes`（实际部署的文件上传上限字节，F049-003必填）。直接执行`python3 -B regression/run_standard.py --suite standard --config <private-config> --dry-run`或`--suite abnormal`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的分项，运行入口存在不代表完整套件交付。
+配置可选`catalog`（唯一用例目录）、`cases`（所选分组的用例ID数组，省略即全量）、`chrome`（已安装浏览器）、`fileUploadMaxBytes`（实际部署的文件上传上限字节，F049-003必填），以及跨机远端执行字段：
+
+- `executionMode`：`"local"`（默认）或 `"remote-https"`（测试机与平台部署机分离）。`remote-https` 模式下编排器改用远端 HTTPS 只读基线（不查测试机本机 Docker，且严禁将 `F059-001` 容器检查记为通过），报告中单独给出 `remoteScopeComplete`，与全目录 `complete` 严格区分。
+- `targetAddress`：可选目标平台 IP/地址；无泛域名 DNS 时自动注入 Chromium `--host-resolver-rules` 与全部 Node HTTP 传输通道，保留原始 `Host` 与 TLS SNI。
+- `caFile` / `insecureTls`：远端健康基线使用的私有 CA 文件或显式跳过校验开关。
+- `controlledUpstreamBind` / `controlledUpstreamAdvertise`：跨机 `service_graph` 外部服务回调监听与通告地址（须由目标机 `magicGateway` 可达）。
+- `excludeHostCoupled`：默认 `true`（仅在 `remote-https` 且未显式指定 `cases` 时生效），自动排除需平台宿主机 Docker/`platformRoot`/快照的用例，并在未配 `controlledUpstream*` 时同步排除需外部回调的用例。
+
+直接执行`python3 -B regression/run_standard.py --suite standard --config <private-config> --dry-run`或`--suite abnormal`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的分项，运行入口存在不代表完整套件交付。
 
 每次在已登记运行目录下生成唯一子目录，保留`inputs.json`、`health-before`、`browser`、`health-after`、`results.json`和`report.json`。`~/codespace/magicTest/reports/` 下所有验证过程产生的文件仅留在本地，统一不提交 Git；每次执行全量回归（省略 `cases` 且非 `--dry-run`）时，编排工具会在写新目录前自动清理 `reports/` 与历史轮次目录下的旧数据（同轮全量 `abnormal` 保留同轮 `standard/`；定向子集复验 `--cases` 与 `--dry-run` 不触发清理）。报告校验逐例证据摘要；只有所选分组全部分项通过、部署身份不变、前后健康、本次资源已独立确认清理且执行器成功，才返回成功。定向执行也报告所选分组完整覆盖率，其余项显示未执行；非零退出需根据逐例状态区分受阻、工具错误和产品失败。私密恢复状态自动留在仓库外，位置打印到终端，不归档其内容。当前浏览器夹具清理不代表历史基础设施登记器已全局核销。
 
@@ -424,15 +432,27 @@ python3 run_tests.py --target vmi-tenant-user-prepare --env-profile autotest-loc
 python3 run_tests.py --preset business-prepare-users --env MAGICTEST_TENANT_TARGETS=t001,t002 --env MAGICTEST_TENANT_USER_POOL_ENABLED=true --env MAGICTEST_USERS_PER_TENANT=3
 ```
 
-### 3.5 我要做并发 / 热点 / 老化压测
+### 3.5 我要做跨机性能压测与 APM 指标关联（推荐）/ 历史 VMI 压测
 
-选：
+当前推荐基于公开 HTTPS 接口执行跨机压测并关联平台 Prometheus APM（无需被测机 SSH，零第三方 Python 依赖）：
 
-- `vmi-concurrent`
-- `vmi-hotspot`
-- `vmi-aging`
+```bash
+# 1. 预览计划（不发网络请求）
+python3 -B run_tests.py --target platform-load
 
-命令：
+# 2. 复用双模拟应用冷启动 state-dir 对 Gateway 或 Apps 发压并拉取平台 APM
+python3 -B load/run_load.py \
+  --from-sim-state ~/.local/state/magic-sim \
+  --sim-app device-management --sim-scenario gateway-read \
+  --mode step --concurrency 2,8,16 --duration 30 \
+  --connection-mode keep-alive \
+  --apm-url https://apm.example.com/prometheus/ \
+  --apm-idle-seconds 30 --require-apm
+```
+
+- 支持 `--mode steady|step|aging`、`--connection-mode keep-alive|cold-tls`、`--auth-mode public|apikey|bearer`（`0600` 私密凭据文件，Bearer 限制 `<= 16384` 字节）及 `--target-address` / `--ca-file` / `--trust-leaf` / `--apm-auth-file`。
+- 离线单元测试：`python3 -B run_tests.py --target load-tools-unit`（或 `python3 -B -m unittest discover -s load -p 'test_*.py' -v`）。
+- 历史 VMI 压测（仅保留兼容旧环境，使用旧 `/api/v1/cas/session/login/` 合同）：
 
 ```bash
 python3 run_tests.py --preset load-hotspot

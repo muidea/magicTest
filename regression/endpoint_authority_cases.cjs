@@ -2,6 +2,7 @@
 // session is never forwarded to Gateway as the Endpoint's business authority.
 const { request } = require('./playwright.cjs');
 const { isDeepStrictEqual: same } = require('node:util');
+const { resolveConnectHost } = require('./remote_target.cjs');
 const graph = require('./service_graph.cjs');
 const generated = require('./generated_service_cases.cjs');
 const authority = require('./application_authority_cases.cjs');
@@ -15,7 +16,7 @@ async function keyCall(origin, method, route, apiKey, body) {
   const url = new URL(route, origin);
   if (url.origin !== origin || url.hash || url.username || url.password || url.pathname + url.search !== route || !url.pathname.startsWith('/api/v1/gateway/services/')) throw Error('Gateway call must retain its original origin and public path');
   const connect = new URL(url);
-  if (connect.hostname.endsWith('.local.vpc')) connect.hostname = '127.0.0.1';
+  connect.hostname = resolveConnectHost(connect.hostname);
   // A new empty API context sends neither browser cookies nor bearer tokens.
   const transport = await request.newContext({ ignoreHTTPSErrors: true });
   try {
