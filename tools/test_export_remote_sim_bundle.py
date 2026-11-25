@@ -33,6 +33,7 @@ class ExportRemoteSimBundleTests(unittest.TestCase):
             (fake_test / "applications/device-management/fixtures").mkdir(parents=True)
             (fake_test / "applications/chess-room-booking/tooling").mkdir(parents=True)
             (fake_test / "applications/chess-room-booking/fixtures").mkdir(parents=True)
+            (fake_test / "load").mkdir(parents=True)
             (fake_test / "reports").mkdir(parents=True)
 
             (fake_test / "README.md").write_text("# magicTest\n", encoding="utf-8")
@@ -56,6 +57,10 @@ class ExportRemoteSimBundleTests(unittest.TestCase):
             (fake_test / "applications/chess-room-booking/README.md").write_text("# crb\n", encoding="utf-8")
             (fake_test / "applications/chess-room-booking/tooling/simulation_tool.py").write_text("# sim\n", encoding="utf-8")
             (fake_test / "applications/chess-room-booking/fixtures/baseline.json").write_text("{}\n", encoding="utf-8")
+            (fake_test / "load/__init__.py").write_text("", encoding="utf-8")
+            (fake_test / "load/run_load.py").write_text("# load\n", encoding="utf-8")
+            (fake_test / "load/apm_client.py").write_text("# apm\n", encoding="utf-8")
+            (fake_test / "load/test_load.py").write_text("# excluded\n", encoding="utf-8")
             (fake_test / "reports/run.json").write_text("{}", encoding="utf-8")
 
             archive_path = tmp_path / "out/sim-bundle.tar.gz"
@@ -75,11 +80,13 @@ class ExportRemoteSimBundleTests(unittest.TestCase):
                 self.assertIn("magic-sim-bundle/bundle-manifest.json", names)
                 self.assertIn("magic-sim-bundle/README-REMOTE.txt", names)
                 self.assertIn("magic-sim-bundle/magicTest/applications/device-management/tooling/simulator.py", names)
+                self.assertIn("magic-sim-bundle/magicTest/load/run_load.py", names)
+                self.assertIn("magic-sim-bundle/magicTest/load/apm_client.py", names)
                 self.assertIn("magic-sim-bundle/magicPlatform/apps/models/device-management/package/package.zip", names)
                 self.assertIn("magic-sim-bundle/magicPlatform/apps/models/chess-room-booking/package/package.zip", names)
                 self.assertIn("magic-sim-bundle/magicPlatform/scripts/deployment-health.sh", names)
 
-                for forbidden_sub in ("__pycache__", ".pyc", "test_live_e2e.py", "test_simulator.py", "validate.go.txt", "leaked.key", "/reports/", "unpacked"):
+                for forbidden_sub in ("__pycache__", ".pyc", "test_live_e2e.py", "test_simulator.py", "test_load.py", "validate.go.txt", "leaked.key", "/reports/", "unpacked"):
                     self.assertFalse(any(forbidden_sub in n for n in names), f"forbidden archive entry matching {forbidden_sub}")
 
                 manifest = json.loads(tf.extractfile("magic-sim-bundle/bundle-manifest.json").read().decode("utf-8"))

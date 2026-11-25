@@ -66,61 +66,84 @@ def _latency_summary(latencies_ms: List[float]) -> Dict[str, Optional[float]]:
     }
 
 
+def _append_gateway_query(url: str, op_suffix: str) -> str:
+    parsed = urlsplit(url)
+    marker = "/api/v1/gateway/services/"
+    idx = parsed.path.find(marker)
+    if idx < 0:
+        return url
+    tail = parsed.path[idx + len(marker):].strip("/")
+    if not tail or "/" in tail:
+        return url
+    base = url.rstrip("/")
+    return f"{base}/{op_suffix}?_pageNum=1&_pageSize=20"
+
+
 def _resolve_sim_target(state_dir_raw: str, sim_app: str, sim_scenario: str) -> Dict[str, Any]:
     state_dir = Path(state_dir_raw).expanduser().resolve()
     summary_file = state_dir / "bootstrap-summary.json"
-    if summary_file.is_file():
-        summary = json.loads(summary_file.read_text(encoding="utf-8"))
-        base_url = str(summary.get("baseUrl") or "").rstrip("/")
-    else:
-        summary = {}
-        base_url = ""
+    summary = json.loads(summary_file.read_text(encoding="utf-8")) if summary_file.is_file() else {}
+    base_url = str(summary.get("baseUrl") or "").rstrip("/")
+    target_address = str(summary.get("targetAddress") or "").strip() or None
+    simulation = summary.get("simulation") or {}
+    portal = summary.get("portal") or {}
+    installations = summary.get("installations") or {}
+    crb_op = summary.get("crbOperator") or {}
 
     secrets_dir = state_dir / "secrets"
     if sim_app == "device-management":
         if sim_scenario != "gateway-read":
             raise ValueError("device-management simulation currently supports sim-scenario=gateway-read")
-        cfg_path = state_dir / "device-management/config.json"
+        cfg_path = state_dir / "runs/device-management/config.json"
         cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.is_file() else {}
-        url = str(cfg.get("serviceUrl") or "").strip()
+        dm_sim = simulation.get("device-management") or {}
+        dm_portal = portal.get("device-management") or {}
+        svc_key = str(dm_portal.get("serviceKey") or "device_management_service")
+        url = str(dm_sim.get("serviceUrl") or cfg.get("serviceUrl") or "").strip()
         if not url and base_url:
-            url = f"{base_url}/api/v1/gateway/services/device-management-gateway/"
+            url = f"{base_url}/api/v1/gateway/services/{svc_key}"
         if not url:
             raise ValueError(f"Unable to determine device-management gateway URL from {state_dir}")
-        api_key_file = str(cfg.get("apiKeyFile") or (secrets_dir / "dm-device.api-key"))
+        api_key_file = str(dm_portal.get("apiKeyFile") or cfg.get("apiKeyFile") or (secrets_dir / "device-management.api-key"))
         return {
-            "url": url,
+            "url": _append_gateway_query(url, "device_query"),
             "authMode": "apikey",
             "secretFile": api_key_file,
             "method": "GET",
+            "targetAddress": target_address,
         }
 
     if sim_app == "chess-room-booking":
-        app_info = (summary.get("apps") or {}).get("chess-room-booking") or {}
-        inst_id = app_info.get("installationId")
+        crb_sim = simulation.get("chess-room-booking") or {}
+        crb_portal = portal.get("chess-room-booking") or {}
+        crb_inst = installations.get("chess-room-booking") or {}
         if sim_scenario == "gateway-read":
-            url = str(app_info.get("gatewayServiceUrl") or "").strip()
+            svc_key = str(crb_portal.get("serviceKey") or "chess_room_booking_simulation")
+            url = str(crb_sim.get("serviceUrl") or "").strip()
             if not url and base_url:
-                url = f"{base_url}/api/v1/gateway/services/chess-room-booking-gateway/"
+                url = f"{base_url}/api/v1/gateway/services/{svc_key}"
             if not url:
                 raise ValueError(f"Unable to determine chess-room-booking gateway URL from {state_dir}")
+            api_key_file = str(crb_portal.get("apiKeyFile") or (secrets_dir / "chess-room-booking.api-key"))
             return {
-                "url": url,
+                "url": _append_gateway_query(url, "room_query"),
                 "authMode": "apikey",
-                "secretFile": str(secrets_dir / "crb-gateway.api-key"),
+                "secretFile": api_key_file,
                 "method": "GET",
+                "targetAddress": target_address,
             }
         if sim_scenario == "apps-read":
-            url = str(app_info.get("appsBaseUrl") or "").strip()
-            if not url and base_url and inst_id:
-                url = f"{base_url}/api/v1/apps/chess-room-booking/installations/{inst_id}/"
-            if not url:
-                raise ValueError(f"Unable to determine chess-room-booking apps URL from {state_dir}")
+            dep_id = crb_inst.get("deploymentId")
+            if not base_url or not dep_id:
+                raise ValueError(f"Unable to determine chess-room-booking deploymentId/baseUrl from {state_dir}")
+            url = f"{base_url}/api/v1/apps/application/runtimes/chess-room-booking?deploymentId={dep_id}"
+            token_file = str(crb_op.get("actionTokenFile") or (secrets_dir / "crb-operator.token"))
             return {
                 "url": url,
                 "authMode": "bearer",
-                "secretFile": str(secrets_dir / "crb-operator.token"),
+                "secretFile": token_file,
                 "method": "GET",
+                "targetAddress": target_address,
             }
         raise ValueError(f"Unsupported sim-scenario for chess-room-booking: {sim_scenario}")
 
@@ -203,7 +226,7 @@ def _build_spec(args: argparse.Namespace) -> Dict[str, Any]:
         "method": method,
         "authMode": auth_mode,
         "secretFile": str(Path(secret_file).expanduser()) if secret_file else None,
-        "targetAddress": (args.target_address or cfg.get("targetAddress") or "").strip() or None,
+        "targetAddress": (args.target_address or cfg.get("targetAddress") or sim_resolved.get("targetAddress") or "").strip() or None,
         "caFile": str(Path(args.ca_file or cfg.get("caFile")).expanduser()) if (args.ca_file or cfg.get("caFile")) else None,
         "trustLeaf": bool(args.trust_leaf or cfg.get("trustLeaf", False)),
         "insecure": bool(args.insecure or cfg.get("insecure", False)),

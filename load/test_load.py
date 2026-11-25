@@ -250,21 +250,44 @@ class LoadSuiteTests(unittest.TestCase):
             root = Path(folder)
             state_dir = root / "sim-state"
             (state_dir / "secrets").mkdir(parents=True)
-            (state_dir / "device-management").mkdir(parents=True)
-            key_file = state_dir / "secrets/dm-device.api-key"
+            (state_dir / "runs/device-management").mkdir(parents=True)
+            key_file = state_dir / "secrets/device-management.api-key"
             key_file.write_text("sk_dm_12345\n")
             key_file.chmod(0o600)
             target.expected_auth = "ApiKey sk_dm_12345"
             (state_dir / "bootstrap-summary.json").write_text(json.dumps({
                 "baseUrl": "https://panel.example.com",
-                "apps": {
+                "targetAddress": "192.168.13.47",
+                "apps": ["device-management", "chess-room-booking"],
+                "installations": {
                     "chess-room-booking": {
                         "installationId": 42,
-                        "gatewayServiceUrl": "https://panel.example.com/api/v1/gateway/services/crb/",
+                        "deploymentId": "dep6b79",
                     }
                 },
+                "portal": {
+                    "device-management": {
+                        "serviceKey": "device_management_service",
+                        "apiKeyFile": str(key_file),
+                    },
+                    "chess-room-booking": {
+                        "serviceKey": "chess_room_booking_simulation",
+                        "apiKeyFile": str(state_dir / "secrets/chess-room-booking.api-key"),
+                    },
+                },
+                "crbOperator": {
+                    "actionTokenFile": str(state_dir / "secrets/crb-operator.token"),
+                },
+                "simulation": {
+                    "device-management": {
+                        "serviceUrl": target.url,
+                    },
+                    "chess-room-booking": {
+                        "serviceUrl": "https://panel.example.com/api/v1/gateway/services/chess_room_booking_simulation",
+                    },
+                },
             }))
-            (state_dir / "device-management/config.json").write_text(json.dumps({
+            (state_dir / "runs/device-management/config.json").write_text(json.dumps({
                 "serviceUrl": target.url,
                 "apiKeyFile": str(key_file),
             }))
@@ -287,9 +310,35 @@ class LoadSuiteTests(unittest.TestCase):
             self.assertGreaterEqual(len(report["stages"][0].get("agingTimeline", [])), 1)
             self.assertTrue(all(r["connection"] == "close" for r in target.requests))
 
+            resolved_dm = run_load._resolve_sim_target(
+                str(state_dir), "device-management", "gateway-read",
+            )
+            self.assertEqual(resolved_dm["targetAddress"], "192.168.13.47")
+            self.assertEqual(resolved_dm["secretFile"], str(key_file))
+            self.assertEqual(
+                run_load._append_gateway_query(
+                    "https://panel.example.com/api/v1/gateway/services/device_management_service",
+                    "device_query",
+                ),
+                "https://panel.example.com/api/v1/gateway/services/device_management_service/device_query?_pageNum=1&_pageSize=20",
+            )
+
+            resolved_crb_gw = run_load._resolve_sim_target(str(state_dir), "chess-room-booking", "gateway-read")
+            self.assertEqual(
+                resolved_crb_gw["url"],
+                "https://panel.example.com/api/v1/gateway/services/chess_room_booking_simulation/room_query?_pageNum=1&_pageSize=20",
+            )
+            self.assertEqual(resolved_crb_gw["secretFile"], str(state_dir / "secrets/chess-room-booking.api-key"))
+            self.assertEqual(resolved_crb_gw["targetAddress"], "192.168.13.47")
+
             resolved = run_load._resolve_sim_target(str(state_dir), "chess-room-booking", "apps-read")
-            self.assertEqual(resolved["url"], "https://panel.example.com/api/v1/apps/chess-room-booking/installations/42/")
+            self.assertEqual(
+                resolved["url"],
+                "https://panel.example.com/api/v1/apps/application/runtimes/chess-room-booking?deploymentId=dep6b79",
+            )
             self.assertEqual(resolved["authMode"], "bearer")
+            self.assertEqual(resolved["secretFile"], str(state_dir / "secrets/crb-operator.token"))
+            self.assertEqual(resolved["targetAddress"], "192.168.13.47")
 
 
 if __name__ == "__main__":

@@ -105,6 +105,7 @@ def collect_bundle_entries(magic_test_root: Path, platform_root: Path) -> list[t
         "applications/live_e2e",
         "applications/device-management",
         "applications/chess-room-booking",
+        "load",
     )
     for rel in test_targets:
         entries.extend(_collect_filtered_tree(magic_test_root, rel, "magicTest"))
@@ -197,13 +198,19 @@ def export_bundle(
                 "   tar -xzf <bundle>.tar.gz\n"
                 "   cd magic-sim-bundle\n"
                 "   export MAGICPLATFORM_ROOT=\"$PWD/magicPlatform\"\n\n"
-                "2. Remote deployment health check:\n"
-                "   sh magicPlatform/scripts/deployment-health.sh --skip-docker --base-url https://panel.example.com --json\n\n"
-                "3. Dry-run bootstrap & dual-app verification:\n"
+                "2. Remote deployment health & APM check (pass --target-address <IP> if DNS is not configured):\n"
+                "   sh magicPlatform/scripts/deployment-health.sh --skip-docker --base-url https://panel.example.com --include-apm --json\n\n"
+                "3. Dry-run & run simulated apps bootstrap:\n"
                 "   python3 -B magicTest/applications/live_e2e/bootstrap_simulated_apps.py \\\n"
                 "     all --base-url https://panel.example.com --state-dir ~/.local/state/magic-sim --dry-run\n\n"
                 "   python3 -B magicTest/applications/live_e2e/run_dual_apps_e2e.py \\\n"
-                "     --platform-root \"$PWD/magicPlatform\" --dry-run --output-dir /tmp/magic-e2e-dry-run\n"
+                "     --platform-root \"$PWD/magicPlatform\" --dry-run --output-dir /tmp/magic-e2e-dry-run\n\n"
+                "4. Cross-server HTTPS load + Prometheus APM (reusing --state-dir):\n"
+                "   python3 -B magicTest/load/run_load.py \\\n"
+                "     --from-sim-state ~/.local/state/magic-sim \\\n"
+                "     --sim-app device-management --sim-scenario gateway-read \\\n"
+                "     --mode step --concurrency 2,8 --duration 30 \\\n"
+                "     --apm-url https://apm.example.com/prometheus/ --apm-idle-seconds 30 --require-apm\n"
             ).encode("utf-8")
             _add_bytes(tf, f"{root_prefix}/README-REMOTE.txt", readme_text, mode=0o644)
 
