@@ -27,10 +27,10 @@ async function boundaries(h) {
   if (baseline.some(row => row.engine === 'postgresql' && row.address === address)) throw new h.Blocked('Boundary endpoint is already registered; never reuse or mutate another owner resource');
   const payload = { name: h.state.prefix + '-wrong-db', catalog: 'regression', engine: 'postgresql', engineVersion: '17', address,
     administrator: 'regression_unused', password: h.state.password, description: '禁用的错误连接回归目录；不供应安装、不创建数据库',
-    cpuMillis: 1000, memoryBytes: 1024 * 1024 * 1024, databaseLimit: 1, status: 'disabled', healthStatus: 'unknown' };
+    cpuMillis: 1000, memoryBytes: 1024 * 1024 * 1024, databaseLimit: 1, status: 'disabled' };
   const created = await h.create(collection, payload, 'database-instance');
   const original = (await h.ok(h.admin, 'GET', collection + created.id)).value;
-  h.check('Boundary resource is disabled, has zero allocations, and never exposes the submitted private password', original.status === 'disabled' && original.allocatedDatabaseCount === 0 && original.address === address && original.engine === 'postgresql' && original.resourceVersion === 1 && !JSON.stringify(original).includes(payload.password), original);
+  h.check('Boundary resource is disabled, unknown health, has zero allocations, and never exposes the submitted private password', original.status === 'disabled' && original.healthStatus === 'unknown' && original.allocatedDatabaseCount === 0 && original.address === address && original.engine === 'postgresql' && original.resourceVersion === 1 && !JSON.stringify(original).includes(payload.password), original);
   const before = await h.directory(h.admin, collection);
   h.check('Creation adds only the original isolated endpoint to the complete directory', before.length === baseline.length + 1 && before.some(row => same(row, original)) && baseline.every(value => before.some(row => same(row, value))));
   for (const [index, address] of ['127.0.0.1:00009', '[::ffff:127.0.0.1]:9'].entries()) await duplicateAttempt(h, original, before, { ...payload, name: h.state.prefix + '-duplicate-db-' + index, address });
@@ -55,12 +55,12 @@ async function management(h) {
   const originalControls = require('./postgres_fixture.cjs').readControls(h, physical);
   const payload = { name: h.state.prefix + '-physical-db', catalog: 'regression', engine: 'postgresql', engineVersion: '17', address: physical.address,
     administrator: physical.username, password: physical.password, description: '独立无持久卷数据库；规格只作规划', cpuMillis: 1000, memoryBytes: 1024 ** 3,
-    databaseLimit: 1, status: 'disabled', healthStatus: 'unknown' };
+    databaseLimit: 1, status: 'disabled' };
   const created = await h.create(collection, payload, 'database-instance');
   const resource = h.state.resources.find(r => r.collection === collection && r.id === created.id);
   const read = () => h.ok(h.admin, 'GET', collection + created.id).then(r => r.value);
   let current = await read();
-  h.check('New resource preserves exact connection identity and masks original private credential', current.id === created.id && current.address === physical.address && current.administrator === physical.username && current.status === 'disabled' && current.allocatedDatabaseCount === 0 && !JSON.stringify(current).includes(physical.password), current);
+  h.check('New resource preserves exact connection identity, unknown healthStatus, and masks original private credential', current.id === created.id && current.address === physical.address && current.administrator === physical.username && current.status === 'disabled' && current.healthStatus === 'unknown' && current.allocatedDatabaseCount === 0 && !JSON.stringify(current).includes(physical.password), current);
   const originalPlacement = (await h.directory(h.admin, placements)).filter(p => p.instance?.id === created.id);
   h.check('New physical endpoint owns exactly one default placement', originalPlacement.length === 1 && originalPlacement[0].mode === 'shared' && originalPlacement[0].namespace === '', originalPlacement);
   const command = async (route, body, confirm) => {
@@ -85,7 +85,7 @@ async function management(h) {
   h.check('Disabled original endpoint is not an allocation candidate', !(await options(target)) && !(await options(foreign)));
   const beforeOverview = (await h.ok(h.admin, 'GET', collection + created.id + '/explorer/overview')).value.overview;
   const edit = async status => {
-    const before = current, update = { ...payload, password: '', name: payload.name + '-edited', address: physical.alternateAddress, description: '已更新规划容量，不修改实际服务器硬限额', cpuMillis: 2000, memoryBytes: 2 * 1024 ** 3, databaseLimit: 3, status };
+    const before = current, update = { ...payload, password: '', name: payload.name + '-edited', address: physical.alternateAddress, description: '已更新规划容量，不修改实际服务器硬限额', cpuMillis: 2000, memoryBytes: 2 * 1024 ** 3, databaseLimit: 3, status, expectedResourceVersion: before.resourceVersion };
     await command(collection + created.id, update, async () => {
       current = await read();
       h.check('Independent database owner persists complete original edit, increments resource revision and retains physical ownership', current.id === before.id && current.address === physical.alternateAddress && current.administrator === physical.username && current.name === update.name && current.description === update.description && current.cpuMillis === update.cpuMillis && current.memoryBytes === update.memoryBytes && current.databaseLimit === 3 && current.status === status && current.resourceVersion > before.resourceVersion && current.allocatedDatabaseCount === 0 && !JSON.stringify(current).includes(physical.password), current);

@@ -40,10 +40,32 @@ async function createSizedFile(h, size, suffix) {
   r.creation.outcome = 'confirmed'; r.phase = 'created'; h.persist();
   return { r, accepted: true };
 }
+async function resolveMaxUploadBytes(h) {
+  let queried = null;
+  const response = await h.api(h.user, 'GET', self + 'limits/');
+  if (h.good(response)) {
+    const value = response.data?.value?.maxUploadBytes;
+    if (Number.isSafeInteger(value) && value >= 1) queried = value;
+    else throw new h.Blocked('magicFile limits endpoint returned invalid maxUploadBytes: ' + JSON.stringify(response.data));
+  }
+  const configured = h.fileUploadMaxBytes;
+  if (configured !== undefined && queried !== null && configured !== queried) {
+    throw new h.Blocked(`Configured fileUploadMaxBytes=${configured} disagrees with deployment uploads.maxBytes=${queried}`);
+  }
+  const limit = configured !== undefined ? configured : queried;
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit >= budget) {
+    throw new h.Blocked('F049-003 needs the actual deployment uploads.maxBytes (from GET /files/self/files/limits/ or explicit fileUploadMaxBytes) within the 1 GiB tool budget');
+  }
+  return {
+    limit,
+    basis: configured !== undefined
+      ? (queried !== null ? 'Explicit deployment input verified against GET /files/self/files/limits/' : 'Explicit deployment input; exact L/L+1 behavior must agree before acceptance')
+      : 'Authoritative GET /files/self/files/limits/ response from deployed magicFile',
+  };
+}
 async function boundaries(h) {
-  const limit = h.fileUploadMaxBytes;
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit >= budget) throw new h.Blocked('F049-003 needs the actual deployment uploads.maxBytes (configuration or evidenced source default) as fileUploadMaxBytes; never substitute the old 10 MiB tool buffer');
-  h.observe({ kind: 'ordinary-file-content-limit', bytes: limit, basis: 'Explicit deployment input; exact L/L+1 behavior must agree before acceptance', specialNotExecuted: 'Interruptions before/after admission require isolated controlled-fault owner' });
+  const { limit, basis } = await resolveMaxUploadBytes(h);
+  h.observe({ kind: 'ordinary-file-content-limit', bytes: limit, basis, specialNotExecuted: 'Interruptions before/after admission require isolated controlled-fault owner' });
   const outcomes = [];
   // Retire each accepted original before dispatching the next large upload.
   // Empty uploads may be valid or explicitly rejected by the current owner.
@@ -55,4 +77,4 @@ async function boundaries(h) {
   h.check('Exact actual content boundary accepts L-1/L, rejects L+1, and retires every original upload', outcomes.every(x => x.disposed) && outcomes.filter(x => ['below', 'limit'].includes(x.suffix)).every(x => x.accepted) && outcomes.find(x => x.suffix === 'above').accepted === false, outcomes);
 }
 boundaries.actors = ['user']; boundaries.transport = 'owner-api';
-module.exports = { handlers: { 'F049-003': boundaries }, createSizedFile };
+module.exports = { handlers: { 'F049-003': boundaries }, createSizedFile, resolveMaxUploadBytes };

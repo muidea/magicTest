@@ -51,7 +51,7 @@ python3 -B run_tests.py --target platform-abnormal --dry-run
 MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json python3 -B run_tests.py --target platform-abnormal
 ```
 
-配置可选`catalog`（唯一用例目录）、`cases`（所选分组的用例ID数组，省略即全量）、`chrome`（已安装浏览器）、`fileUploadMaxBytes`（实际部署的文件上传上限字节，F049-003必填），以及跨机远端执行字段：
+配置可选`catalog`（唯一用例目录）、`cases`（所选分组的用例ID数组，省略即全量）、`chrome`（已安装浏览器）、`fileUploadMaxBytes`（可选覆盖或核对实际部署的 `uploads.maxBytes`；缺省时 `F049-003` 自动从 `GET /files/self/files/limits/` 只读读取，两端同时存在但数值不一致时阻塞退出），以及跨机远端执行字段：
 
 - `executionMode`：`"local"`（默认）或 `"remote-https"`（测试机与平台部署机分离）。`remote-https` 模式下编排器改用远端 HTTPS 只读基线（不查测试机本机 Docker，且严禁将 `F059-001` 容器检查记为通过），报告中单独给出 `remoteScopeComplete`，与全目录 `complete` 严格区分。
 - `targetAddress`：可选目标平台 IP/地址；无泛域名 DNS 时自动注入 Chromium `--host-resolver-rules` 与全部 Node HTTP 传输通道，保留原始 `Host` 与 TLS SNI。
