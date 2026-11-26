@@ -370,7 +370,7 @@ handlers['F065-003'] = async h => {
     await actor.page.setViewportSize(viewport);
     await actor.page.goto(actor.origin + '/portal/', { waitUntil: 'networkidle', timeout: 30000 });
     const card = actor.page.locator('.ant-card').filter({ has: actor.page.getByText('我的应用', { exact: true }) }).first();
-    const empty = card.getByText('当前租户空间暂无已安装并启用的应用', { exact: true });
+    const empty = card.getByText('当前空间暂无已安装并启用的应用', { exact: true });
     await empty.waitFor({ state: 'visible', timeout: 10000 });
     await fits(h, actor.page, card, 'Applications card'); await fits(h, actor.page, empty, 'Empty applications feedback');
     h.check('Empty portal has no horizontal overflow', await actor.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));

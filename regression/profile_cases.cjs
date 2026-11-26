@@ -137,8 +137,8 @@ async function scopeSwitch(h) {
     if (routeError) throw new h.Blocked('Original profile response transport failed: ' + routeError);
     h.check('Delayed result is an actual authorized original tenant owner response', delayedResponse.status === 200 && !delayedResponse.data.error && accountCount(delayedResponse.data.value).length === 1 && accountCount(delayedResponse.data.value)[0].value === countA, delayedResponse);
     await actor.page.locator('.magic-layout-user-area button').first().hover();
-    await actor.page.getByText('切换租户空间', { exact: true }).click();
-    const dialog = actor.page.getByRole('dialog', { name: '切换当前租户空间' });
+    await actor.page.getByText('切换空间', { exact: true }).click();
+    const dialog = actor.page.getByRole('dialog', { name: '切换当前空间' });
     await dialog.locator('.ant-select-selector').click();
     await actor.page.locator('.ant-select-item-option').filter({ hasText: b }).click();
     const switched = actor.page.waitForResponse(r => new URL(r.url()).pathname === '/api/v1/web/session/namespace' && r.request().method() === 'PUT');
