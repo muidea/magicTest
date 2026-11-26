@@ -22,7 +22,7 @@ async function openApplication(h, actor, entry, rows) {
   const preview = panel.getByRole('button', { name, exact: true }), count = await preview.count();
   h.check('Original overview application preview is unique when present', count === 0 || count === 1);
   if (count === 1) return preview.click();
-  h.check('Original application omitted from preview has a complete larger owner directory', rows.applications.length > 4);
+  h.check('Original application omitted from preview has a complete larger owner directory', rows.applications.length > 8);
   // RightOutlined contributes an accessible name; match the visible button
   // text and independently known complete count instead of omitting its icon.
   const all = panel.getByRole('button').filter({ hasText: new RegExp('^查看全部\\s*\\(' + rows.applications.length + '\\)$') });
@@ -51,27 +51,37 @@ async function projection(h, actor) {
   h.observe({ kind: 'portal-overview-independent-projections', actor: actor.identity, rows });
   return rows;
 }
-async function metric(h, actor, title, count) {
-  const value = actor.page.getByLabel('门户概览', { exact: true }).locator(':scope > div').filter({ hasText: title }).locator('strong');
-  await value.waitFor({ state: 'visible' });
-  let actual;
-  for (let attempt = 0; attempt < 20; attempt++) {
-    actual = await value.innerText();
-    if (actual === String(count)) break;
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  h.check('Visible ' + title + ' count equals complete current-subject owner projection', actual === String(count), { actor: actor.identity, title, count, actual });
-}
 async function home(h, actor, rows, width, label) {
   await actor.page.setViewportSize({ width, height: 900 });
   await actor.page.goto(actor.origin + '/portal/', { waitUntil: 'networkidle' });
-  await actor.page.getByRole('heading', { name: '门户工作台', exact: true }).waitFor();
+  await actor.page.getByRole('navigation', { name: '门户导航', exact: true }).waitFor();
+  await card(actor.page, '我的应用').waitFor();
   await actor.page.waitForFunction(() => document.querySelectorAll('.ant-spin-spinning').length === 0, {}, { timeout: 60000 });
-  await metric(h, actor, '我的应用', rows.applications.length);
-  await metric(h, actor, '服务中心', rows.services.length);
-  await metric(h, actor, '反馈工单', rows.feedbacks.length);
+  const appCard = card(actor.page, '我的应用');
+  const appAllText = (await appCard.getByRole('button', { name: /查看全部/ }).innerText()).replace(/\s/g, '');
+  h.check('Application overview total equals the complete current-subject owner directory',
+    appAllText === '查看全部' + (rows.applications.length ? '(' + rows.applications.length + ')' : ''),
+    { expected: rows.applications.length, actual: appAllText });
+  const appTileCount = await appCard.locator('article').count();
+  h.check('Application overview grid renders up to 8 applications matching owner total',
+    appTileCount === Math.min(rows.applications.length, 8),
+    { expected: Math.min(rows.applications.length, 8), actual: appTileCount });
+  const serviceCard = card(actor.page, '服务中心');
+  let actualServiceTab = '';
+  const expectedServiceTab = '全部服务(' + rows.services.length + ')';
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const tab = serviceCard.getByRole('tab', { name: /^全部服务\s*\(\d+\)$/ });
+    if (await tab.count() === 1) {
+      actualServiceTab = (await tab.innerText()).replace(/\s/g, '');
+      if (actualServiceTab === expectedServiceTab) break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  h.check('Visible 服务中心 count equals complete current-subject owner projection',
+    actualServiceTab === expectedServiceTab,
+    { actor: actor.identity, expected: expectedServiceTab, actual: actualServiceTab });
   const noticeCount = (await card(actor.page, '通知中心').getByRole('button', { name: /查看全部/ }).innerText()).replace(/\s/g, '');
-  h.check('Notification preview total equals the independent complete scoped directory', noticeCount === '查看全部' + (rows.notifications.length ? '（' + rows.notifications.length + '）' : ''), { expected: rows.notifications.length, actual: noticeCount });
+  h.check('Notification preview total equals the independent complete scoped directory', noticeCount === '查看全部' + (rows.notifications.length ? '(' + rows.notifications.length + ')' : ''), { expected: rows.notifications.length, actual: noticeCount });
   await actor.page.locator('.ant-spin-spinning').first().waitFor({ state: 'hidden' });
   h.check('Loaded portal sections do not disguise owner read failures as empty counts', await actor.page.locator('.ant-card .ant-alert').count() === 0);
   const overflow = await actor.page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
@@ -158,8 +168,25 @@ async function overview(h) {
       await h.screenshot(manager, 'portal-overview-application-' + index + '-' + width);
     }
   }
-  h.check('Portal overview navigation leaves both complete subject projections and original notice unchanged',
-    same(await projection(h, h.user), rows) && same(await projection(h, manager), managerRows) && same((await h.ok(h.admin, 'GET', '/panel/support/notifications/' + notice.id)).value, originalNotice));
+  const afterUserRows = await projection(h, h.user);
+  const openedNotice = afterUserRows.notifications.find(v => v.id === notice.id);
+  const initialNotice = rows.notifications.find(v => v.id === notice.id);
+  const normalizedAfterUserRows = {
+    ...afterUserRows,
+    notifications: afterUserRows.notifications.map(v => {
+      if (v.id !== notice.id) return v;
+      const copy = { ...v };
+      if ('read' in (initialNotice || {})) copy.read = initialNotice.read;
+      else delete copy.read;
+      if ('readTime' in (initialNotice || {})) copy.readTime = initialNotice.readTime;
+      else delete copy.readTime;
+      return copy;
+    }),
+  };
+  h.check('Portal overview marks opened notice read for current actor while leaving other projections and original notice unchanged',
+    Boolean(openedNotice && openedNotice.read === true && typeof openedNotice.readTime === 'number' && openedNotice.readTime > 0) &&
+    same(normalizedAfterUserRows, rows) && same(await projection(h, manager), managerRows) &&
+    same((await h.ok(h.admin, 'GET', '/panel/support/notifications/' + notice.id)).value, originalNotice));
   await graph.retire(h, subscription);
   await feedback.cleanup(h, ticket);
 }
