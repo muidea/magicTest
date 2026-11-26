@@ -5,7 +5,7 @@ test('original application navigation uses preview or real view-all and rejects 
   const { openApplication } = require('./portal_overview_cases.cjs');
   for (const mode of ['preview', 'full-list', 'duplicate-preview', 'missing-owner', 'small-preview-missing', 'duplicate-card', 'missing-card']) {
     const events = [], entry = { id: 'original', showName: 'Original instance' };
-    const rows = { applications: [entry, ...Array.from({ length: mode === 'small-preview-missing' ? 1 : 5 }, (_, i) => ({ id: 'peer-' + i }))] };
+    const rows = { applications: [entry, ...Array.from({ length: mode === 'small-preview-missing' ? 1 : 9 }, (_, i) => ({ id: 'peer-' + i }))] };
     if (mode === 'missing-owner') rows.applications.shift();
     const page = { locator(selector) { return { filter() { return selector === '.magic-resource-card' ? resource : panel; }, getByText() { return {}; } }; },
       getByText(name, options) { assert.equal(name, entry.showName); assert.equal(options.exact, true); return {}; },
@@ -16,8 +16,8 @@ test('original application navigation uses preview or real view-all and rejects 
       assert.equal(role, 'button');
       if (options) { assert.equal(options.exact, true); assert.equal(options.name, entry.showName); return preview; }
       return { filter({ hasText }) {
-        assert.ok(hasText.test('查看全部 (6)'));
-        for (const invalid of ['查看全部 (5)', '查看全部 (60)', '其他查看全部 (6)', '查看全部 (6) 其他']) assert.equal(hasText.test(invalid), false);
+        assert.ok(hasText.test('查看全部 (10)'));
+        for (const invalid of ['查看全部 (9)', '查看全部 (100)', '其他查看全部 (10)', '查看全部 (10) 其他']) assert.equal(hasText.test(invalid), false);
         return { async count() { return 1; }, async click() { events.push('view-all'); } };
       } };
     } };
