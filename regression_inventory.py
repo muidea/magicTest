@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path, PurePosixPath
@@ -41,7 +42,14 @@ def unique_index(items: list[dict], field: str) -> dict:
     return result
 
 
-def validate_inventory(inventory: dict, catalog: dict, workspace: Path, platform: Path) -> None:
+def validate_inventory(
+    inventory: dict,
+    catalog: dict,
+    workspace: Path,
+    platform: Path,
+    *,
+    skip_missing_sibling_repos: bool = False,
+) -> list[str]:
     validator = ROOT / 'tools/platform_acceptance.py'
     candidate_validator = workspace / 'magicTest/tools/platform_acceptance.py'
     if candidate_validator.is_file():
@@ -84,9 +92,17 @@ def validate_inventory(inventory: dict, catalog: dict, workspace: Path, platform
             raise ValueError(f"盘点不能声明完整覆盖或验收通过: {review['caseId']}")
         if set(review["assetIds"]) - assets.keys() or not review["finding"].strip():
             raise ValueError(f"复核缺少有效资产或发现: {review['caseId']}")
+    skipped_repos: set[str] = set()
     for reference in references:
-        if not resolve_reference(reference, workspace, platform).is_file():
+        resolved = resolve_reference(reference, workspace, platform)
+        if skip_missing_sibling_repos and reference.startswith("~/codespace/"):
+            parts = PurePosixPath(reference[len("~/codespace/"):]).parts
+            if len(parts) > 1 and parts[0] != "magicTest" and not (workspace / parts[0]).is_dir():
+                skipped_repos.add(parts[0])
+                continue
+        if not resolved.is_file():
             raise ValueError(f"引用文件不存在: {reference}")
+    return sorted(skipped_repos)
 
 
 def build_rows(inventory: dict, catalog: dict) -> list[dict]:
@@ -117,8 +133,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=Path, default=DEFAULT_INVENTORY)
     parser.add_argument("--catalog", type=Path, help="显式指定原用例目录，不复制用例定义")
+    default_platform = Path(os.environ["MAGICPLATFORM_ROOT"]).expanduser() if os.environ.get("MAGICPLATFORM_ROOT") else (Path.home() / "dataspace/magicPlatform")
     parser.add_argument("--workspace", type=Path, default=ROOT.parent)
-    parser.add_argument("--platform-root", type=Path, default=Path.home() / "dataspace/magicPlatform")
+    parser.add_argument("--platform-root", type=Path, default=default_platform)
+    parser.add_argument("--skip-missing-sibling-repos", action="store_true", help="跳过当前测试机未克隆的同级 codespace 仓库引用（仍严格校验 magicTest 与 magicPlatform）")
     parser.add_argument("--check", action="store_true", help="检查功能完整分组、用例引用、target及文件存在性")
     parser.add_argument("--case", help="查看单条固定编号用例，例如 F033-001")
     parser.add_argument("--scenario", help="按主场景筛选，例如 R07")
@@ -130,7 +148,13 @@ def main(argv: list[str] | None = None) -> int:
         inventory = json.loads(args.inventory.read_text())
         catalog_path = args.catalog or resolve_reference(inventory["sourceCatalog"], args.workspace, args.platform_root)
         catalog = json.loads(catalog_path.read_text())
-        validate_inventory(inventory, catalog, args.workspace, args.platform_root)
+        skipped_repos = validate_inventory(
+            inventory,
+            catalog,
+            args.workspace,
+            args.platform_root,
+            skip_missing_sibling_repos=args.skip_missing_sibling_repos,
+        )
         rows = build_rows(inventory, catalog)
         if args.scenario:
             if args.scenario not in {s["id"] for s in inventory["scenarios"]}:
@@ -168,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
         print("脚本复核状态：" + json.dumps(Counter(r["status"] for r in rows), ensure_ascii=False))
         print("执行分组（混合用例分别计入）：" + json.dumps(
             Counter(p['suite'] for r in rows for p in r['execution']), ensure_ascii=False))
+        if skipped_repos:
+            print("已跳过未克隆同级仓库存在性检查：" + ", ".join(skipped_repos))
         print("仅证明盘点结构与引用有效；不表示脚本就绪、业务通过或Live完成。")
     return 0
 

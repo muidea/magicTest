@@ -85,17 +85,116 @@ UPSTREAM_CALLBACK_ABNORMAL_CASES = frozenset({
     'F057-004',
 })
 
+# Cases requiring deliveryFixtureConfig (dedicated isolated deployment + published public-owner fixture),
+# which is disallowed in remote-https mode.
+DELIVERY_FIXTURE_STANDARD_CASES = frozenset({
+    'F003-004',
+    'F006-001',
+    'F006-002',
+    'F006-003',
+    'F006-004',
+    'F011-001',
+    'F013-001',
+    'F013-002',
+    'F014-001',
+    'F014-002',
+    'F014-003',
+    'F014-004',
+    'F015-001',
+    'F016-001',
+    'F017-003',
+    'F019-003',
+    'F025-001',
+    'F025-002',
+    'F025-003',
+    'F027-001',
+    'F027-002',
+    'F028-001',
+    'F028-003',
+    'F029-001',
+    'F029-003',
+    'F030-002',
+    'F032-002',
+    'F032-003',
+    'F033-001',
+    'F034-001',
+    'F035-001',
+    'F035-003',
+    'F036-001',
+    'F036-002',
+    'F037-001',
+    'F038-001',
+    'F038-002',
+    'F038-003',
+    'F049-004',
+    'F050-001',
+    'F050-002',
+    'F052-003',
+    'F065-002',
+    'F067-001',
+    'F067-003',
+    'F068-001',
+    'F068-002',
+    'F068-004',
+    'F069-001',
+    'F069-002',
+    'F069-003',
+    'F069-004',
+    'F069-005',
+    'F070-001',
+    'F070-002',
+    'F070-004',
+    'F071-001',
+    'F071-003',
+})
 
-def excluded_for_remote(suite='standard', *, include_upstream=False):
-    """Return sorted case IDs to exclude in remote-https mode when host-coupled exclusion is active."""
+DELIVERY_FIXTURE_ABNORMAL_CASES = frozenset({
+    'F010-005',
+    'F020-002',
+    'F027-003',
+    'F028-002',
+    'F034-002',
+    'F048-003',
+    'F071-002',
+    'F071-004',
+    'F071-005',
+})
+
+def remote_exclusion_breakdown(
+    suite='standard',
+    *,
+    include_upstream=False,
+    include_delivery_fixture=False,
+):
+    """Return categorized case IDs excluded in remote-https mode."""
     if suite == 'standard':
-        excluded = set(HOST_COUPLED_STANDARD_CASES)
-        if not include_upstream:
-            excluded |= UPSTREAM_CALLBACK_STANDARD_CASES
-        return sorted(excluded)
+        return {
+            'hostCoupled': sorted(HOST_COUPLED_STANDARD_CASES),
+            'deliveryFixture': [] if include_delivery_fixture else sorted(DELIVERY_FIXTURE_STANDARD_CASES),
+            'upstreamCallback': [] if include_upstream else sorted(UPSTREAM_CALLBACK_STANDARD_CASES),
+        }
     if suite == 'abnormal':
-        excluded = set(HOST_COUPLED_ABNORMAL_CASES)
-        if not include_upstream:
-            excluded |= UPSTREAM_CALLBACK_ABNORMAL_CASES
-        return sorted(excluded)
+        return {
+            'hostCoupled': sorted(HOST_COUPLED_ABNORMAL_CASES),
+            'deliveryFixture': [] if include_delivery_fixture else sorted(DELIVERY_FIXTURE_ABNORMAL_CASES),
+            'upstreamCallback': [] if include_upstream else sorted(UPSTREAM_CALLBACK_ABNORMAL_CASES),
+        }
     raise ValueError(f'Unsupported suite for remote profile: {suite}')
+
+
+def excluded_for_remote(
+    suite='standard',
+    *,
+    include_upstream=False,
+    include_delivery_fixture=False,
+):
+    """Return sorted case IDs to exclude in remote-https mode when host-coupled exclusion is active."""
+    breakdown = remote_exclusion_breakdown(
+        suite,
+        include_upstream=include_upstream,
+        include_delivery_fixture=include_delivery_fixture,
+    )
+    excluded = set()
+    for ids in breakdown.values():
+        excluded.update(ids)
+    return sorted(excluded)

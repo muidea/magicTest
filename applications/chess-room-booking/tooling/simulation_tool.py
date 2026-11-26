@@ -629,9 +629,27 @@ def verify(plan, models, gateway, journal, wait_seconds=0):
         time.sleep(min(2, max(0, deadline - time.monotonic())))
 
 
+def inspect_instance(models, gateway):
+    """Read-only Gateway scan across all simulation entity models."""
+    counts, total = {}, 0
+    for name in sorted(models):
+        rows = gateway.scan(name)
+        counts[name] = len(rows)
+        total += len(rows)
+        require(total <= 1000, 'total read row budget exceeded')
+    return {
+        'mode': 'inspect',
+        'empty': total == 0,
+        'totalRecords': total,
+        'counts': counts,
+        'readOnly': True,
+        'liveAccepted': False,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('plan', 'run', 'verify'))
+    parser.add_argument('command', choices=('plan', 'run', 'verify', 'inspect'))
     parser.add_argument('--mode', choices=('seed', 'replay', 'live-stream'), default='replay')
     parser.add_argument('--cycles', type=int, default=4)
     parser.add_argument('--plan', type=Path)
@@ -657,6 +675,12 @@ def main():
                     stream.write(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
             else:
                 print(dumps(value))
+            return
+        if args.command == 'inspect':
+            models = definitions()
+            url = endpoint(args.service_url)
+            gateway = Gateway(url, secret(args.api_key_file), args.ca_file, args.trust_leaf)
+            print(dumps(inspect_instance(models, gateway)))
             return
         require(args.state_dir is not None and 0 <= args.wait_seconds <= 60, 'state-dir and wait budget 0..60 required')
         models = definitions()

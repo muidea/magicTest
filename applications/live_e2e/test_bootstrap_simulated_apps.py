@@ -485,6 +485,75 @@ class BootstrapSimulatedAppsTests(unittest.TestCase):
             self.assertEqual([c[3] for c in seen_cmds], ["init", "seed", "backfill", "live-stream", "verify"])
             self.assertIn("device-management", res)
 
+    def test_ensure_crb_operator_token_refuses_existing_account_when_password_generated(self):
+        class FakeSess:
+            base_url = "https://panel.example.com"
+            timeout = 10
+
+            def proxy_json(self, method, path, payload=None):
+                if "/role-templates/" in path:
+                    return {"values": [{"key": "store-manager", "subjectType": "account", "status": 2, "applicationAccess": [{"applicationUuid": bsa.APP_SPECS["chess-room-booking"]["uuid"]}]}], "pagination": {"total": 1}}
+                if "/accounts/" in path:
+                    return {"values": [{"id": 99, "account": "crb-sim-operator"}], "pagination": {"total": 1}}
+                raise AssertionError(f"unexpected call: {method} {path}")
+
+        with tempfile.TemporaryDirectory(prefix="bsa-op-") as tmp:
+            secrets_dir = bsa.ensure_private_dir(Path(tmp) / "secrets")
+            pw_path = secrets_dir / "crb-sim-operator.password"
+            created: list[str] = []
+            with self.assertRaisesRegex(bsa.SafetyRefusal, "already exists"):
+                bsa.ensure_crb_operator_token(
+                    FakeSess(),
+                    secrets_dir,
+                    namespace="panel",
+                    deployment_id="dep-crb",
+                    operator_account="crb-sim-operator",
+                    operator_password="SimOp!generated",
+                    ssl_context=ssl.create_default_context(),
+                    password_source="generated",
+                    on_password_created=lambda pw: created.append(pw),
+                )
+            self.assertEqual(created, [])
+            self.assertFalse(pw_path.exists())
+
+    def test_run_seed_and_verify_crb_reuse_existing_inspects_non_empty_without_writes(self):
+        with tempfile.TemporaryDirectory(prefix="bsa-crb-") as tmp:
+            state_dir = bsa.ensure_private_dir(Path(tmp) / "state")
+            secrets_dir = bsa.ensure_private_dir(state_dir / "secrets")
+            orig_run = bsa._run_subprocess
+            seen_cmds: list[list[str]] = []
+
+            def fake_run(cmd, env):
+                seen_cmds.append(cmd)
+                if cmd[-1] == "inspect":
+                    return json.dumps({"mode": "inspect", "empty": False, "totalRecords": 9, "counts": {"store": 3, "room": 6}, "readOnly": True, "liveAccepted": False})
+                return "{}"
+
+            bsa._run_subprocess = fake_run  # type: ignore[assignment]
+            try:
+                res = bsa.run_seed_and_verify(
+                    action="all",
+                    base_url="https://panel.example.com",
+                    state_dir=state_dir,
+                    secrets_dir=secrets_dir,
+                    platform_root=bsa.resolve_platform_root(),
+                    services_info={},
+                    apps=["chess-room-booking"],
+                    ca_file=None,
+                    trust_leaf=False,
+                    cycles=1,
+                    anchor_utc=None,
+                    reuse_existing=True,
+                )
+            finally:
+                bsa._run_subprocess = orig_run  # type: ignore[assignment]
+
+            self.assertEqual([c[-1] for c in seen_cmds], ["inspect"])
+            crb_res = res["chess-room-booking"]
+            self.assertEqual(crb_res["status"], "reused_non_empty_readonly_inspected")
+            self.assertEqual(crb_res["inspect"]["totalRecords"], 9)
+            self.assertFalse((state_dir / "runs/crb-plan.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

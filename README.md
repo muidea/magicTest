@@ -57,7 +57,7 @@ MAGICTEST_REGRESSION_CONFIG=~/.local/state/magicTest/regression-config.json pyth
 - `targetAddress`：可选目标平台 IP/地址；无泛域名 DNS 时自动注入 Chromium `--host-resolver-rules` 与全部 Node HTTP 传输通道，保留原始 `Host` 与 TLS SNI。
 - `caFile` / `insecureTls`：远端健康基线使用的私有 CA 文件或显式跳过校验开关。
 - `controlledUpstreamBind` / `controlledUpstreamAdvertise`：跨机 `service_graph` 外部服务回调监听与通告地址（须由目标机 `magicGateway` 可达）。
-- `excludeHostCoupled`：默认 `true`（仅在 `remote-https` 且未显式指定 `cases` 时生效），自动排除需平台宿主机 Docker/`platformRoot`/快照的用例，并在未配 `controlledUpstream*` 时同步排除需外部回调的用例。
+- `excludeHostCoupled`：默认 `true`（仅在 `remote-https` 且未显式指定 `cases` 时生效），自动排除需平台宿主机 Docker/`platformRoot`/快照的用例与本地 `deliveryFixtureConfig` 夹具用例，并在未配 `controlledUpstream*` 时排除外部回调用例，在 `excludedCaseReasons` 中按类别记录清单。
 
 直接执行`python3 -B regression/run_standard.py --suite standard --config <private-config> --dry-run`或`--suite abnormal`可只读核对实际选择，不访问部署。当前入口仍有尚未实现的分项，运行入口存在不代表完整套件交付。
 

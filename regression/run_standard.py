@@ -211,7 +211,7 @@ def ensure_delivery_fixture(fixture_config_path, directory):
     return True
 
 
-def finish(owner, catalog, before, after, browser, directory, browser_exit, suite='standard', *, execution_mode='local', excluded_cases=()):
+def finish(owner, catalog, before, after, browser, directory, browser_exit, suite='standard', *, execution_mode='local', excluded_cases=(), excluded_breakdown=None):
     same_candidate = before['environment'] == after['environment']
     cleanup_files = sorted((directory / 'browser/attempts').glob('*/cleanup.json'))
     cleanup = [{'path': str(p.relative_to(directory)),
@@ -242,6 +242,7 @@ def finish(owner, catalog, before, after, browser, directory, browser_exit, suit
         'currentBrowserResourcesCleaned': cleaned,
         'cleanupEvidence': cleanup,
         'excludedCases': list(excluded_cases),
+        **({'excludedCaseReasons': excluded_breakdown} if excluded_breakdown is not None else {}),
         'historicalInfrastructureRegistry': 'not reconciled by browser runner; isolated-ops handlers must prove their own lifecycle',
     }
     report['caseComplete'] = report['complete']
@@ -320,9 +321,18 @@ def main():
     if cases is not None and (not isinstance(cases, list) or not cases or any(not isinstance(c, str) or c not in suite_ids for c in cases) or len(cases) != len(set(cases))):
         raise ValueError(f'cases must be distinct required {args.suite} case IDs')
     excluded_cases = []
+    excluded_breakdown = None
     if execution_mode == 'remote-https' and cases is None and config.get('excludeHostCoupled', True):
         include_upstream = bool(config.get('controlledUpstreamBind') or config.get('controlledUpstreamAdvertise'))
-        excluded_cases = _load_remote_profile().excluded_for_remote(args.suite, include_upstream=include_upstream)
+        remote_profile = _load_remote_profile()
+        excluded_breakdown = remote_profile.remote_exclusion_breakdown(
+            args.suite,
+            include_upstream=include_upstream,
+        )
+        excluded_cases = remote_profile.excluded_for_remote(
+            args.suite,
+            include_upstream=include_upstream,
+        )
     command = ['node', str(ROOT / 'regression/standard.cjs'), '--catalog', str(catalog_path), '--suite', args.suite,
                '--execution-mode', execution_mode]
     if cases:
@@ -352,7 +362,7 @@ def main():
     if not credentials.is_file():
         raise ValueError('Credentials file does not exist')
     with environment_lock(credentials):
-        return execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite=args.suite, excluded_cases=excluded_cases)
+        return execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite=args.suite, excluded_cases=excluded_cases, excluded_breakdown=excluded_breakdown)
 
 
 def cleanup_historical_runs(catalog_path, output_root, *, suite='standard', cases=None):
@@ -450,7 +460,7 @@ def cleanup_historical_runs(catalog_path, output_root, *, suite='standard', case
     }
 
 
-def execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite='standard', excluded_cases=()):
+def execute_live(config, catalog_path, owner, catalog, command, credentials, cases, suite='standard', excluded_cases=(), excluded_breakdown=None):
     execution_mode = config.get('executionMode', 'local')
     history_cleanup = cleanup_historical_runs(catalog_path, config['output'], suite=suite, cases=cases)
     if history_cleanup.get('cleaned'):
@@ -469,6 +479,7 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     save(directory / 'inputs.json', {'suite': suite, 'executionMode': execution_mode,
                                     'selectedCases': cases or f'all required {suite} branches',
                                     'excludedCases': list(excluded_cases),
+                                    **({'excludedCaseReasons': excluded_breakdown} if excluded_breakdown is not None else {}),
                                     'historyCleanup': history_cleanup,
                                     'catalogDigest': owner.digest(catalog), 'toolHashes': inputs,
                                     'fileUploadMaxBytes': config.get('fileUploadMaxBytes'),
@@ -515,7 +526,7 @@ def execute_live(config, catalog_path, owner, catalog, command, credentials, cas
     after = json.loads(after_path.read_text())
     browser_path = directory / 'browser/results.json'
     browser = json.loads(browser_path.read_text()) if browser_path.exists() else {}
-    report = finish(owner, catalog, before, after, browser, directory, browser_exit, suite=suite, execution_mode=execution_mode, excluded_cases=excluded_cases)
+    report = finish(owner, catalog, before, after, browser, directory, browser_exit, suite=suite, execution_mode=execution_mode, excluded_cases=excluded_cases, excluded_breakdown=excluded_breakdown)
     print(json.dumps({'counts': report['counts'], 'complete': report['complete'],
                       'remoteScopeComplete': report.get('remoteScopeComplete'),
                       'executionGates': report['executionGates']}, ensure_ascii=False))

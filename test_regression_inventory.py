@@ -136,6 +136,28 @@ class RegressionInventoryTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'execution suite'):
             self.validate()
 
+    def test_skip_missing_sibling_repos_allows_absent_sibling_but_enforces_magic_test_and_platform(self):
+        self.inventory['assets'].append({
+            'id': 'runner-go',
+            'path': '~/codespace/magicRunner/internal/sample_test.go',
+            'layer': 'source',
+            'limitation': 'sibling repo',
+        })
+        with self.assertRaisesRegex(ValueError, '不存在'):
+            self.validate()
+        skipped = validate_inventory(self.inventory, self.catalog, self.workspace, self.platform, skip_missing_sibling_repos=True)
+        self.assertEqual(skipped, ['magicRunner'])
+
+        self.inventory['assets'].append({
+            'id': 'mt-missing',
+            'path': '~/codespace/magicTest/missing.py',
+            'layer': 'tool',
+            'limitation': 'must exist',
+        })
+        (self.workspace / 'magicTest/existing.py').write_text('')
+        with self.assertRaisesRegex(ValueError, '不存在'):
+            validate_inventory(self.inventory, self.catalog, self.workspace, self.platform, skip_missing_sibling_repos=True)
+
 
 if __name__ == "__main__":
     unittest.main()

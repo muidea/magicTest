@@ -484,6 +484,34 @@ class ReportGatesTest(unittest.TestCase):
             self.assertTrue((reports / 'README.md').is_file())
             self.assertFalse((reports / 'runs').exists())
 
+    def test_remote_profile_sets_are_disjoint_and_valid_required_catalog_cases(self):
+        from regression import remote_profile
+
+        suite_cases = {
+            suite: {
+                c['id']
+                for c in self.catalog['cases']
+                if c['required'] and any(p['suite'] == suite for p in c['execution'])
+            }
+            for suite in ('standard', 'abnormal')
+        }
+        std_groups = [
+            remote_profile.HOST_COUPLED_STANDARD_CASES,
+            remote_profile.DELIVERY_FIXTURE_STANDARD_CASES,
+            remote_profile.UPSTREAM_CALLBACK_STANDARD_CASES,
+        ]
+        abn_groups = [
+            remote_profile.HOST_COUPLED_ABNORMAL_CASES,
+            remote_profile.DELIVERY_FIXTURE_ABNORMAL_CASES,
+            remote_profile.UPSTREAM_CALLBACK_ABNORMAL_CASES,
+        ]
+        for suite, groups in (('standard', std_groups), ('abnormal', abn_groups)):
+            seen = set()
+            for group in groups:
+                self.assertTrue(group.issubset(suite_cases[suite]), f'{suite} unknown IDs: {group - suite_cases[suite]}')
+                self.assertFalse(seen & group, f'{suite} overlapping IDs: {seen & group}')
+                seen |= group
+
     def test_remote_https_dry_run_excludes_host_coupled_and_optional_upstream_cases(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -502,6 +530,7 @@ class ReportGatesTest(unittest.TestCase):
             self.assertIn('F059-001', excluded)
             self.assertIn('F047-001', excluded)
             self.assertIn('F039-001', excluded)
+            self.assertIn('F006-001', excluded)
 
             config.write_text(json.dumps({
                 'executionMode': 'remote-https',
@@ -515,7 +544,15 @@ class ReportGatesTest(unittest.TestCase):
             command = driver.call_args.args[0]
             excluded_with_up = command[command.index('--exclude') + 1].split(',')
             self.assertIn('F059-001', excluded_with_up)
+            self.assertIn('F006-001', excluded_with_up)
             self.assertNotIn('F039-001', excluded_with_up)
+
+            with mock.patch.object(sys, 'argv', ['run_standard.py', '--config', str(config), '--suite', 'abnormal', '--dry-run']), \
+                    mock.patch.object(run_standard.subprocess, 'run', return_value=mock.Mock(returncode=0)) as driver:
+                self.assertEqual(run_standard.main(), 0)
+            abn_excluded = driver.call_args.args[0][driver.call_args.args[0].index('--exclude') + 1].split(',')
+            self.assertIn('F010-005', abn_excluded)
+            self.assertNotIn('F049-003', abn_excluded)
 
     def test_remote_https_live_uses_remote_health_and_separates_remote_scope_complete(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -564,17 +601,25 @@ class ReportGatesTest(unittest.TestCase):
                 }))
                 return 0
 
+            breakdown = {'hostCoupled': ['F059-001'], 'deliveryFixture': ['F006-001'], 'upstreamCallback': []}
             with mock.patch.object(run_standard.tempfile, 'mkdtemp', return_value=str(root / 'private')), \
                     mock.patch.object(run_standard, 'run_browser', side_effect=fake_browser), \
                     mock.patch('builtins.print'):
-                rc = run_standard.execute_live(cfg, root / 'catalog.json', owner, self.catalog, ['node', 'standard.cjs'], creds, ['F001-004'], excluded_cases=['F059-001'])
+                rc = run_standard.execute_live(
+                    cfg, root / 'catalog.json', owner, self.catalog, ['node', 'standard.cjs'], creds, ['F001-004'],
+                    excluded_cases=['F006-001', 'F059-001'], excluded_breakdown=breakdown,
+                )
             self.assertEqual(rc, 0)
             owner.capture_health.assert_not_called()
             self.assertEqual(owner.capture_remote_health.call_count, 2)
-            report = json.loads(next(output_dir.glob('*/report.json')).read_text())
+            run_dir = next(output_dir.glob('*'))
+            inputs = json.loads((run_dir / 'inputs.json').read_text())
+            report = json.loads((run_dir / 'report.json').read_text())
+            self.assertEqual(inputs['excludedCaseReasons'], breakdown)
             self.assertTrue(report['remoteScopeComplete'])
             self.assertFalse(report['complete'])
             self.assertEqual(report['executionGates']['executionMode'], 'remote-https')
+            self.assertEqual(report['executionGates']['excludedCaseReasons'], breakdown)
 
 
 if __name__ == '__main__':

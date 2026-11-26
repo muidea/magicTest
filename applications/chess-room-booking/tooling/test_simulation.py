@@ -406,6 +406,26 @@ class SimulationTests(unittest.TestCase):
         with self.assertRaises(OSError):
             sim.secret(alias)
 
+    def test_inspect_instance_readonly_on_empty_and_populated_gateway(self):
+        empty_res = sim.inspect_instance(self.models, self.gateway)
+        self.assertTrue(empty_res['empty'])
+        self.assertEqual(empty_res['totalRecords'], 0)
+        self.assertTrue(empty_res['readOnly'])
+        self.assertFalse(empty_res['liveAccepted'])
+        self.assertEqual(set(empty_res['counts']), set(self.models))
+        self.assertEqual(self.gateway.writes, 0)
+
+        sim.run(self.plan, self.models, self.gateway, self.journal, action_client=self.actions)
+        self.add_effects()
+        writes_before = self.gateway.writes
+        pop_res = sim.inspect_instance(self.models, self.gateway)
+        self.assertFalse(pop_res['empty'])
+        self.assertEqual(pop_res['totalRecords'], 61)
+        self.assertTrue(pop_res['readOnly'])
+        self.assertFalse(pop_res['liveAccepted'])
+        self.assertEqual(pop_res['counts']['bookingOrder'], 9)
+        self.assertEqual(self.gateway.writes, writes_before)
+
 
 if __name__ == '__main__':
     unittest.main()

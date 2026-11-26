@@ -1136,6 +1136,8 @@ def ensure_crb_operator_token(
     operator_password: str,
     ssl_context: ssl.SSLContext,
     on_password_changed: Callable[[str], None] | None = None,
+    password_source: str = "provided",
+    on_password_created: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     crb_uuid = APP_SPECS["chess-room-booking"]["uuid"]
     templates = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/role-templates/")
@@ -1164,7 +1166,14 @@ def ensure_crb_operator_token(
 
     accounts = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/")
     acc = next((a for a in accounts if a.get("account") == operator_account), None)
+    if acc is not None and password_source == "generated":
+        raise SafetyRefusal(
+            f"operator account {operator_account!r} already exists in namespace {namespace} without a local password file; "
+            "pass --operator-password-file with its current password or specify a dedicated --operator-account name"
+        )
     if acc is None:
+        if on_password_created is not None:
+            on_password_created(operator_password)
         created = session.proxy_json(
             "POST",
             f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/",
@@ -1314,6 +1323,7 @@ def run_seed_and_verify(
     cycles: int,
     anchor_utc: str | None,
     target_address: str | None = None,
+    reuse_existing: bool = False,
 ) -> dict[str, Any]:
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "MAGICPLATFORM_ROOT": str(platform_root)}
     if target_address and target_address.strip():
@@ -1360,6 +1370,33 @@ def run_seed_and_verify(
         crb_svc_url = f"{base_url}/api/v1/gateway/services/{crb_svc_key}"
         crb_act_url = f"{base_url}/api/v1/apps/entity/action/execute/"
         tls_args = _sim_tls_args_for_crb(ca_file, trust_leaf)
+
+        crb_journal_path = crb_state_dir / "journal.json"
+        crb_preflighted = False
+        if crb_journal_path.is_file():
+            try:
+                crb_preflighted = bool(json.loads(crb_journal_path.read_text(encoding="utf-8")).get("preflight"))
+            except (OSError, json.JSONDecodeError):
+                crb_preflighted = False
+
+        if reuse_existing and action in ("seed-data", "all") and not crb_preflighted:
+            inspect_raw = _run_subprocess([
+                sys.executable, "-B", str(crb_tool),
+                "--service-url", crb_svc_url,
+                "--api-key-file", str(crb_key_file),
+                *tls_args,
+                "inspect",
+            ], env)
+            inspect_doc = json.loads(inspect_raw)
+            if inspect_doc.get("empty") is False:
+                results["chess-room-booking"] = {
+                    "status": "reused_non_empty_readonly_inspected",
+                    "seedSkippedReason": "remote chess-room-booking instance already contains business records; preserved without writes",
+                    "inspect": inspect_doc,
+                    "stateDir": str(crb_state_dir),
+                    "serviceUrl": crb_svc_url,
+                }
+                return results
 
         if action in ("seed-data", "all"):
             if not plan_path.exists():
@@ -1521,6 +1558,8 @@ def main(argv: list[str] | None = None) -> int:
         if "chess-room-booking" in apps:
             crb_inst = _resolve_ready_installations(session, ["chess-room-booking"], installations_info)["chess-room-booking"]
             op_pw_path = secrets_dir / f"{args.operator_account}.password"
+            password_source = "provided"
+            on_password_created = None
             if args.operator_password_file is not None:
                 op_pw = read_secret_file(args.operator_password_file, label="operator password")
                 write_secret_file(op_pw_path, op_pw)
@@ -1528,7 +1567,8 @@ def main(argv: list[str] | None = None) -> int:
                 op_pw = read_secret_file(op_pw_path, label="operator password")
             else:
                 op_pw = "SimOp!" + secrets.token_urlsafe(18)
-                write_secret_file(op_pw_path, op_pw)
+                password_source = "generated"
+                on_password_created = lambda new_pw, p=op_pw_path: write_secret_file(p, new_pw)
             summary["crbOperator"] = ensure_crb_operator_token(
                 session,
                 secrets_dir,
@@ -1538,6 +1578,8 @@ def main(argv: list[str] | None = None) -> int:
                 operator_password=op_pw,
                 ssl_context=ssl_ctx,
                 on_password_changed=lambda new_pw, p=op_pw_path: write_secret_file(p, new_pw),
+                password_source=password_source,
+                on_password_created=on_password_created,
             )
 
     if args.command in ("all", "seed-data", "verify"):
@@ -1554,6 +1596,7 @@ def main(argv: list[str] | None = None) -> int:
             cycles=args.cycles,
             anchor_utc=args.anchor_utc,
             target_address=target_address,
+            reuse_existing=bool(args.reuse_existing),
         )
 
     summary_path = state_dir / "bootstrap-summary.json"
