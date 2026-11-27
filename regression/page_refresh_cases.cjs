@@ -190,11 +190,11 @@ async function scheduling(h) {
     const relBody = (await relReqPromise).postDataJSON();
     const relSpan = Date.parse(relBody?.to) - Date.parse(relBody?.from);
     h.check('Relative time-window source sends exact 24h UTC window on automatic read', relSpan === 24 * 3600 * 1000, relBody);
-    await browser.locator('details.application-page-time-range summary').click();
+    await browser.locator('.application-page-runtime-surface').click({ button: 'right', position: { x: 40, y: 40 } });
     await browser.getByLabel('趋势开始时间 UTC', { exact: true }).fill('2026-01-01T00:00:00Z');
     await browser.getByLabel('趋势结束时间 UTC', { exact: true }).fill('2026-01-02T00:00:00Z');
     const fixedNext = browser.waitForRequest(isWindowedSource, { timeout: 20000 }); fixedNext.catch(() => {});
-    await browser.getByRole('button', { name: '应用时间范围', exact: true }).click();
+    await browser.getByRole('button', { name: '应用过滤', exact: true }).click();
     const fixedReq1 = (await fixedNext).postDataJSON();
     const fixedAuto = browser.waitForRequest(isWindowedSource, { timeout: 20000 }); fixedAuto.catch(() => {});
     const fixedReq2 = (await fixedAuto).postDataJSON();
@@ -202,6 +202,7 @@ async function scheduling(h) {
       fixedReq1?.from === '2026-01-01T00:00:00.000Z' && fixedReq1?.to === '2026-01-02T00:00:00.000Z' &&
       fixedReq2?.from === fixedReq1?.from && fixedReq2?.to === fixedReq1?.to, { fixedReq1, fixedReq2 });
     const restoredWindow = browser.waitForRequest(isWindowedSource, { timeout: 20000 }); restoredWindow.catch(() => {});
+    await browser.locator('.application-page-runtime-surface').click({ button: 'right', position: { x: 40, y: 40 } });
     await browser.getByRole('button', { name: '最近时间窗', exact: true }).click();
     const restoredBody = (await restoredWindow).postDataJSON();
     h.check('Restoring relative window returns to live 24h UTC range cleanly',

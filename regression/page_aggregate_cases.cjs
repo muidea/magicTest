@@ -230,7 +230,7 @@ async function verifyTimeBucket(h) {
     appUrl.searchParams.set('pageKey', 'home');
     await browser.setViewportSize({ width: 1440, height: 900 });
     await browser.goto(appUrl.href, { waitUntil: 'networkidle' });
-    await browser.locator('details.application-page-time-range summary').click();
+    await browser.locator('.application-page-runtime-surface').click({ button: 'right', position: { x: 40, y: 40 } });
     await browser.getByLabel('趋势开始时间 UTC', { exact: true }).fill(from);
     await browser.getByLabel('趋势结束时间 UTC', { exact: true }).fill(to);
     const utcRead = browser.waitForRequest(req => {
@@ -240,7 +240,7 @@ async function verifyTimeBucket(h) {
       } catch { return false; }
     }, { timeout: 20000 }); utcRead.catch(() => {});
     const utcDone = browser.waitForResponse(res => res.request().method() === 'POST' && new URL(res.url()).pathname === '/api/v1/web/proxy/apps/page/sources/' && res.request().postDataJSON()?.sourceKey === 'buckets' && res.request().postDataJSON()?.from === from, { timeout: 20000 }); utcDone.catch(() => {});
-    await browser.getByRole('button', { name: '应用时间范围', exact: true }).click();
+    await browser.getByRole('button', { name: '应用过滤', exact: true }).click();
     await utcRead; await utcDone;
     await browser.locator('details.application-page-hourly-details summary').click();
     const detailsText = await browser.locator('details.application-page-hourly-details').innerText();
@@ -269,6 +269,7 @@ async function verifyTimeBucket(h) {
     };
     await browser.route(matchBucket, holdHandler);
     try {
+      await browser.locator('.application-page-runtime-surface').click({ button: 'right', position: { x: 40, y: 40 } });
       await browser.getByRole('button', { name: '最近完整小时', exact: true }).click();
       await heldPromise;
       await browser.locator('.application-page-navigation').getByRole('button', { name: '静态离开目标', exact: true }).click();
