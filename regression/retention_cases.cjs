@@ -55,6 +55,8 @@ async function uiReadFailure(h, r) {
   await page.route(match, failure);
   try {
     await page.goto(h.admin.origin + '/panel/operations/settings/', { waitUntil: 'networkidle' });
+    const retentionTab = page.getByRole('tab', { name: '日志保留策略', exact: true });
+    if (await retentionTab.count()) await retentionTab.click();
     const card = page.locator('.ant-card').filter({ has: page.getByText('日志保留策略', { exact: true }) });
     await card.getByText('日志保留策略暂时无法加载', { exact: true }).waitFor();
     h.check('Failed real policy read exposes neither invented default inputs nor a save action', reads > 0 && writes === 0 && await card.getByRole('spinbutton').count() === 0 && await card.getByRole('button', { name: '保存日志保留策略', exact: true }).count() === 0);
