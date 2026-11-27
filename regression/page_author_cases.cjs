@@ -27,12 +27,13 @@ async function fixture(h, suffix) {
   content.pages = [{ key: 'home', title: '原始作者页面', routes: ['/'], navigation: true, layout: { type: 'responsive-grid', columns: 12, gap: 0 }, routeParameters: [], components: [{ key: 'intro', type: 'text', layout: { span: 12, order: 0 }, dataSources: [], properties: { text: '回归页面原始说明' } }, { key: 'records', type: 'entity-table', layout: { span: 12, order: 1 }, dataSources: ['records'], properties: { entity: key, columns: ['id', 'name'], readonly: true } }] }];
   return { app, model, pages: await save(h, app, 'pages', current, content) };
 }
+const designerDialog = page => page.getByRole('dialog').filter({ has: page.getByRole('button', { name: '关闭页面设计器', exact: true }) });
 async function open(h, app) {
   const page = h.admin.page;
   await page.goto(h.admin.origin + '/panel/application/definition/view?aid=' + app.id, { waitUntil: 'networkidle' });
   await page.getByRole('tab', { name: '页面设计', exact: true }).click();
-  await page.locator('tr[data-row-key="home"]').getByRole('button', { name: /设计$/ }).click();
-  const dialog = page.getByRole('dialog'); await dialog.waitFor();
+  await page.locator('tr[data-row-key="home"], tr[data-row-key="pg:home"]').first().getByRole('button', { name: /设计$/ }).click();
+  const dialog = designerDialog(page); await dialog.waitFor();
   await dismissNotifications(h);
   await btn(dialog, '关闭页面设计器').click({ trial: true });
   if (await btn(dialog, '← 返回页面属性').isVisible()) await btn(dialog, '← 返回页面属性').click();
@@ -55,11 +56,24 @@ async function dismissNotifications(h) {
 }
 async function confirmDialog(h, action, accept, pattern) {
   await dismissNotifications(h);
+  const page = h.admin.page;
   let message;
   const listen = async dialog => { message = dialog.message(); if (accept) await dialog.accept(); else await dialog.dismiss(); };
-  h.admin.page.once('dialog', listen);
-  try { await action(); h.check('Real browser confirmation describes the unsaved operation', !!message && pattern.test(message), { message, accepted: accept }); }
-  finally { h.admin.page.off('dialog', listen); }
+  page.once('dialog', listen);
+  try {
+    await action();
+    if (!message) {
+      const modal = page.locator('.ant-modal-confirm:visible').last();
+      await modal.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+      if (await modal.count()) {
+        message = await modal.innerText();
+        const btns = modal.locator('.ant-modal-confirm-btns button');
+        await (accept ? btns.last() : btns.first()).click();
+        await modal.waitFor({ state: 'hidden', timeout: 5000 });
+      }
+    }
+    h.check('Real browser confirmation describes the unsaved operation', !!message && pattern.test(message), { message, accepted: accept });
+  } finally { page.off('dialog', listen); }
 }
 function watch(h, pathname, method = 'PUT') {
   const writes = [], listen = r => { if (new URL(r.url()).pathname === '/api/v1/web/proxy' + pathname && r.method() === method) writes.push({ method, pathname }); };
@@ -253,7 +267,17 @@ async function prepareAuthorMain(h, authored) {
   // Verify UI initial-page creation, navigation entry and component-library addition in the author workspace.
   const pageView = h.admin.page;
   await btn(pageView, /新增页面$/).click();
-  dialog = pageView.getByRole('dialog'); await dialog.waitFor();
+  const templateModal = pageView.getByRole('dialog').filter({ hasText: '选择页面模板' });
+  await Promise.race([
+    designerDialog(pageView).waitFor({ state: 'visible' }),
+    templateModal.waitFor({ state: 'visible' }),
+  ]);
+  if (await templateModal.isVisible()) {
+    await templateModal.getByRole('button', { name: /空白页面/ }).click();
+    await btn(templateModal, '生成并打开设计器').click();
+    await templateModal.waitFor({ state: 'hidden' });
+  }
+  dialog = designerDialog(pageView); await dialog.waitFor();
   await dialog.getByLabel('页面标题', { exact: true }).fill('动作页 ' + h.state.prefix);
   await dialog.getByLabel('页面路由', { exact: true }).fill('/actions');
   await dialog.getByRole('tab', { name: '组件库', exact: true }).click();

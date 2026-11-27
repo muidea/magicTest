@@ -5,7 +5,12 @@ const handlers = {};
 const base = '/panel/application/definitions/';
 const entityRoute = '/panel/application/definition/entitys/';
 const clone = x => structuredClone(x);
-const card = (page, title) => page.locator('.ant-card').filter({ has: page.locator('.ant-card-head-title').filter({ hasText: new RegExp('^' + title + '$') }) }).last();
+const card = (page, title) => {
+  const exact = new RegExp('^' + title + '$');
+  return page.locator('.ant-card, div:has(> .ant-table-wrapper), div:has(> .ant-descriptions)').filter({
+    has: page.locator('.ant-card-head-title, div > strong, div:not(:has(*))').filter({ hasText: exact }),
+  }).last();
+};
 const view = (app, entity, action = 'view') => entity ? '/panel/application/definition/entity/' + action + '?aid=' + app.id + '&eid=' + entity.id : '/panel/application/definition/view?aid=' + app.id;
 async function open(h, app, entity, action) {
   await h.admin.page.goto(h.admin.origin + view(app, entity, action), { waitUntil: 'networkidle' });
@@ -137,7 +142,7 @@ handlers['F013-003'] = async h => {
   const writes = [], watch = r => { if (['PUT', 'POST', 'DELETE'].includes(r.method()) && new URL(r.url()).pathname.includes('/panel/application/')) writes.push(r.method() + ' ' + new URL(r.url()).pathname); };
   page.on('request', watch);
   try {
-    await page.getByRole('button', { name: '新增字段', exact: true }).click();
+    await page.getByRole('button', { name: /新增字段$/ }).click();
     const dialog = page.getByRole('dialog', { name: '新增字段', exact: true });
     await formInput(dialog, '字段名称').fill('cancelledField');
     await dialog.getByRole('button', { name: /^取\s*消$/ }).click();

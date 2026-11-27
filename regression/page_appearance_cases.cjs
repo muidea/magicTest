@@ -48,7 +48,7 @@ async function prepare(h, authored) {
   await browser.setViewportSize({ width: 1440, height: 1000 });
   await browser.goto(h.admin.origin + '/panel/application/definition/view?aid=' + authored.app.id, { waitUntil: 'networkidle' });
   await browser.getByRole('tab', { name: '页面设计', exact: true }).click();
-  await browser.locator('tr[data-row-key="home"]').getByRole('button', { name: /设计$/ }).click();
+  await browser.locator('tr[data-row-key="home"], tr[data-row-key="pg:home"]').first().getByRole('button', { name: /设计$/ }).click();
   const dialog = browser.getByRole('dialog'); await dialog.waitFor();
   const colorInput = dialog.getByLabel('页面背景背景色', { exact: true });
   h.check('Actual appearance control reads the exact saved original page color', await colorInput.inputValue() === '#eeeeee');
