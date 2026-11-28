@@ -971,10 +971,18 @@ def _ensure_endpoint_role_binding(
                 f"no enabled CAS account role template covering application-data-write found for deployment {deployment_id}"
             )
         acc_tpl_key = str(acc_tpl["key"])
-        existing_keys = [str(ref["key"]) for ref in (acc.get("templateRefs") or []) if ref.get("key")]
+        tpl_by_key = {str(t.get("key") or ""): t for t in templates}
+        existing_keys = [
+            str(ref["key"])
+            for ref in (acc.get("templateRefs") or [])
+            if ref.get("key")
+            and (
+                str(ref["key"]) not in tpl_by_key
+                or int(tpl_by_key[str(ref["key"])].get("status") or 0) == 2
+            )
+        ]
         if acc_tpl_key not in existing_keys:
             existing_keys.append(acc_tpl_key)
-        tpl_by_key = {str(t.get("key") or ""): t for t in templates}
         bindings = _list_all_pages(
             session,
             f"/api/v1/web/proxy/cas/namespaces/{namespace}/subject-role-bindings/?"

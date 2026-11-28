@@ -797,5 +797,91 @@ class BootstrapSimulatedAppsTests(unittest.TestCase):
             server.server_close()
 
 
+    def test_ensure_endpoint_role_binding_skips_disabled_account_templates(self):
+        dep_id = "72e1936ee13b90f374fbfae5379656a4"
+        app_module = f"/applications/{dep_id}"
+        enabled_other = "app-other-enabled-operator"
+        disabled_stale = "app-00c3bc804c879d1bc74601703f001cd2-warehouse-operator"
+        new_acc_tpl = f"app-{dep_id}-warehouse-operator"
+        new_ep_tpl = f"app-{dep_id}-vmi-ingestor"
+        calls: list[tuple[str, str, dict | None]] = []
+
+        class _FakeSession:
+            def proxy_json(self, method: str, path: str, payload=None):
+                calls.append((method, path, payload))
+                if method == "GET" and path.endswith("/endpoints/42"):
+                    return {"value": {"id": 42, "account": {"id": 7}}}
+                if method == "GET" and path.endswith("/accounts/7"):
+                    return {
+                        "value": {
+                            "id": 7,
+                            "effectiveRoles": [{"module": "/applications/other", "key": "application-data-write"}],
+                            "templateRefs": [
+                                {"key": enabled_other},
+                                {"key": disabled_stale},
+                            ],
+                        }
+                    }
+                if method == "GET" and "/subject-role-bindings/" in path:
+                    return {
+                        "values": [
+                            {
+                                "sourceType": "template",
+                                "sourceKey": enabled_other,
+                                "status": 2,
+                                "applicationAccess": [{"applicationUuid": "other", "accessLevel": "manager"}],
+                            }
+                        ],
+                        "pagination": {"total": 1},
+                    }
+                return {"value": {}}
+
+        templates = [
+            {
+                "key": enabled_other,
+                "status": 2,
+                "subjectType": "account",
+                "roleRefs": [{"module": "/applications/other", "key": "application-data-write"}],
+            },
+            {
+                "key": disabled_stale,
+                "status": 3,
+                "subjectType": "account",
+                "roleRefs": [{"module": "/applications/stale", "key": "application-data-write"}],
+            },
+            {
+                "key": new_acc_tpl,
+                "status": 2,
+                "subjectType": "account",
+                "applicationAccess": [{"applicationUuid": dep_id, "accessLevel": "manager"}],
+                "roleRefs": [{"module": app_module, "key": "application-data-write"}],
+            },
+            {
+                "key": new_ep_tpl,
+                "status": 2,
+                "subjectType": "endpoint",
+                "roleRefs": [
+                    {"module": app_module, "key": "application-data-read"},
+                    {"module": app_module, "key": "application-data-write"},
+                ],
+            },
+        ]
+
+        selected_ep_tpl = bsa._ensure_endpoint_role_binding(
+            _FakeSession(),  # type: ignore[arg-type]
+            namespace="ns1",
+            deployment_id=dep_id,
+            endpoint_id=42,
+            templates=templates,
+        )
+        self.assertEqual(selected_ep_tpl, new_ep_tpl)
+        acc_puts = [p for m, path, p in calls if m == "PUT" and path.endswith("/accounts/7/role-templates")]
+        self.assertEqual(len(acc_puts), 1)
+        self.assertEqual(acc_puts[0]["roleTemplateKeys"], [enabled_other, new_acc_tpl])
+        self.assertNotIn(disabled_stale, acc_puts[0]["roleTemplateKeys"])
+        ep_puts = [p for m, path, p in calls if m == "PUT" and path.endswith("/endpoints/42/role-templates")]
+        self.assertEqual(ep_puts, [{"roleTemplateKeys": [new_ep_tpl]}])
+
+
 if __name__ == "__main__":
     unittest.main()

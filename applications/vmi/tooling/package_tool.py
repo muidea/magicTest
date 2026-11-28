@@ -103,6 +103,10 @@ def validate_source(root: Path = MODEL_ROOT):
             raise ValueError("entity namespace/version mismatch: " + e["name"])
         caps = {c["key"]: c["enabled"] for c in e["serviceExpose"]["capabilities"]}
         enabled += sum(caps.values())
+        for blk in e.get("blockInfo") or []:
+            bk = str(blk.get("key") or "")
+            if not ACTION_KEY_RE.fullmatch(bk):
+                raise ValueError(f"invalid block binding key on {e['name']}: {bk!r}")
         for act in e.get("writeRules", {}).get("actions", []):
             k = act["key"]
             if not ACTION_KEY_RE.fullmatch(k):
@@ -124,6 +128,10 @@ def validate_source(root: Path = MODEL_ROOT):
         if template.get("subjectType") == "account":
             if "application-viewer" not in roles or "application-data-read" in roles:
                 raise ValueError(f"account template {template.get('key')} violates application-viewer rule")
+        elif template.get("subjectType") == "endpoint":
+            bad_roles = sorted(r for r in roles if r.startswith("entity-action-") or r == "application-viewer")
+            if bad_roles:
+                raise ValueError(f"endpoint template {template.get('key')} cannot include human-only roles: {bad_roles}")
 
     readiness = read_json(root / "definition/readiness.json")
     if enabled != readiness["enabledCapabilities"] or readiness["liveReady"] or readiness["businessReady"]:
