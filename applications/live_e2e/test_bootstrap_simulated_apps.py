@@ -554,6 +554,129 @@ class BootstrapSimulatedAppsTests(unittest.TestCase):
             self.assertEqual(crb_res["inspect"]["totalRecords"], 9)
             self.assertFalse((state_dir / "runs/crb-plan.json").exists())
 
+    def test_run_seed_and_verify_crb_uses_replay_mode_on_fresh_seed(self):
+        with tempfile.TemporaryDirectory(prefix="bsa-crb-replay-") as tmp:
+            state_dir = bsa.ensure_private_dir(Path(tmp) / "state")
+            secrets_dir = bsa.ensure_private_dir(state_dir / "secrets")
+            orig_run = bsa._run_subprocess
+            seen_cmds: list[list[str]] = []
+
+            def fake_run(cmd, env):
+                seen_cmds.append(cmd)
+                if cmd[-1] == "plan":
+                    plan_out = Path(cmd[cmd.index("--output") + 1])
+                    plan_out.parent.mkdir(parents=True, exist_ok=True)
+                    plan_out.write_text("{}", encoding="utf-8")
+                return "{}"
+
+            bsa._run_subprocess = fake_run  # type: ignore[assignment]
+            try:
+                bsa.run_seed_and_verify(
+                    action="all",
+                    base_url="https://panel.example.com",
+                    state_dir=state_dir,
+                    secrets_dir=secrets_dir,
+                    platform_root=bsa.resolve_platform_root(),
+                    services_info={},
+                    apps=["chess-room-booking"],
+                    ca_file=None,
+                    trust_leaf=False,
+                    cycles=1,
+                    anchor_utc=None,
+                    reuse_existing=False,
+                )
+            finally:
+                bsa._run_subprocess = orig_run  # type: ignore[assignment]
+
+            self.assertEqual([c[-1] for c in seen_cmds], ["plan", "run", "verify"])
+            for cmd in seen_cmds:
+                mode_idx = cmd.index("--mode")
+                self.assertEqual(cmd[mode_idx + 1], "replay")
+
+    def test_single_service_converge_includes_service_description(self):
+        captured: list[dict] = []
+
+        class _FakeSession:
+            def proxy_json(self, method, path, payload=None):
+                req_path = urlsplit(path).path
+                if method == "GET" and req_path.endswith("/application/installations/"):
+                    return {
+                        "values": [
+                            {
+                                "id": 11,
+                                "deploymentId": "dep-dm-1",
+                                "applicationUuid": bsa.APP_SPECS["device-management"]["uuid"],
+                                "status": "ready",
+                                "receipt": {"runtimeApplicationUuid": "rt-dm-1"},
+                            }
+                        ]
+                    }
+                if method == "GET" and req_path.endswith("/hub/services/"):
+                    return {"values": [], "pagination": {"total": 0}}
+                if method == "GET" and req_path.endswith("/hub/publications/"):
+                    return {"values": [], "pagination": {"total": 0}}
+                if method == "GET" and req_path.endswith("/hub/capabilitys/"):
+                    return {
+                        "values": [
+                            {
+                                "id": 101,
+                                "providerType": "application",
+                                "providerKey": "rt-dm-1",
+                                "status": 1,
+                            }
+                        ],
+                        "pagination": {"total": 1},
+                    }
+                if method == "GET" and req_path.endswith("/role-templates/"):
+                    return {
+                        "values": [
+                            {
+                                "key": "app-dep-dm-1-collector",
+                                "subjectType": "endpoint",
+                                "status": 2,
+                                "roleRefs": [{"module": "/applications/dep-dm-1", "key": "application-data-write"}],
+                            }
+                        ],
+                        "pagination": {"total": 1},
+                    }
+                if method == "GET" and req_path.endswith("/portal/services/"):
+                    return {"values": [{"id": 201, "leaseTerm": {"status": 0}}]}
+                if method == "GET" and req_path.endswith("/endpoints/301"):
+                    return {"value": {"id": 301, "account": {"id": 7}}}
+                if method == "GET" and req_path.endswith("/accounts/7"):
+                    return {"value": {"id": 7, "effectiveRoles": [{"module": "/applications/dep-dm-1", "key": "application-data-write"}], "templateRefs": []}}
+                if method == "GET" and "/subject-role-bindings/" in req_path:
+                    return {"values": [], "pagination": {"total": 0}}
+                if method == "POST" and req_path == "/api/v1/web/proxy/panel/hub/services/generated/converge/":
+                    captured.append(payload)
+                    return {"values": [{"service": {"id": 201, "key": payload["items"][0]["service"]["key"]}, "publication": {"id": 202, "service": {"id": 201}, "status": 2}}]}
+                if method == "POST" and req_path == "/api/v1/web/proxy/portal/service/subscriptions/":
+                    return {"value": {"phase": "complete"}}
+                if method == "POST" and req_path == "/api/v1/web/proxy/portal/service/credentials/":
+                    return {"value": {"endpointId": 301, "apiKey": "dm-key-1"}}
+                if method == "PUT":
+                    return {"value": {}}
+                raise AssertionError(f"unexpected call {method} {path}")
+
+        with tempfile.TemporaryDirectory(prefix="bsa-dm-svc-") as tmp:
+            secrets_dir = bsa.ensure_private_dir(Path(tmp) / "secrets")
+            bsa.ensure_portal_subscriptions_and_keys(
+                _FakeSession(),  # type: ignore[arg-type]
+                secrets_dir,
+                namespace="panel",
+                apps=["device-management"],
+                installations={
+                    "device-management": {
+                        "deploymentId": "dep-dm-1",
+                        "runtimeApplicationUuid": "rt-dm-1",
+                    }
+                },
+            )
+            self.assertEqual(len(captured), 1)
+            svc_payload = captured[0]["items"][0]["service"]
+            self.assertEqual(svc_payload["description"], bsa.APP_SPECS["device-management"]["serviceDescription"])
+            self.assertTrue(bool(svc_payload["description"].strip()))
+
     def test_vmi_app_spec_and_reuse_existing_inspect(self):
         self.assertIn("vmi", bsa.APP_SPECS)
         self.assertEqual(bsa.parse_apps("device-management,chess-room-booking,vmi"), ["device-management", "chess-room-booking", "vmi"])
@@ -776,6 +899,7 @@ class BootstrapSimulatedAppsTests(unittest.TestCase):
                 self.assertEqual(len(mock_state["converge_bodies"]), 1)
                 items = mock_state["converge_bodies"][0]["items"]
                 self.assertEqual(len(items), 6)
+                self.assertTrue(all(str(it["service"].get("description") or "").strip() for it in items))
                 all_bound_cap_ids = [cid for it in items for cid in it["capabilityIDs"]]
                 self.assertEqual(len(all_bound_cap_ids), len(set(all_bound_cap_ids)))
                 self.assertEqual(set(all_bound_cap_ids), {c["id"] for c in caps})

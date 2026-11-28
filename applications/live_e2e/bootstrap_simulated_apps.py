@@ -52,6 +52,7 @@ APP_SPECS: dict[str, dict[str, Any]] = {
         "instanceKey": "device-management",
         "instanceName": "设备管理模拟实例",
         "serviceKeys": ("device_management_service",),
+        "serviceDescription": "设备台账、遥测采集、阈值告警与维护记录统一接入服务",
         "storageRequired": True,
     },
     "chess-room-booking": {
@@ -59,6 +60,7 @@ APP_SPECS: dict[str, dict[str, Any]] = {
         "instanceKey": "chess-room-booking",
         "instanceName": "棋牌室预订模拟实例",
         "serviceKeys": ("chess_room_booking_simulation", "chess_room_booking_service"),
+        "serviceDescription": "棋牌室商户门店、包间排程、预订订单与投诉工单统一接入服务",
         "storageRequired": True,
     },
     "vmi": {
@@ -78,36 +80,42 @@ APP_SPECS: dict[str, dict[str, Any]] = {
                 "key": "vmi_partner_service",
                 "domain": "partner",
                 "showName": "VMI 合作方与会员服务",
+                "description": "管理 VMI 分销合作方层级关系与终端会员档案",
                 "entities": ("partner", "member"),
             },
             {
                 "key": "vmi_catalog_service",
                 "domain": "catalog",
                 "showName": "VMI 商品目录与规格服务",
+                "description": "维护 VMI 标准商品目录、保质效期及 SKU 规格价格",
                 "entities": ("product", "productInfo"),
             },
             {
                 "key": "vmi_warehouse_service",
                 "domain": "warehouse",
                 "showName": "VMI 仓储与货架库位服务",
+                "description": "维护区域中心仓库及货架库位容量配置",
                 "entities": ("warehouse", "shelf"),
             },
             {
                 "key": "vmi_inventory_service",
                 "domain": "inventory",
                 "showName": "VMI 门店商品与出入库告警服务",
+                "description": "管理门店在库商品、出入库单据流水及自动库存告警",
                 "entities": ("store", "goods", "stockin", "stockout", "goodsInfo", "inventoryAlert"),
             },
             {
                 "key": "vmi_order_service",
                 "domain": "order",
                 "showName": "VMI 销售订单与履约服务",
+                "description": "处理门店销售订单、履约流转与订单商品明细",
                 "entities": ("order", "goodsItem"),
             },
             {
                 "key": "vmi_loyalty_service",
                 "domain": "loyalty",
                 "showName": "VMI 激励策略与积分报表服务",
+                "description": "维护积分返利策略、会员积分流水、奖励发放与月度结算单",
                 "entities": ("rewardPolicy", "credit", "creditReward", "creditReport"),
             },
         ),
@@ -1228,6 +1236,7 @@ def ensure_portal_subscriptions_and_keys(
                             "key": p_key,
                             "name": p_key,
                             "showName": profile["showName"],
+                            "description": profile.get("description", ""),
                         },
                         "capabilityIDs": cap_ids,
                         "publication": _default_publication_payload(namespace),
@@ -1300,6 +1309,7 @@ def ensure_portal_subscriptions_and_keys(
                             "key": svc_key_desired,
                             "name": svc_key_desired,
                             "showName": spec["instanceName"],
+                            "description": spec.get("serviceDescription", ""),
                         },
                         "capabilityIDs": cap_ids,
                         "publication": _default_publication_payload(namespace),
@@ -1639,7 +1649,7 @@ def run_seed_and_verify(
                 if not plan_path.exists():
                     plan_cmd = [
                         sys.executable, "-B", str(sim_tool),
-                        "--mode", "seed",
+                        "--mode", "replay",
                         "--output", str(plan_path),
                         "plan",
                     ]
@@ -1648,7 +1658,7 @@ def run_seed_and_verify(
                     _run_subprocess(plan_cmd, env)
                 _run_subprocess([
                     sys.executable, "-B", str(sim_tool),
-                    "--mode", "seed",
+                    "--mode", "replay",
                     "--plan", str(plan_path),
                     "--service-url", svc_url,
                     "--action-url", act_url,
@@ -1664,7 +1674,7 @@ def run_seed_and_verify(
                     raise BootstrapError(f"missing chess-room-booking plan for verify: {plan_path}")
                 _run_subprocess([
                     sys.executable, "-B", str(sim_tool),
-                    "--mode", "seed",
+                    "--mode", "replay",
                     "--plan", str(plan_path),
                     "--service-url", svc_url,
                     "--state-dir", str(app_state_dir),

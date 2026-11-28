@@ -34,36 +34,42 @@ VMI_DOMAIN_SERVICES: tuple[dict[str, Any], ...] = (
         "key": "vmi_partner_service",
         "domain": "partner",
         "showName": "VMI 合作方与会员服务",
+        "description": "管理 VMI 分销合作方层级关系与终端会员档案",
         "entities": ("partner", "member"),
     },
     {
         "key": "vmi_catalog_service",
         "domain": "catalog",
         "showName": "VMI 商品目录与规格服务",
+        "description": "维护 VMI 标准商品目录、保质效期及 SKU 规格价格",
         "entities": ("product", "productInfo"),
     },
     {
         "key": "vmi_warehouse_service",
         "domain": "warehouse",
         "showName": "VMI 仓储与货架库位服务",
+        "description": "维护区域中心仓库及货架库位容量配置",
         "entities": ("warehouse", "shelf"),
     },
     {
         "key": "vmi_inventory_service",
         "domain": "inventory",
         "showName": "VMI 门店商品与出入库告警服务",
+        "description": "管理门店在库商品、出入库单据流水及自动库存告警",
         "entities": ("store", "goods", "stockin", "stockout", "goodsInfo", "inventoryAlert"),
     },
     {
         "key": "vmi_order_service",
         "domain": "order",
         "showName": "VMI 销售订单与履约服务",
+        "description": "处理门店销售订单、履约流转与订单商品明细",
         "entities": ("order", "goodsItem"),
     },
     {
         "key": "vmi_loyalty_service",
         "domain": "loyalty",
         "showName": "VMI 激励策略与积分报表服务",
+        "description": "维护积分返利策略、会员积分流水、奖励发放与月度结算单",
         "entities": ("rewardPolicy", "credit", "creditReward", "creditReport"),
     },
 )
@@ -167,19 +173,26 @@ def simulation_plan(anchor_utc: str | None = None, run_id: str | None = None, mo
     t1 = iso_utc(anchor + timedelta(minutes=15))
 
     creates = [
-        {"key": "partner:root", "entity": "partner", "values": {"partnerCode": f"VMI-P-{rid}-ROOT", "name": f"中心分销商-{rid}", "contact": "010-80001001"}},
-        {"key": "partner:sub", "entity": "partner", "values": {"partnerCode": f"VMI-P-{rid}-SUB", "name": f"华东加盟商-{rid}", "refererId": {"$ref": "partner:root"}, "contact": "021-60002002"}},
-        {"key": "warehouse:main", "entity": "warehouse", "values": {"code": f"VMI-WH-{rid}", "name": f"华东中心仓-{rid}", "region": "华东", "address": "上海市浦东新区临港园区1号"}},
+        {"key": "partner:root", "entity": "partner", "values": {"partnerCode": f"VMI-P-{rid}-ROOT", "name": "中心分销商", "contact": "010-80001001"}},
+        {"key": "partner:sub", "entity": "partner", "values": {"partnerCode": f"VMI-P-{rid}-SUB", "name": "华东加盟商", "refererId": {"$ref": "partner:root"}, "contact": "021-60002002"}},
+        {"key": "warehouse:main", "entity": "warehouse", "values": {"code": f"VMI-WH-{rid}", "name": "华东中心仓", "region": "华东", "address": "上海市浦东新区临港园区1号"}},
         {"key": "shelf:a1", "entity": "shelf", "values": {"code": f"VMI-SH-{rid}-A1", "name": "冷链主货架A1", "warehouseId": {"$ref": "warehouse:main"}, "capacity": 500, "usedCapacity": 320}},
         {"key": "shelf:a2", "entity": "shelf", "values": {"code": f"VMI-SH-{rid}-A2", "name": "常温主货架A2", "warehouseId": {"$ref": "warehouse:main"}, "capacity": 300, "usedCapacity": 120}},
         {"key": "product:drink", "entity": "product", "values": {"code": f"VMI-PR-{rid}-01", "name": "精品乌龙茶", "category": "饮品", "expireHours": 4320}},
+        {"key": "product:tea", "entity": "product", "values": {"code": f"VMI-PR-{rid}-02", "name": "清香茉莉花茶", "category": "饮品", "expireHours": 4320}},
         {"key": "productInfo:sku1", "entity": "productInfo", "values": {"sku": f"VMI-SKU-{rid}-500ML", "productId": {"$ref": "product:drink"}, "specName": "500ml*15整箱", "unitPrice": 68.5}},
-        {"key": "store:s1", "entity": "store", "values": {"code": f"VMI-ST-{rid}-01", "name": f"陆家嘴旗舰店-{rid}", "warehouseId": {"$ref": "warehouse:main"}, "shelfIds": [{"$ref": "shelf:a1"}, {"$ref": "shelf:a2"}]}},
+        {"key": "productInfo:sku2", "entity": "productInfo", "values": {"sku": f"VMI-SKU-{rid}-500ML-TEA", "productId": {"$ref": "product:tea"}, "specName": "500ml*12礼盒装", "unitPrice": 54.0}},
+        {"key": "store:s1", "entity": "store", "values": {"code": f"VMI-ST-{rid}-01", "name": "陆家嘴旗舰店", "warehouseId": {"$ref": "warehouse:main"}, "shelfIds": [{"$ref": "shelf:a1"}, {"$ref": "shelf:a2"}]}},
+        {"key": "store:s2", "entity": "store", "values": {"code": f"VMI-ST-{rid}-02", "name": "静安体验店", "warehouseId": {"$ref": "warehouse:main"}, "shelfIds": [{"$ref": "shelf:a2"}]}},
         {"key": "member:m1", "entity": "member", "values": {"memberCode": f"VMI-MB-{rid}-01", "name": "张明", "partnerId": {"$ref": "partner:sub"}, "phone": "13800001001"}},
+        {"key": "member:m2", "entity": "member", "values": {"memberCode": f"VMI-MB-{rid}-02", "name": "李雪", "partnerId": {"$ref": "partner:sub"}, "phone": "13800001002"}},
         {"key": "goods:g1", "entity": "goods", "values": {"goodsCode": f"VMI-GD-{rid}-01", "name": "旗舰店精品乌龙茶箱装", "storeId": {"$ref": "store:s1"}, "productInfoId": {"$ref": "productInfo:sku1"}, "shelfIds": [{"$ref": "shelf:a1"}], "price": 79.0, "stockCount": 8, "safetyStock": 15}},
+        {"key": "goods:g2", "entity": "goods", "values": {"goodsCode": f"VMI-GD-{rid}-02", "name": "静安店清香茉莉花茶礼盒", "storeId": {"$ref": "store:s2"}, "productInfoId": {"$ref": "productInfo:sku2"}, "shelfIds": [{"$ref": "shelf:a2"}], "price": 66.0, "stockCount": 85, "safetyStock": 20}},
         {"key": "stockin:si1", "entity": "stockin", "values": {"billNo": f"VMI-SI-{rid}-01", "storeId": {"$ref": "store:s1"}, "warehouseId": {"$ref": "warehouse:main"}, "totalQuantity": 150}},
         {"key": "stockout:so1", "entity": "stockout", "values": {"billNo": f"VMI-SO-{rid}-01", "storeId": {"$ref": "store:s1"}, "warehouseId": {"$ref": "warehouse:main"}, "totalQuantity": 20}},
         {"key": "order:o1", "entity": "order", "values": {"orderNo": f"VMI-OD-{rid}-01", "storeId": {"$ref": "store:s1"}, "customerId": {"$ref": "member:m1"}, "totalCost": 1580.0, "totalItems": 20}},
+        {"key": "order:o2", "entity": "order", "values": {"orderNo": f"VMI-OD-{rid}-02", "storeId": {"$ref": "store:s2"}, "customerId": {"$ref": "member:m2"}, "totalCost": 396.0, "totalItems": 6}},
+        {"key": "order:o3", "entity": "order", "values": {"orderNo": f"VMI-OD-{rid}-03", "storeId": {"$ref": "store:s1"}, "customerId": {"$ref": "member:m2"}, "totalCost": 237.0, "totalItems": 3}},
         {"key": "rewardPolicy:rp1", "entity": "rewardPolicy", "values": {"policyCode": f"VMI-RP-{rid}-01", "name": "满千返1%积分", "rate": 1.0, "minOrderAmount": 1000.0}},
         {"key": "credit:cr1", "entity": "credit", "values": {"entryNo": f"VMI-CR-{rid}-01", "ownerId": {"$ref": "member:m1"}, "orderId": {"$ref": "order:o1"}, "deltaAmount": 15.8, "balanceAfter": 15.8, "reason": "订单消费返利入账", "occurredAt": t1}},
         {"key": "creditReport:rep1", "entity": "creditReport", "values": {"reportCode": f"VMI-REP-{rid}-01", "ownerId": {"$ref": "member:m1"}, "periodKey": anchor.strftime("%Y-%m"), "totalEarned": 20.8, "totalSpent": 5.0, "currentBalance": 15.8}},
@@ -207,6 +220,7 @@ def simulation_plan(anchor_utc: str | None = None, run_id: str | None = None, mo
         {"targetKey": "order:o1", "entity": "order", "action": "pay", "payload": {}},
         {"targetKey": "order:o1", "entity": "order", "action": "start-fulfill", "payload": {}},
         {"targetKey": "order:o1", "entity": "order", "action": "complete", "payload": {}},
+        {"targetKey": "order:o2", "entity": "order", "action": "pay", "payload": {}},
     ]
 
     return {
@@ -219,6 +233,7 @@ def simulation_plan(anchor_utc: str | None = None, run_id: str | None = None, mo
                 "key": svc["key"],
                 "domain": svc["domain"],
                 "showName": svc["showName"],
+                "description": svc["description"],
                 "entities": list(svc["entities"]),
             }
             for svc in VMI_DOMAIN_SERVICES

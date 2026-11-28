@@ -271,9 +271,9 @@ class VmiSimulationToolTests(unittest.TestCase):
                     0,
                 )
                 post_calls = [c for c in state["calls"] if c[0] == "POST"]
-                self.assertEqual(len(post_calls), 20)
+                self.assertEqual(len(post_calls), 27)
                 self.assertEqual({c[1] for c in post_calls}, {s["key"] for s in simulation_tool.VMI_DOMAIN_SERVICES})
-                self.assertEqual(len(state["action_calls"]), 5)
+                self.assertEqual(len(state["action_calls"]), 6)
 
                 # Full verify passes all 6 domain services + isolation negative probe (HTTP 404).
                 self.assertEqual(
