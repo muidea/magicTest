@@ -1,0 +1,417 @@
+package modelpackage_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	bc "github.com/muidea/magicBase/pkg/common"
+	"github.com/muidea/magicBase/pkg/scripteffect"
+	"github.com/muidea/magicOrm/models"
+	"github.com/muidea/magicOrm/orm"
+	"github.com/muidea/magicOrm/provider"
+	pc "github.com/muidea/magicRunner/internal/modules/kernel/panel/pkg/common"
+	mp "github.com/muidea/magicRunner/internal/modules/kernel/panel/pkg/modelpackage"
+	"github.com/muidea/magicRunner/internal/pkg/applicationpagecapability"
+	rc "github.com/muidea/magicRunner/pkg/common"
+	"github.com/muidea/magicRunner/pkg/definitionjson"
+)
+
+func TestVMIDefinitionTool(t *testing.T) {
+	root, out := os.Getenv("VMI_DEFINITION_ROOT"), os.Getenv("VMI_TOOL_OUTPUT")
+	toolingRoot := os.Getenv("VMI_TOOLING_ROOT")
+	if toolingRoot == "" {
+		toolingRoot = root
+	}
+	readFrom := func(base, name string, target any) {
+		t.Helper()
+		raw, err := os.ReadFile(filepath.Join(base, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := target.(*pc.ApplicationDefinitionView); ok {
+			err = definitionjson.DecodeProjection(raw, target)
+		} else {
+			err = definitionjson.Decode(raw, target)
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	read := func(name string, target any) {
+		t.Helper()
+		readFrom(root, name, target)
+	}
+	var identityFixture struct {
+		Identity    bc.EntityActionIdentity `json:"identity"`
+		OperationID string                  `json:"operationId"`
+	}
+	readFrom(toolingRoot, "tooling/testdata/write-identity.json", &identityFixture)
+	identityProbe := &bc.EntityValueWriteRequest{APIVersion: bc.EntityValueWriteAPIVersion, OperationID: identityFixture.OperationID, Identity: identityFixture.Identity, Entity: "/vmi/warehouse", Operation: "create"}
+	if err := identityProbe.Validate(); err != nil {
+		t.Fatal("simulator identity does not satisfy Base contract", err)
+	}
+
+	var application pc.ApplicationDefinitionView
+	read("definition/application/metadata.json", &application)
+	var pages rc.ApplicationPageDefinition
+	read("definition/application/pages/definition.json", &pages)
+	entities := []*pc.EntityDefinitionView{}
+	paths, err := filepath.Glob(filepath.Join(root, "definition/application/entities/*.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range paths {
+		raw, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var e pc.EntityDefinitionView
+		if err = definitionjson.DecodeProjection(raw, &e); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if failure := bc.ValidateEntityConstraints(&e.Object); failure != nil {
+			t.Fatalf("%s constraints: %v", e.Name, failure)
+		}
+		if failure := e.Object.Verify(); failure != nil {
+			t.Fatalf("%s verify: %v", e.Name, failure)
+		}
+		if failure := bc.ValidateEntityWriteRules(&e.Object, e.WriteRules); failure != nil {
+			t.Fatalf("%s writeRules: %v", e.Name, failure)
+		}
+		entities = append(entities, &e)
+	}
+	if err := pc.ValidateDefinitionWriteRules(entities); err != nil {
+		t.Fatalf("ValidateDefinitionWriteRules: %v", err)
+	}
+	if err := pc.ValidateDefinitionCreateInputs(entities); err != nil {
+		t.Fatalf("ValidateDefinitionCreateInputs: %v", err)
+	}
+
+	blockFiles := map[string][]byte{}
+	blockRoot := filepath.Join(root, "definition/application/blocks")
+	err = filepath.Walk(blockRoot, func(name string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(blockRoot, name)
+		if err != nil {
+			return err
+		}
+		blockFiles[filepath.ToSlash(rel)], err = os.ReadFile(name)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocks, err := pc.ParseApplicationFunctionBlockFiles(blockFiles)
+	if err != nil {
+		t.Fatalf("ParseApplicationFunctionBlockFiles: %v", err)
+	}
+	artifact := &pc.ApplicationModelArtifact{
+		APIVersion:      mp.ArtifactAPIVersion,
+		ApplicationUUID: application.UUID,
+		ApplicationKey:  application.Name,
+		Version:         pages.ModelRevision,
+		RuntimeType:     "model-driven",
+		Application:     &application,
+		Entities:        entities,
+		Pages:           &pages,
+		FunctionBlocks:  blocks,
+	}
+	assetsIndexPath := filepath.Join(root, "definition/assets/index.json")
+	indexBytes, assetErr := os.ReadFile(assetsIndexPath)
+	if assetErr != nil {
+		t.Fatal(assetErr)
+	}
+	var assets pc.ApplicationPackageAssets
+	if err = json.Unmarshal(indexBytes, &assets); err != nil {
+		t.Fatal(err)
+	}
+	artifact.Assets = &assets
+	artifact.PackageFiles = map[string][]byte{}
+	for _, item := range assets.Files {
+		raw, readErr := os.ReadFile(filepath.Join(root, "definition", filepath.FromSlash(item.Path)))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		artifact.PackageFiles[item.Path] = raw
+	}
+
+	built, err := mp.Build(artifact)
+	if err != nil {
+		t.Fatalf("official Build: %v", err)
+	}
+	second, err := mp.Build(artifact)
+	if err != nil || !bytes.Equal(built.Payload, second.Payload) {
+		t.Fatalf("Build is not deterministic: %v", err)
+	}
+	parsed, err := mp.Parse(built.Payload)
+	if err != nil {
+		t.Fatalf("official Parse: %v", err)
+	}
+	if !reflect.DeepEqual(parsed.Files, built.Files) {
+		t.Fatal("ZIP members changed in Parse")
+	}
+	if parsed.Artifact.Pages.NavigationMode != rc.PageNavigationModeTree {
+		t.Fatalf("expected navigationMode tree, got %q", parsed.Artifact.Pages.NavigationMode)
+	}
+	if parsed.Artifact.Pages.Statistics == nil || parsed.Artifact.Pages.Statistics.Ratios["shelfUtilization"] == nil {
+		t.Fatal("missing shelfUtilization ratio statistic")
+	}
+	runtime := applicationpagecapability.Inspect(parsed.Artifact.Pages)
+	if !runtime.Ready {
+		raw, _ := json.MarshalIndent(runtime, "", "  ")
+		t.Fatalf("page runtime capability not ready: %s", raw)
+	}
+	if err := applicationpagecapability.Validate(parsed.Artifact.Pages); err != nil {
+		t.Fatalf("applicationpagecapability.Validate: %v", err)
+	}
+	if err := pc.FreezeApplicationAuthorization(parsed.Artifact.Application, parsed.Artifact.Entities); err != nil {
+		t.Fatalf("pc.FreezeApplicationAuthorization: %v", err)
+	}
+	if len(parsed.Artifact.Application.Authorization.Templates) != 5 {
+		t.Fatalf("expected 5 CAS templates, got %d", len(parsed.Artifact.Application.Authorization.Templates))
+	}
+
+	p := provider.NewRemoteProvider("vmi-definition-offline", nil)
+	tableModels := []models.Model{}
+	fieldCount := 0
+	for _, e := range parsed.Artifact.Entities {
+		model, failure := p.RegisterModel(&e.Object)
+		if failure != nil {
+			t.Fatalf("%s RegisterModel: %v", e.Name, failure)
+		}
+		tableModels = append(tableModels, model)
+		fieldCount += len(e.Fields)
+	}
+	schemaPreflight := map[string]string{}
+	for _, model := range tableModels {
+		for _, index := range models.GetIndexes(model) {
+			for _, name := range index.Fields {
+				if !models.IsMainTableField(model, model.GetField(name)) {
+					t.Fatalf("index %s references non-main-table field %s.%s", index.Name, model.GetName(), name)
+				}
+			}
+		}
+		if failure := orm.PreflightSchemaChange(context.Background(), nil, model, p, "vmi_definition_offline"); failure != nil {
+			t.Fatalf("%s PreflightSchemaChange: %v", model.GetName(), failure)
+		}
+		schemaPreflight[model.GetName()] = "official public ORM create preflight passed; no SQL exported or executed"
+	}
+
+	projected := []*bc.EntityView{}
+	byName := map[string]*bc.EntityView{}
+	for _, e := range parsed.Artifact.Entities {
+		raw, err := json.Marshal(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var runtimeEntity bc.EntityView
+		if err := definitionjson.DecodeProjection(raw, &runtimeEntity); err != nil {
+			t.Fatal(err)
+		}
+		runtimeEntity.BlockInfo, err = pc.ProjectEntityFunctionBlocks(blocks, e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		projected = append(projected, &runtimeEntity)
+		byName[e.Name] = &runtimeEntity
+	}
+	if err := scripteffect.ValidateRuntimeModels(projected); err != nil {
+		t.Fatalf("ValidateRuntimeModels: %v", err)
+	}
+
+	// Verify slice reference rules are preserved on store & goods
+	for _, name := range []string{"store", "goods"} {
+		ent := byName[name]
+		if ent == nil || ent.WriteRules == nil {
+			t.Fatal("missing entity", name)
+		}
+		hasSliceRef := false
+		for _, rule := range ent.WriteRules.References {
+			if rule.Field == "shelfIds" {
+				hasSliceRef = true
+			}
+		}
+		if !hasSliceRef {
+			t.Fatalf("%s missing shelfIds slice reference rule", name)
+		}
+	}
+
+	// Execute both CreateEffect blocks cleanly across threshold, zero-emit, and invalid inputs
+	positiveCases, negativeCases := 0, 0
+	movementPlan, err := scripteffect.Freeze(byName["goodsInfo"], byName["inventoryAlert"], byName["goodsInfo"].BlockInfo[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		qty      int64
+		expected int
+		severity string
+	}{
+		{20, 0, ""},
+		{150, 1, "warning"},
+		{600, 1, "critical"},
+	} {
+		rec := map[string]any{
+			"id": "9007199254741001", "lineNo": "MV-TEST-01", "direction": "in",
+			"storeId": "9007199254741002", "goodsId": "9007199254741003", "productInfoId": "9007199254741004",
+			"quantity": tc.qty, "unitPrice": 12.5, "occurredAt": "2026-11-01T00:00:00Z",
+			"version": 1, "createdAt": "2026-11-01T00:00:00Z", "updatedAt": "2026-11-01T00:00:00Z", "updatedBy": "fixture:ops",
+		}
+		raw, _ := json.Marshal(rec)
+		res, err := movementPlan.Calculate(context.Background(), "0123456789abcdef0123456789abcdef", raw)
+		if err != nil || len(res) != tc.expected {
+			t.Fatalf("movement qty %d failed: %v %v", tc.qty, res, err)
+		}
+		if tc.expected == 1 {
+			if !strings.HasPrefix(res[0].Identity, "VMI-MV-") {
+				t.Fatalf("unexpected alert identity prefix: %s", res[0].Identity)
+			}
+			positiveCases++
+		}
+	}
+	badMove, _ := json.Marshal(map[string]any{
+		"id": "9007199254741001", "lineNo": "MV-BAD", "direction": "invalid",
+		"storeId": "9007199254741002", "goodsId": "9007199254741003", "productInfoId": "9007199254741004",
+		"quantity": 200, "unitPrice": 12.5, "occurredAt": "2026-11-01T00:00:00Z",
+		"version": 1, "createdAt": "2026-11-01T00:00:00Z", "updatedAt": "2026-11-01T00:00:00Z", "updatedBy": "fixture:ops",
+	})
+	if _, err := movementPlan.Calculate(context.Background(), "0123456789abcdef0123456789abcdef", badMove); err == nil {
+		t.Fatal("invalid movement direction accepted")
+	}
+	negativeCases++
+
+	orderPlan, err := scripteffect.Freeze(byName["goodsItem"], byName["inventoryAlert"], byName["goodsItem"].BlockInfo[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		subtotal float64
+		expected int
+	}{
+		{250.0, 0},
+		{1500.0, 1},
+		{5200.0, 1},
+	} {
+		rec := map[string]any{
+			"id": "9007199254741010", "itemCode": "IT-TEST-01",
+			"orderId": "9007199254741011", "storeId": "9007199254741002", "goodsId": "9007199254741003",
+			"quantity": 10, "unitPrice": tc.subtotal / 10, "subtotal": tc.subtotal, "occurredAt": "2026-11-01T00:00:00Z",
+			"version": 1, "createdAt": "2026-11-01T00:00:00Z", "updatedAt": "2026-11-01T00:00:00Z", "updatedBy": "fixture:ops",
+		}
+		raw, _ := json.Marshal(rec)
+		res, err := orderPlan.Calculate(context.Background(), "0123456789abcdef0123456789abcdef", raw)
+		if err != nil || len(res) != tc.expected {
+			t.Fatalf("order item subtotal %v failed: %v %v", tc.subtotal, res, err)
+		}
+		if tc.expected == 1 {
+			if !strings.HasPrefix(res[0].Identity, "VMI-OR-") {
+				t.Fatalf("unexpected order alert identity: %s", res[0].Identity)
+			}
+			positiveCases++
+		}
+	}
+	badItem, _ := json.Marshal(map[string]any{
+		"id": "9007199254741010", "itemCode": "IT-BAD",
+		"orderId": "9007199254741011", "storeId": "9007199254741002", "goodsId": "9007199254741003",
+		"quantity": 0, "unitPrice": 100.0, "subtotal": 2000.0, "occurredAt": "2026-11-01T00:00:00Z",
+		"version": 1, "createdAt": "2026-11-01T00:00:00Z", "updatedAt": "2026-11-01T00:00:00Z", "updatedBy": "fixture:ops",
+	})
+	if _, err := orderPlan.Calculate(context.Background(), "0123456789abcdef0123456789abcdef", badItem); err == nil {
+		t.Fatal("invalid order item quantity 0 accepted")
+	}
+	negativeCases++
+
+	payload := built.Payload
+	if target := os.Getenv("VMI_INSPECT_PACKAGE"); target != "" {
+		payload, err = os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		downloaded, err := mp.Parse(payload)
+		if err != nil {
+			t.Fatal("download Parse:", err)
+		}
+		if downloaded.ModelDigest != built.ModelDigest || downloaded.PageDigest != built.PageDigest || downloaded.FunctionBlocksDigest != built.FunctionBlocksDigest {
+			t.Fatal("downloaded model/page/block content differs from current definitions")
+		}
+		parsed = downloaded
+	}
+	if err = os.MkdirAll(filepath.Join(out, "unpacked"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	for name, raw := range parsed.Files {
+		target := filepath.Join(out, "unpacked", filepath.FromSlash(name))
+		if err = os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(target, raw, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	unpacked, err := mp.ParseUnpacked(os.DirFS(filepath.Join(out, "unpacked")))
+	if err != nil {
+		t.Fatalf("official ParseUnpacked: %v", err)
+	}
+	if !reflect.DeepEqual(unpacked.Artifact.Application.Authorization, application.Authorization) {
+		t.Fatal("authorization lost during ZIP/unpacked roundtrip")
+	}
+	if err = os.WriteFile(filepath.Join(out, "package.zip"), payload, 0644); err != nil {
+		t.Fatal(err)
+	}
+	ddlJSON, err := json.MarshalIndent(schemaPreflight, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(out, "schema-preflight.json"), append(ddlJSON, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+	report := map[string]any{
+		"schemaVersion":           "vmi.source-check/v1",
+		"status":                  "offline-definition-validated",
+		"applicationKey":          application.Name,
+		"applicationUuid":         application.UUID,
+		"businessVersion":         application.Version,
+		"packageModelRevision":    parsed.Artifact.Version,
+		"entityCount":             len(entities),
+		"fieldCount":              fieldCount,
+		"pageCount":               len(pages.Pages),
+		"dataSourceCount":         len(pages.DataSources),
+		"navigationMode":          pages.NavigationMode,
+		"entityActionCount":       len(parsed.Artifact.Application.Authorization.EntityActions),
+		"templateCount":           len(parsed.Artifact.Application.Authorization.Templates),
+		"assetCount":              len(parsed.Artifact.Assets.Files),
+		"functionBlockCount":      len(blocks.Index.Definitions),
+		"runtimeEffectValidation": true,
+		"effectCalculationCases":  positiveCases,
+		"effectNegativeCases":     negativeCases,
+		"officialBuild":           true,
+		"officialParse":           true,
+		"officialParseUnpacked":   true,
+		"deterministicBuild":      true,
+		"schemaCreatePreflight":   true,
+		"pageRuntimeInspection":   runtime,
+		"modelDigest":             parsed.ModelDigest,
+		"artifactDigest":          parsed.ArtifactDigest,
+		"pageDigest":              parsed.PageDigest,
+		"functionBlocksDigest":    parsed.FunctionBlocksDigest,
+		"packageDigest":           parsed.PackageDigest,
+	}
+	raw, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(out, "source-checks.json"), append(raw, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+}

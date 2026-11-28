@@ -4,6 +4,7 @@
 
 - [设备管理验证套件](~/codespace/magicTest/applications/device-management/README.md)
 - [棋牌室预订验证套件](~/codespace/magicTest/applications/chess-room-booking/README.md)
+- [VMI 供应商管理库存验证套件](~/codespace/magicTest/applications/vmi/README.md)
 - [双应用联合 E2E 验证](~/codespace/magicTest/applications/live_e2e/README.md)
 
 [返回测试项目首页](~/codespace/magicTest/README.md)

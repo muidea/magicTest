@@ -554,6 +554,248 @@ class BootstrapSimulatedAppsTests(unittest.TestCase):
             self.assertEqual(crb_res["inspect"]["totalRecords"], 9)
             self.assertFalse((state_dir / "runs/crb-plan.json").exists())
 
+    def test_vmi_app_spec_and_reuse_existing_inspect(self):
+        self.assertIn("vmi", bsa.APP_SPECS)
+        self.assertEqual(bsa.parse_apps("device-management,chess-room-booking,vmi"), ["device-management", "chess-room-booking", "vmi"])
+
+        sim_tool_dir = APPLICATIONS_ROOT / "vmi/tooling"
+        if str(sim_tool_dir) not in sys.path:
+            sys.path.insert(0, str(sim_tool_dir))
+        import simulation_tool as vmi_sim
+
+        self.assertEqual(bsa.APP_SPECS["vmi"]["serviceProfiles"], vmi_sim.VMI_DOMAIN_SERVICES)
+
+        plan = bsa.build_dry_run_plan(
+            type("Args", (), {
+                "command": "all",
+                "base_url": "https://panel.example.com",
+                "target_address": None,
+                "namespace": "panel",
+                "reuse_existing": True,
+                "state_dir": Path("/tmp/bsa-dry-run"),
+            })(),
+            bsa.resolve_platform_root(),
+            ["vmi"],
+        )
+        self.assertEqual(len(plan["apps"]["vmi"]["serviceProfiles"]), 6)
+
+        with tempfile.TemporaryDirectory(prefix="bsa-vmi-") as tmp:
+            state_dir = bsa.ensure_private_dir(Path(tmp) / "state")
+            secrets_dir = bsa.ensure_private_dir(state_dir / "secrets")
+            orig_run = bsa._run_subprocess
+            seen_cmds: list[list[str]] = []
+
+            def fake_run(cmd, env):
+                seen_cmds.append(cmd)
+                if cmd[-1] == "inspect":
+                    return json.dumps({"empty": False, "totalRecords": 18, "counts": {"warehouse": 1}})
+                return "{}"
+
+            bsa._run_subprocess = fake_run  # type: ignore[assignment]
+            try:
+                res = bsa.run_seed_and_verify(
+                    action="all",
+                    base_url="https://panel.example.com",
+                    state_dir=state_dir,
+                    secrets_dir=secrets_dir,
+                    platform_root=bsa.resolve_platform_root(),
+                    services_info={},
+                    apps=["vmi"],
+                    ca_file=None,
+                    trust_leaf=False,
+                    cycles=1,
+                    anchor_utc=None,
+                    reuse_existing=True,
+                )
+            finally:
+                bsa._run_subprocess = orig_run  # type: ignore[assignment]
+
+            self.assertEqual([c[-1] for c in seen_cmds], ["inspect"])
+            self.assertIn("--service-map", seen_cmds[0])
+            self.assertEqual(res["vmi"]["status"], "reused_non_empty_readonly_inspected")
+            self.assertEqual(res["vmi"]["inspect"]["totalRecords"], 18)
+            self.assertEqual(len(res["vmi"]["serviceUrls"]), 6)
+
+    def test_vmi_provisions_six_disjoint_domain_services_and_portal_subscriptions(self):
+        sim_tool_dir = APPLICATIONS_ROOT / "vmi/tooling"
+        if str(sim_tool_dir) not in sys.path:
+            sys.path.insert(0, str(sim_tool_dir))
+        import simulation_tool as vmi_sim
+
+        entities = sorted(vmi_sim.VMI_ENTITY_TO_SERVICE_KEY)
+        caps = [
+            {
+                "id": 1000 + idx,
+                "key": f"{ent}_create",
+                "kind": "create",
+                "providerType": "application",
+                "providerKey": "rt-vmi-1",
+                "status": 1,
+                "options": json.dumps({"runtimeEntityName": ent}),
+            }
+            for idx, ent in enumerate(entities)
+        ]
+
+        mock_state: dict = {
+            "converge_bodies": [],
+            "published_ids": [],
+            "portal_services": [],
+            "subscribed_service_ids": [],
+            "panel_hub_subscription_calls": 0,
+            "endpoint_role_puts": [],
+        }
+
+        class _VmiPortalHandler(BaseHTTPRequestHandler):
+            def log_message(self, format, *args):  # noqa: A002
+                return
+
+            def _read_json(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                return json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+
+            def _send(self, code, doc):
+                raw = json.dumps(doc).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def do_GET(self):  # noqa: N802
+                path = urlsplit(self.path).path
+                if path in ("/api/v1/web/proxy/panel/hub/services/", "/api/v1/web/proxy/panel/hub/publications/"):
+                    self._send(200, {"values": [], "pagination": {"total": 0}})
+                    return
+                if path == "/api/v1/web/proxy/panel/hub/capabilitys/":
+                    self._send(200, {"values": caps, "pagination": {"total": len(caps)}})
+                    return
+                if path == "/api/v1/web/proxy/cas/namespaces/panel/role-templates/":
+                    self._send(200, {
+                        "values": [
+                            {
+                                "key": "vmi-ingestor",
+                                "subjectType": "endpoint",
+                                "status": 2,
+                                "roleRefs": [{"module": "/applications/dep-vmi-1", "key": "application-data-write"}],
+                            },
+                            {
+                                "key": "vmi-manager",
+                                "subjectType": "account",
+                                "status": 2,
+                                "roleRefs": [{"module": "/applications/dep-vmi-1", "key": "application-data-write"}],
+                            },
+                        ],
+                        "pagination": {"total": 2},
+                    })
+                    return
+                if path == "/api/v1/web/proxy/portal/services/":
+                    self._send(200, {"values": mock_state["portal_services"], "pagination": {"total": len(mock_state["portal_services"])}})
+                    return
+                if path.startswith("/api/v1/web/proxy/cas/namespaces/panel/endpoints/"):
+                    ep_id = int(path.rsplit("/", 1)[-1])
+                    self._send(200, {"value": {"id": ep_id, "account": {"id": 88}}})
+                    return
+                if path == "/api/v1/web/proxy/cas/namespaces/panel/accounts/88":
+                    self._send(200, {
+                        "value": {
+                            "id": 88,
+                            "effectiveRoles": [{"module": "/applications/dep-vmi-1", "key": "application-data-write"}],
+                            "templateRefs": [{"key": "vmi-manager"}],
+                        }
+                    })
+                    return
+                self._send(404, {"error": {"message": f"unexpected GET {path}"}})
+
+            def do_POST(self):  # noqa: N802
+                path = urlsplit(self.path).path
+                body = self._read_json()
+                if path == "/api/v1/web/proxy/panel/hub/services/generated/converge/":
+                    mock_state["converge_bodies"].append(body)
+                    values = []
+                    for idx, item in enumerate(body["items"], start=1):
+                        svc_id = 100 + idx
+                        pub_id = 200 + idx
+                        svc_obj = {"id": svc_id, "key": item["service"]["key"]}
+                        values.append({
+                            "service": svc_obj,
+                            "publication": {"id": pub_id, "service": {"id": svc_id}, "status": 1},
+                        })
+                    self._send(200, {"values": values})
+                    return
+                if path.startswith("/api/v1/web/proxy/panel/hub/subscriptions"):
+                    mock_state["panel_hub_subscription_calls"] += 1
+                    self._send(500, {"error": {"message": "forbidden"}})
+                    return
+                if path == "/api/v1/web/proxy/portal/service/subscriptions/":
+                    mock_state["subscribed_service_ids"].append(int(body["service"]))
+                    self._send(200, {"value": {"phase": "complete"}})
+                    return
+                if path == "/api/v1/web/proxy/portal/service/credentials/":
+                    svc_id = int(body["service"])
+                    self._send(200, {"value": {"endpointId": 300 + svc_id, "apiKey": f"vmi-secret-{svc_id}"}})
+                    return
+                self._send(404, {"error": {"message": f"unexpected POST {path}"}})
+
+            def do_PUT(self):  # noqa: N802
+                path = urlsplit(self.path).path
+                body = self._read_json()
+                if path.startswith("/api/v1/web/proxy/panel/hub/publication/publish/"):
+                    pub_id = int(path.rsplit("/", 1)[-1])
+                    svc_id = pub_id - 100
+                    mock_state["published_ids"].append(pub_id)
+                    mock_state["portal_services"].append({"id": svc_id, "leaseTerm": {"status": 0}})
+                    self._send(200, {"value": {"id": pub_id, "status": 2}})
+                    return
+                if path.startswith("/api/v1/web/proxy/cas/namespaces/panel/endpoints/") and path.endswith("/role-templates"):
+                    ep_id = int(path.split("/")[-2])
+                    mock_state["endpoint_role_puts"].append((ep_id, body["roleTemplateKeys"]))
+                    self._send(200, {"value": {}})
+                    return
+                self._send(404, {"error": {"message": f"unexpected PUT {path}"}})
+
+        server = HTTPServer(("127.0.0.1", 0), _VmiPortalHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory(prefix="bsa-vmi-6svc-") as tmp:
+                secrets_dir = bsa.ensure_private_dir(Path(tmp) / "secrets")
+                sess = _PlainHttpSession(f"http://127.0.0.1:{server.server_port}")
+                provisioned = bsa.ensure_portal_subscriptions_and_keys(
+                    sess,
+                    secrets_dir,
+                    namespace="panel",
+                    apps=["vmi"],
+                    installations={
+                        "vmi": {
+                            "deploymentId": "dep-vmi-1",
+                            "runtimeApplicationUuid": "rt-vmi-1",
+                        }
+                    },
+                )
+                self.assertEqual(mock_state["panel_hub_subscription_calls"], 0)
+                self.assertEqual(len(mock_state["converge_bodies"]), 1)
+                items = mock_state["converge_bodies"][0]["items"]
+                self.assertEqual(len(items), 6)
+                all_bound_cap_ids = [cid for it in items for cid in it["capabilityIDs"]]
+                self.assertEqual(len(all_bound_cap_ids), len(set(all_bound_cap_ids)))
+                self.assertEqual(set(all_bound_cap_ids), {c["id"] for c in caps})
+
+                vmi_info = provisioned["vmi"]
+                self.assertEqual(vmi_info["mode"], "domain-services")
+                self.assertEqual(len(vmi_info["services"]), 6)
+                self.assertEqual(len(mock_state["subscribed_service_ids"]), 6)
+                self.assertEqual(len(mock_state["published_ids"]), 6)
+                self.assertEqual(len(mock_state["endpoint_role_puts"]), 6)
+                for svc_key, info in vmi_info["services"].items():
+                    key_path = Path(info["apiKeyFile"])
+                    self.assertEqual(key_path.name, f"vmi.{svc_key}.api-key")
+                    self.assertTrue(key_path.is_file())
+                    self.assertEqual(stat.S_IMODE(key_path.stat().st_mode), 0o600)
+                    self.assertEqual(info["endpointTemplateKey"], "vmi-ingestor")
+        finally:
+            server.shutdown()
+            server.server_close()
+
 
 if __name__ == "__main__":
     unittest.main()

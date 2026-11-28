@@ -105,6 +105,7 @@ def collect_bundle_entries(magic_test_root: Path, platform_root: Path) -> list[t
         "applications/live_e2e",
         "applications/device-management",
         "applications/chess-room-booking",
+        "applications/vmi",
         "load",
     )
     for rel in test_targets:
@@ -125,6 +126,13 @@ def collect_bundle_entries(magic_test_root: Path, platform_root: Path) -> list[t
         "apps/models/chess-room-booking/package/package.zip",
         "apps/models/chess-room-booking/package/schema-preflight.json",
         "apps/models/chess-room-booking/package/source-checks.json",
+        "apps/models/vmi/README.md",
+        "apps/models/vmi/definition",
+        "apps/models/vmi/package/README.md",
+        "apps/models/vmi/package/SHA256SUMS",
+        "apps/models/vmi/package/package.zip",
+        "apps/models/vmi/package/schema-preflight.json",
+        "apps/models/vmi/package/source-checks.json",
         "scripts/deployment-domain.sh",
         "scripts/deployment-health.sh",
         "scripts/deployment-mode.sh",

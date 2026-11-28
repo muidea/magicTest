@@ -61,6 +61,58 @@ APP_SPECS: dict[str, dict[str, Any]] = {
         "serviceKeys": ("chess_room_booking_simulation", "chess_room_booking_service"),
         "storageRequired": True,
     },
+    "vmi": {
+        "uuid": "7c4a91e6b2d84f039a5e1d8c6f3b2041",
+        "instanceKey": "vmi",
+        "instanceName": "VMI 供应商管理库存模拟实例",
+        "serviceKeys": (
+            "vmi_partner_service",
+            "vmi_catalog_service",
+            "vmi_warehouse_service",
+            "vmi_inventory_service",
+            "vmi_order_service",
+            "vmi_loyalty_service",
+        ),
+        "serviceProfiles": (
+            {
+                "key": "vmi_partner_service",
+                "domain": "partner",
+                "showName": "VMI 合作方与会员服务",
+                "entities": ("partner", "member"),
+            },
+            {
+                "key": "vmi_catalog_service",
+                "domain": "catalog",
+                "showName": "VMI 商品目录与规格服务",
+                "entities": ("product", "productInfo"),
+            },
+            {
+                "key": "vmi_warehouse_service",
+                "domain": "warehouse",
+                "showName": "VMI 仓储与货架库位服务",
+                "entities": ("warehouse", "shelf"),
+            },
+            {
+                "key": "vmi_inventory_service",
+                "domain": "inventory",
+                "showName": "VMI 门店商品与出入库告警服务",
+                "entities": ("store", "goods", "stockin", "stockout", "goodsInfo", "inventoryAlert"),
+            },
+            {
+                "key": "vmi_order_service",
+                "domain": "order",
+                "showName": "VMI 销售订单与履约服务",
+                "entities": ("order", "goodsItem"),
+            },
+            {
+                "key": "vmi_loyalty_service",
+                "domain": "loyalty",
+                "showName": "VMI 激励策略与积分报表服务",
+                "entities": ("rewardPolicy", "credit", "creditReward", "creditReport"),
+            },
+        ),
+        "storageRequired": True,
+    },
 }
 
 
@@ -881,7 +933,7 @@ def _ensure_endpoint_role_binding(
         templates,
         subject_type="endpoint",
         deployment_id=deployment_id,
-        preferred_keys=("collector", "channel-ingestor"),
+        preferred_keys=("collector", "channel-ingestor", "vmi-ingestor"),
     )
     if ep_tpl is None:
         raise BootstrapError(f"no enabled CAS endpoint role template found for deployment {deployment_id}")
@@ -911,7 +963,7 @@ def _ensure_endpoint_role_binding(
             templates,
             subject_type="account",
             deployment_id=deployment_id,
-            preferred_keys=("operator", "master-data", "platform-ops", "store-manager"),
+            preferred_keys=("operator", "master-data", "platform-ops", "store-manager", "vmi-manager"),
             required_role_keys=("application-data-write",),
         )
         if acc_tpl is None:
@@ -960,6 +1012,149 @@ def _ensure_endpoint_role_binding(
     return ep_tpl_key
 
 
+def _capability_entity_name(cap: dict[str, Any]) -> str:
+    raw_opts = cap.get("options")
+    if isinstance(raw_opts, str) and raw_opts.strip():
+        try:
+            opts = json.loads(raw_opts)
+            if isinstance(opts, dict):
+                name = str(opts.get("runtimeEntityName") or "").strip()
+                if name:
+                    return name
+        except json.JSONDecodeError:
+            pass
+    elif isinstance(raw_opts, dict):
+        name = str(raw_opts.get("runtimeEntityName") or "").strip()
+        if name:
+            return name
+    ent_name = str((cap.get("entity") or {}).get("name") or "").strip()
+    if ent_name:
+        return ent_name
+    key = str(cap.get("key") or "").strip()
+    kind = str(cap.get("kind") or "").strip()
+    if key and kind and key.endswith("_" + kind):
+        return key[: -(len(kind) + 1)]
+    return ""
+
+
+def _default_publication_payload(namespace: str) -> dict[str, Any]:
+    return {
+        "status": 1,
+        "visibleScope": namespace,
+        "allowSubscription": True,
+        "requireApproval": False,
+        "maxSubscriptions": 10,
+        "maxQPS": 50,
+        "dailyQuota": 100000,
+    }
+
+
+def _provision_single_portal_service(
+    session: HttpSession,
+    secrets_dir: Path,
+    *,
+    namespace: str,
+    deployment_id: str,
+    role_templates: list[dict[str, Any]],
+    svc: dict[str, Any],
+    pub: dict[str, Any] | None,
+    panel_pubs: list[dict[str, Any]],
+    key_filename: str,
+    cred_name_prefix: str,
+) -> dict[str, Any]:
+    svc_id = int(svc["id"])
+    svc_key = str(svc["key"])
+
+    if pub is None:
+        pub = next((p for p in panel_pubs if int((p.get("service") or {}).get("id") or 0) == svc_id), None)
+    if pub is None:
+        pub = session.proxy_json(
+            "POST",
+            "/api/v1/web/proxy/panel/hub/publications/",
+            payload={
+                "service": {"id": svc_id},
+                **_default_publication_payload(namespace),
+            },
+        ).get("value") or {}
+    pub_id = int(pub["id"])
+    if int(pub.get("status") or 0) != 2:
+        session.proxy_json(
+            "PUT",
+            f"/api/v1/web/proxy/panel/hub/publication/publish/{pub_id}",
+            payload={},
+        )
+
+    portal_svcs = _list_all_pages(session, "/api/v1/web/proxy/portal/services/")
+    portal_svc = next((row for row in portal_svcs if int(row.get("id") or 0) == svc_id), None)
+    if portal_svc is None:
+        raise BootstrapError(f"Portal service id={svc_id} ({svc_key}) not visible after publication")
+
+    sub_action = "existing"
+    if int((portal_svc.get("leaseTerm") or {}).get("status") or 0) != 2:
+        request_id = uuid.uuid4().hex
+        sub_res = session.proxy_json(
+            "POST",
+            "/api/v1/web/proxy/portal/service/subscriptions/",
+            payload={"requestId": request_id, "service": svc_id, "leaseTerm": 1},
+        )
+        outcome = sub_res.get("value") or {}
+        if outcome.get("phase") not in (None, "complete"):
+            for _ in range(15):
+                polled = session.proxy_json(
+                    "GET",
+                    f"/api/v1/web/proxy/portal/service/subscription-requests/{request_id}?service={svc_id}",
+                ).get("value") or {}
+                if polled.get("phase") == "complete":
+                    break
+                time.sleep(1)
+        sub_action = "subscribed"
+
+    key_path = secrets_dir / key_filename
+    key_action = "reused_local"
+    endpoint_id = 0
+    if not key_path.exists():
+        cred_doc = session.proxy_json(
+            "POST",
+            "/api/v1/web/proxy/portal/service/credentials/",
+            payload={"service": svc_id, "name": f"bootstrap-{cred_name_prefix}-{secrets.token_hex(4)}"},
+        )
+        cred_val = cred_doc.get("value") or {}
+        endpoint_id = int(cred_val.get("endpointId") or 0)
+        api_key = str(cred_doc.get("apiKey") or cred_val.get("apiKey") or "")
+        if not api_key:
+            raise BootstrapError(f"credential creation for {svc_key} returned no apiKey")
+        write_secret_file(key_path, api_key)
+        key_action = "created"
+
+    if endpoint_id <= 0:
+        cred_rows = _list_all_pages(
+            session,
+            f"/api/v1/web/proxy/portal/service/credentials/?service={svc_id}",
+        )
+        active_cred = next((r for r in cred_rows if int(r.get("endpointId") or 0) > 0), None)
+        if active_cred is None:
+            raise BootstrapError(f"no Portal credential with endpointId found for service id={svc_id}")
+        endpoint_id = int(active_cred["endpointId"])
+
+    ep_tpl_key = _ensure_endpoint_role_binding(
+        session,
+        namespace=namespace,
+        deployment_id=deployment_id,
+        endpoint_id=endpoint_id,
+        templates=role_templates,
+    )
+
+    return {
+        "serviceId": svc_id,
+        "serviceKey": svc_key,
+        "subscription": sub_action,
+        "apiKeyStatus": key_action,
+        "apiKeyFile": str(key_path),
+        "endpointId": endpoint_id,
+        "endpointTemplateKey": ep_tpl_key,
+    }
+
+
 def ensure_portal_subscriptions_and_keys(
     session: HttpSession,
     secrets_dir: Path,
@@ -980,6 +1175,96 @@ def ensure_portal_subscriptions_and_keys(
         inst = resolved_installations[app_key]
         deployment_id = inst["deploymentId"]
         runtime_app_uuid = inst["runtimeApplicationUuid"]
+
+        profiles = spec.get("serviceProfiles")
+        if profiles:
+            svc_by_key = {str(row.get("key") or ""): row for row in panel_svcs if row.get("key")}
+            pub_by_key: dict[str, dict[str, Any] | None] = {}
+            missing_profiles = [p for p in profiles if p["key"] not in svc_by_key]
+            if missing_profiles:
+                if panel_caps is None:
+                    panel_caps = _list_all_pages(session, "/api/v1/web/proxy/panel/hub/capabilitys/")
+                matched_caps = [
+                    c for c in panel_caps
+                    if c.get("providerType") == "application"
+                    and c.get("providerKey") == runtime_app_uuid
+                    and int(c.get("status") or 0) == 1
+                ]
+                caps_by_entity: dict[str, list[int]] = {}
+                for cap in matched_caps:
+                    ent_name = _capability_entity_name(cap)
+                    if ent_name:
+                        caps_by_entity.setdefault(ent_name, []).append(int(cap["id"]))
+                converge_items: list[dict[str, Any]] = []
+                assigned_cap_ids: set[int] = set()
+                for profile in missing_profiles:
+                    p_key = str(profile["key"])
+                    cap_ids = sorted({
+                        cid
+                        for ent in profile["entities"]
+                        for cid in caps_by_entity.get(ent, [])
+                    })
+                    if not cap_ids:
+                        raise BootstrapError(
+                            f"no enabled source capabilities found for {app_key} service {p_key} "
+                            f"(runtimeApplicationUuid={runtime_app_uuid}, entities={list(profile['entities'])})"
+                        )
+                    overlap = assigned_cap_ids.intersection(cap_ids)
+                    if overlap:
+                        raise BootstrapError(
+                            f"disjoint domain partition violated for {app_key} service {p_key}: overlapping capability IDs {sorted(overlap)}"
+                        )
+                    assigned_cap_ids.update(cap_ids)
+                    converge_items.append({
+                        "service": {
+                            "key": p_key,
+                            "name": p_key,
+                            "showName": profile["showName"],
+                        },
+                        "capabilityIDs": cap_ids,
+                        "publication": _default_publication_payload(namespace),
+                    })
+                converge_doc = session.proxy_json(
+                    "POST",
+                    "/api/v1/web/proxy/panel/hub/services/generated/converge/",
+                    payload={"items": converge_items},
+                )
+                converged_items = converge_doc.get("values") or []
+                if len(converged_items) != len(converge_items):
+                    raise BootstrapError(
+                        f"generated service convergence for {app_key} returned {len(converged_items)} items, expected {len(converge_items)}"
+                    )
+                for item in converged_items:
+                    svc_obj = item.get("service") or {}
+                    k = str(svc_obj.get("key") or "")
+                    if not k:
+                        raise BootstrapError(f"generated service convergence for {app_key} returned item without service.key")
+                    svc_by_key[k] = svc_obj
+                    pub_by_key[k] = item.get("publication")
+
+            profile_results: dict[str, dict[str, Any]] = {}
+            for profile in profiles:
+                p_key = str(profile["key"])
+                svc_res = _provision_single_portal_service(
+                    session,
+                    secrets_dir,
+                    namespace=namespace,
+                    deployment_id=deployment_id,
+                    role_templates=role_templates,
+                    svc=svc_by_key[p_key],
+                    pub=pub_by_key.get(p_key),
+                    panel_pubs=panel_pubs,
+                    key_filename=f"{app_key}.{p_key}.api-key",
+                    cred_name_prefix=p_key,
+                )
+                svc_res["entities"] = list(profile["entities"])
+                profile_results[p_key] = svc_res
+            out[app_key] = {
+                "mode": "domain-services",
+                "serviceKeys": [str(p["key"]) for p in profiles],
+                "services": profile_results,
+            }
+            continue
 
         svc = next((row for row in panel_svcs if row.get("key") in spec["serviceKeys"]), None)
         pub: dict[str, Any] | None = None
@@ -1009,15 +1294,7 @@ def ensure_portal_subscriptions_and_keys(
                             "showName": spec["instanceName"],
                         },
                         "capabilityIDs": cap_ids,
-                        "publication": {
-                            "status": 1,
-                            "visibleScope": namespace,
-                            "allowSubscription": True,
-                            "requireApproval": False,
-                            "maxSubscriptions": 10,
-                            "maxQPS": 50,
-                            "dailyQuota": 100000,
-                        },
+                        "publication": _default_publication_payload(namespace),
                     }]
                 },
             )
@@ -1026,126 +1303,45 @@ def ensure_portal_subscriptions_and_keys(
                 raise BootstrapError(f"generated service convergence for {app_key} returned no item")
             svc = converged_items[0].get("service") or {}
             pub = converged_items[0].get("publication") or {}
-        svc_id = int(svc["id"])
-        svc_key = str(svc["key"])
-
-        if pub is None:
-            pub = next((p for p in panel_pubs if int((p.get("service") or {}).get("id") or 0) == svc_id), None)
-        if pub is None:
-            pub = session.proxy_json(
-                "POST",
-                "/api/v1/web/proxy/panel/hub/publications/",
-                payload={
-                    "service": {"id": svc_id},
-                    "status": 1,
-                    "visibleScope": namespace,
-                    "allowSubscription": True,
-                    "requireApproval": False,
-                    "maxSubscriptions": 10,
-                    "maxQPS": 50,
-                    "dailyQuota": 100000,
-                },
-            ).get("value") or {}
-        pub_id = int(pub["id"])
-        if int(pub.get("status") or 0) != 2:
-            session.proxy_json(
-                "PUT",
-                f"/api/v1/web/proxy/panel/hub/publication/publish/{pub_id}",
-                payload={},
-            )
-
-        portal_svcs = _list_all_pages(session, "/api/v1/web/proxy/portal/services/")
-        portal_svc = next((row for row in portal_svcs if int(row.get("id") or 0) == svc_id), None)
-        if portal_svc is None:
-            raise BootstrapError(f"Portal service id={svc_id} ({svc_key}) not visible after publication")
-
-        sub_action = "existing"
-        if int((portal_svc.get("leaseTerm") or {}).get("status") or 0) != 2:
-            request_id = uuid.uuid4().hex
-            sub_res = session.proxy_json(
-                "POST",
-                "/api/v1/web/proxy/portal/service/subscriptions/",
-                payload={"requestId": request_id, "service": svc_id, "leaseTerm": 1},
-            )
-            outcome = sub_res.get("value") or {}
-            if outcome.get("phase") not in (None, "complete"):
-                for _ in range(15):
-                    polled = session.proxy_json(
-                        "GET",
-                        f"/api/v1/web/proxy/portal/service/subscription-requests/{request_id}?service={svc_id}",
-                    ).get("value") or {}
-                    if polled.get("phase") == "complete":
-                        break
-                    time.sleep(1)
-            sub_action = "subscribed"
-
-        key_path = secrets_dir / f"{app_key}.api-key"
-        key_action = "reused_local"
-        endpoint_id = 0
-        if not key_path.exists():
-            cred_doc = session.proxy_json(
-                "POST",
-                "/api/v1/web/proxy/portal/service/credentials/",
-                payload={"service": svc_id, "name": f"bootstrap-{app_key}-{secrets.token_hex(4)}"},
-            )
-            cred_val = cred_doc.get("value") or {}
-            endpoint_id = int(cred_val.get("endpointId") or 0)
-            api_key = str(cred_doc.get("apiKey") or cred_val.get("apiKey") or "")
-            if not api_key:
-                raise BootstrapError(f"credential creation for {svc_key} returned no apiKey")
-            write_secret_file(key_path, api_key)
-            key_action = "created"
-
-        if endpoint_id <= 0:
-            cred_rows = _list_all_pages(
-                session,
-                f"/api/v1/web/proxy/portal/service/credentials/?service={svc_id}",
-            )
-            active_cred = next((r for r in cred_rows if int(r.get("endpointId") or 0) > 0), None)
-            if active_cred is None:
-                raise BootstrapError(f"no Portal credential with endpointId found for service id={svc_id}")
-            endpoint_id = int(active_cred["endpointId"])
-
-        ep_tpl_key = _ensure_endpoint_role_binding(
+        out[app_key] = _provision_single_portal_service(
             session,
+            secrets_dir,
             namespace=namespace,
             deployment_id=deployment_id,
-            endpoint_id=endpoint_id,
-            templates=role_templates,
+            role_templates=role_templates,
+            svc=svc,
+            pub=pub,
+            panel_pubs=panel_pubs,
+            key_filename=f"{app_key}.api-key",
+            cred_name_prefix=app_key,
         )
-
-        out[app_key] = {
-            "serviceId": svc_id,
-            "serviceKey": svc_key,
-            "subscription": sub_action,
-            "apiKeyStatus": key_action,
-            "apiKeyFile": str(key_path),
-            "endpointId": endpoint_id,
-            "endpointTemplateKey": ep_tpl_key,
-        }
     return out
 
 
-def ensure_crb_operator_token(
+def ensure_app_operator_token(
     session: HttpSession,
     secrets_dir: Path,
     *,
+    app_key: str,
     namespace: str,
     deployment_id: str,
     operator_account: str,
     operator_password: str,
     ssl_context: ssl.SSLContext,
+    preferred_template_keys: tuple[str, ...],
+    pkce_client_name: str,
+    token_filename: str,
     on_password_changed: Callable[[str], None] | None = None,
     password_source: str = "provided",
     on_password_created: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    crb_uuid = APP_SPECS["chess-room-booking"]["uuid"]
+    app_uuid = APP_SPECS[app_key]["uuid"]
     templates = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/role-templates/")
     chosen_template = _select_preferred_template(
         templates,
         subject_type="account",
         deployment_id=deployment_id,
-        preferred_keys=("platform-ops", "store-manager", "frontdesk"),
+        preferred_keys=preferred_template_keys,
     )
     if chosen_template is None:
         chosen_template = next(
@@ -1154,14 +1350,14 @@ def ensure_crb_operator_token(
                 if t.get("subjectType") == "account"
                 and int(t.get("status") or 0) == 2
                 and (
-                    crb_uuid in str(t.get("key") or "")
-                    or any(a.get("applicationUuid") == crb_uuid for a in (t.get("applicationAccess") or []))
+                    app_uuid in str(t.get("key") or "")
+                    or any(a.get("applicationUuid") == app_uuid for a in (t.get("applicationAccess") or []))
                 )
             ),
             None,
         )
     if chosen_template is None:
-        raise BootstrapError(f"no chess-room-booking account role template found in namespace {namespace}")
+        raise BootstrapError(f"no {app_key} account role template found in namespace {namespace}")
     tpl_key = str(chosen_template["key"])
 
     accounts = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/")
@@ -1179,10 +1375,10 @@ def ensure_crb_operator_token(
             f"/api/v1/web/proxy/cas/namespaces/{namespace}/accounts/",
             payload={
                 "account": operator_account,
-                "displayName": "CRB Simulation Operator",
+                "displayName": f"{app_key} Simulation Operator",
                 "password": operator_password,
                 "email": f"{operator_account}@{namespace}.local",
-                "description": "Least-privilege operator for chess-room-booking simulation",
+                "description": f"Least-privilege operator for {app_key} simulation",
                 "status": 2,
                 "roleTemplateKeys": [tpl_key],
             },
@@ -1208,7 +1404,7 @@ def ensure_crb_operator_token(
     redirect_uri = f"{session.base_url}/oauth/callback"
     clients = _list_all_pages(session, f"/api/v1/web/proxy/cas/namespaces/{namespace}/oauth/clients/")
     client = next(
-        (c for c in clients if c.get("name") == "crb-sim-pkce-client" and c.get("clientType") == "public"),
+        (c for c in clients if c.get("name") == pkce_client_name and c.get("clientType") == "public"),
         None,
     )
     if client is None:
@@ -1216,7 +1412,7 @@ def ensure_crb_operator_token(
             "POST",
             f"/api/v1/web/proxy/cas/namespaces/{namespace}/oauth/clients/",
             payload={
-                "name": "crb-sim-pkce-client",
+                "name": pkce_client_name,
                 "developerName": "magicTest",
                 "clientType": "public",
                 "partyType": "third_party",
@@ -1224,11 +1420,11 @@ def ensure_crb_operator_token(
                 "redirectUris": [redirect_uri],
                 "grantTypes": ["authorization_code"],
                 "allowedScopes": desired_scopes,
-                "scopeDescription": "Least-privilege chess-room-booking simulator token",
+                "scopeDescription": f"Least-privilege {app_key} simulator token",
                 "audience": "api://magicrunner",
                 "requirePKCE": True,
                 "status": 2,
-                "description": "PKCE client for least-privilege CRB simulation actions",
+                "description": f"PKCE client for least-privilege {app_key} simulation actions",
                 "endpointId": 0,
             },
         ).get("value") or {}
@@ -1240,17 +1436,17 @@ def ensure_crb_operator_token(
                 f"/api/v1/web/proxy/cas/namespaces/{namespace}/oauth/clients/{client['clientId']}",
                 payload={
                     "expectedVersion": int(client.get("version") or 1),
-                    "name": client.get("name") or "crb-sim-pkce-client",
+                    "name": client.get("name") or pkce_client_name,
                     "developerName": client.get("developerName") or "magicTest",
                     "authenticationNamespaces": client.get("authenticationNamespaces") or [namespace],
                     "redirectUris": client.get("redirectUris") or [redirect_uri],
                     "grantTypes": client.get("grantTypes") or ["authorization_code"],
                     "allowedScopes": desired_scopes,
-                    "scopeDescription": client.get("scopeDescription") or "Least-privilege chess-room-booking simulator token",
+                    "scopeDescription": client.get("scopeDescription") or f"Least-privilege {app_key} simulator token",
                     "audience": "api://magicrunner",
                     "requirePKCE": bool(client.get("requirePKCE", True)),
                     "status": int(client.get("status") or 2),
-                    "description": client.get("description") or "PKCE client for least-privilege CRB simulation actions",
+                    "description": client.get("description") or f"PKCE client for least-privilege {app_key} simulation actions",
                     "endpointId": int(client.get("endpointId") or 0),
                 },
             ).get("value") or client
@@ -1268,7 +1464,7 @@ def ensure_crb_operator_token(
         timeout=session.timeout,
         on_password_changed=on_password_changed,
     )
-    token_path = secrets_dir / "crb-operator.token"
+    token_path = secrets_dir / token_filename
     write_secret_file(token_path, token)
     return {
         "operatorAccount": operator_account,
@@ -1278,6 +1474,37 @@ def ensure_crb_operator_token(
         "tokenBytes": len(token.encode("utf-8")),
         "actionTokenFile": str(token_path),
     }
+
+
+def ensure_crb_operator_token(
+    session: HttpSession,
+    secrets_dir: Path,
+    *,
+    namespace: str,
+    deployment_id: str,
+    operator_account: str,
+    operator_password: str,
+    ssl_context: ssl.SSLContext,
+    on_password_changed: Callable[[str], None] | None = None,
+    password_source: str = "provided",
+    on_password_created: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    return ensure_app_operator_token(
+        session,
+        secrets_dir,
+        app_key="chess-room-booking",
+        namespace=namespace,
+        deployment_id=deployment_id,
+        operator_account=operator_account,
+        operator_password=operator_password,
+        ssl_context=ssl_context,
+        preferred_template_keys=("platform-ops", "store-manager", "frontdesk"),
+        pkce_client_name="crb-sim-pkce-client",
+        token_filename="crb-operator.token",
+        on_password_changed=on_password_changed,
+        password_source=password_source,
+        on_password_created=on_password_created,
+    )
 
 
 def _sim_tls_args_for_dm(base_url: str, ca_file: Path | None, trust_leaf: bool) -> list[str]:
@@ -1361,29 +1588,30 @@ def run_seed_and_verify(
         results["device-management"] = {"runDir": str(dm_run_dir), "serviceUrl": dm_svc_url}
 
     if "chess-room-booking" in apps:
-        crb_tool = APPLICATIONS_ROOT / "chess-room-booking/tooling/simulation_tool.py"
-        crb_state_dir = ensure_private_dir(state_dir / "runs/chess-room-booking")
+        sim_tool = APPLICATIONS_ROOT / "chess-room-booking/tooling/simulation_tool.py"
+        app_state_dir = ensure_private_dir(state_dir / "runs/chess-room-booking")
         plan_path = state_dir / "runs/crb-plan.json"
-        crb_key_file = Path(services_info["chess-room-booking"]["apiKeyFile"]) if "chess-room-booking" in services_info else (secrets_dir / "chess-room-booking.api-key")
-        crb_tok_file = secrets_dir / "crb-operator.token"
-        crb_svc_key = services_info.get("chess-room-booking", {}).get("serviceKey", "chess_room_booking_simulation")
-        crb_svc_url = f"{base_url}/api/v1/gateway/services/{crb_svc_key}"
-        crb_act_url = f"{base_url}/api/v1/apps/entity/action/execute/"
+        key_file = Path(services_info["chess-room-booking"]["apiKeyFile"]) if "chess-room-booking" in services_info else (secrets_dir / "chess-room-booking.api-key")
+        tok_file = secrets_dir / "crb-operator.token"
+        svc_key = services_info.get("chess-room-booking", {}).get("serviceKey", "chess_room_booking_simulation")
+        svc_url = f"{base_url}/api/v1/gateway/services/{svc_key}"
+        act_url = f"{base_url}/api/v1/apps/entity/action/execute/"
         tls_args = _sim_tls_args_for_crb(ca_file, trust_leaf)
 
-        crb_journal_path = crb_state_dir / "journal.json"
-        crb_preflighted = False
-        if crb_journal_path.is_file():
+        journal_path = app_state_dir / "journal.json"
+        preflighted = False
+        if journal_path.is_file():
             try:
-                crb_preflighted = bool(json.loads(crb_journal_path.read_text(encoding="utf-8")).get("preflight"))
+                preflighted = bool(json.loads(journal_path.read_text(encoding="utf-8")).get("preflight"))
             except (OSError, json.JSONDecodeError):
-                crb_preflighted = False
+                preflighted = False
 
-        if reuse_existing and action in ("seed-data", "all") and not crb_preflighted:
+        skipped_crb_reuse = False
+        if reuse_existing and action in ("seed-data", "all") and not preflighted:
             inspect_raw = _run_subprocess([
-                sys.executable, "-B", str(crb_tool),
-                "--service-url", crb_svc_url,
-                "--api-key-file", str(crb_key_file),
+                sys.executable, "-B", str(sim_tool),
+                "--service-url", svc_url,
+                "--api-key-file", str(key_file),
                 *tls_args,
                 "inspect",
             ], env)
@@ -1393,50 +1621,148 @@ def run_seed_and_verify(
                     "status": "reused_non_empty_readonly_inspected",
                     "seedSkippedReason": "remote chess-room-booking instance already contains business records; preserved without writes",
                     "inspect": inspect_doc,
-                    "stateDir": str(crb_state_dir),
-                    "serviceUrl": crb_svc_url,
+                    "stateDir": str(app_state_dir),
+                    "serviceUrl": svc_url,
                 }
-                return results
+                skipped_crb_reuse = True
 
-        if action in ("seed-data", "all"):
-            if not plan_path.exists():
-                plan_cmd = [
-                    sys.executable, "-B", str(crb_tool),
+        if not skipped_crb_reuse:
+            if action in ("seed-data", "all"):
+                if not plan_path.exists():
+                    plan_cmd = [
+                        sys.executable, "-B", str(sim_tool),
+                        "--mode", "seed",
+                        "--output", str(plan_path),
+                        "plan",
+                    ]
+                    if anchor_utc:
+                        plan_cmd[3:3] = ["--anchor-utc", anchor_utc]
+                    _run_subprocess(plan_cmd, env)
+                _run_subprocess([
+                    sys.executable, "-B", str(sim_tool),
                     "--mode", "seed",
-                    "--output", str(plan_path),
-                    "plan",
-                ]
-                if anchor_utc:
-                    plan_cmd[3:3] = ["--anchor-utc", anchor_utc]
-                _run_subprocess(plan_cmd, env)
-            _run_subprocess([
-                sys.executable, "-B", str(crb_tool),
-                "--mode", "seed",
-                "--plan", str(plan_path),
-                "--service-url", crb_svc_url,
-                "--action-url", crb_act_url,
-                "--state-dir", str(crb_state_dir),
-                "--api-key-file", str(crb_key_file),
-                "--action-token-file", str(crb_tok_file),
-                *tls_args,
-                "run",
-            ], env)
+                    "--plan", str(plan_path),
+                    "--service-url", svc_url,
+                    "--action-url", act_url,
+                    "--state-dir", str(app_state_dir),
+                    "--api-key-file", str(key_file),
+                    "--action-token-file", str(tok_file),
+                    *tls_args,
+                    "run",
+                ], env)
 
-        if action in ("verify", "all"):
-            if not plan_path.exists():
-                raise BootstrapError(f"missing chess-room-booking plan for verify: {plan_path}")
-            _run_subprocess([
-                sys.executable, "-B", str(crb_tool),
-                "--mode", "seed",
-                "--plan", str(plan_path),
-                "--service-url", crb_svc_url,
-                "--state-dir", str(crb_state_dir),
-                "--api-key-file", str(crb_key_file),
-                "--wait-seconds", "60",
+            if action in ("verify", "all"):
+                if not plan_path.exists():
+                    raise BootstrapError(f"missing chess-room-booking plan for verify: {plan_path}")
+                _run_subprocess([
+                    sys.executable, "-B", str(sim_tool),
+                    "--mode", "seed",
+                    "--plan", str(plan_path),
+                    "--service-url", svc_url,
+                    "--state-dir", str(app_state_dir),
+                    "--api-key-file", str(key_file),
+                    "--wait-seconds", "60",
+                    *tls_args,
+                    "verify",
+                ], env)
+            results["chess-room-booking"] = {"stateDir": str(app_state_dir), "planFile": str(plan_path), "serviceUrl": svc_url}
+
+    if "vmi" in apps:
+        sim_tool = APPLICATIONS_ROOT / "vmi/tooling/simulation_tool.py"
+        app_state_dir = ensure_private_dir(state_dir / "runs/vmi")
+        plan_path = state_dir / "runs/vmi-plan.json"
+        tok_file = secrets_dir / "vmi-operator.token"
+        act_url = f"{base_url}/api/v1/apps/entity/action/execute/"
+        tls_args = _sim_tls_args_for_crb(ca_file, trust_leaf)
+
+        vmi_services_info = (services_info.get("vmi") or {}).get("services") or {}
+        service_map_entries: dict[str, dict[str, str]] = {}
+        for profile in APP_SPECS["vmi"]["serviceProfiles"]:
+            svc_key = str(profile["key"])
+            svc_meta = vmi_services_info.get(svc_key) or {}
+            key_file = str(svc_meta.get("apiKeyFile") or (secrets_dir / f"vmi.{svc_key}.api-key"))
+            service_map_entries[svc_key] = {
+                "serviceUrl": f"{base_url}/api/v1/gateway/services/{svc_key}",
+                "apiKeyFile": key_file,
+            }
+        service_map_path = app_state_dir / "service-map.json"
+        service_map_path.write_text(
+            json.dumps({"services": service_map_entries}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.chmod(service_map_path, 0o600)
+
+        journal_path = app_state_dir / "journal.json"
+        preflighted = False
+        if journal_path.is_file():
+            try:
+                preflighted = bool(json.loads(journal_path.read_text(encoding="utf-8")).get("preflight"))
+            except (OSError, json.JSONDecodeError):
+                preflighted = False
+
+        skipped_vmi_reuse = False
+        if reuse_existing and action in ("seed-data", "all") and not preflighted:
+            inspect_raw = _run_subprocess([
+                sys.executable, "-B", str(sim_tool),
+                "--service-map", str(service_map_path),
                 *tls_args,
-                "verify",
+                "inspect",
             ], env)
-        results["chess-room-booking"] = {"stateDir": str(crb_state_dir), "planFile": str(plan_path), "serviceUrl": crb_svc_url}
+            inspect_doc = json.loads(inspect_raw)
+            if inspect_doc.get("empty") is False:
+                results["vmi"] = {
+                    "status": "reused_non_empty_readonly_inspected",
+                    "seedSkippedReason": "remote vmi instance already contains business records; preserved without writes",
+                    "inspect": inspect_doc,
+                    "stateDir": str(app_state_dir),
+                    "serviceMapFile": str(service_map_path),
+                    "serviceUrls": {k: v["serviceUrl"] for k, v in service_map_entries.items()},
+                }
+                skipped_vmi_reuse = True
+
+        if not skipped_vmi_reuse:
+            if action in ("seed-data", "all"):
+                if not plan_path.exists():
+                    plan_cmd = [
+                        sys.executable, "-B", str(sim_tool),
+                        "--mode", "seed",
+                        "--output", str(plan_path),
+                        "plan",
+                    ]
+                    if anchor_utc:
+                        plan_cmd[3:3] = ["--anchor-utc", anchor_utc]
+                    _run_subprocess(plan_cmd, env)
+                _run_subprocess([
+                    sys.executable, "-B", str(sim_tool),
+                    "--mode", "seed",
+                    "--plan", str(plan_path),
+                    "--service-map", str(service_map_path),
+                    "--action-url", act_url,
+                    "--state-dir", str(app_state_dir),
+                    "--action-token-file", str(tok_file),
+                    *tls_args,
+                    "run",
+                ], env)
+
+            if action in ("verify", "all"):
+                if not plan_path.exists():
+                    raise BootstrapError(f"missing vmi plan for verify: {plan_path}")
+                _run_subprocess([
+                    sys.executable, "-B", str(sim_tool),
+                    "--mode", "seed",
+                    "--plan", str(plan_path),
+                    "--service-map", str(service_map_path),
+                    "--state-dir", str(app_state_dir),
+                    "--wait-seconds", "60",
+                    *tls_args,
+                    "verify",
+                ], env)
+            results["vmi"] = {
+                "stateDir": str(app_state_dir),
+                "planFile": str(plan_path),
+                "serviceMapFile": str(service_map_path),
+                "serviceUrls": {k: v["serviceUrl"] for k, v in service_map_entries.items()},
+            }
 
     return results
 
@@ -1454,12 +1780,24 @@ def build_dry_run_plan(args: argparse.Namespace, platform_root: Path, apps: list
     app_plans = {}
     for app_key in apps:
         pkg = package_zip_path(platform_root, app_key)
-        app_plans[app_key] = {
+        entry: dict[str, Any] = {
             "uuid": APP_SPECS[app_key]["uuid"],
             "packageZip": str(pkg),
             "packageExists": pkg.is_file(),
             "packageSha256": package_sha256(pkg) if pkg.is_file() else "",
         }
+        profiles = APP_SPECS[app_key].get("serviceProfiles")
+        if profiles:
+            entry["serviceProfiles"] = [
+                {
+                    "key": p["key"],
+                    "domain": p["domain"],
+                    "showName": p["showName"],
+                    "entities": list(p["entities"]),
+                }
+                for p in profiles
+            ]
+        app_plans[app_key] = entry
     return {
         "mode": "dry-run",
         "command": args.command,
@@ -1577,6 +1915,37 @@ def main(argv: list[str] | None = None) -> int:
                 operator_account=args.operator_account,
                 operator_password=op_pw,
                 ssl_context=ssl_ctx,
+                on_password_changed=lambda new_pw, p=op_pw_path: write_secret_file(p, new_pw),
+                password_source=password_source,
+                on_password_created=on_password_created,
+            )
+        if "vmi" in apps:
+            vmi_inst = _resolve_ready_installations(session, ["vmi"], installations_info)["vmi"]
+            vmi_account = "vmi-sim-operator"
+            op_pw_path = secrets_dir / f"{vmi_account}.password"
+            password_source = "provided"
+            on_password_created = None
+            if args.operator_password_file is not None:
+                op_pw = read_secret_file(args.operator_password_file, label="operator password")
+                write_secret_file(op_pw_path, op_pw)
+            elif op_pw_path.exists():
+                op_pw = read_secret_file(op_pw_path, label="operator password")
+            else:
+                op_pw = "SimOp!" + secrets.token_urlsafe(18)
+                password_source = "generated"
+                on_password_created = lambda new_pw, p=op_pw_path: write_secret_file(p, new_pw)
+            summary["vmiOperator"] = ensure_app_operator_token(
+                session,
+                secrets_dir,
+                app_key="vmi",
+                namespace=args.namespace,
+                deployment_id=vmi_inst["deploymentId"],
+                operator_account=vmi_account,
+                operator_password=op_pw,
+                ssl_context=ssl_ctx,
+                preferred_template_keys=("vmi-manager", "warehouse-operator", "store-clerk"),
+                pkce_client_name="vmi-sim-pkce-client",
+                token_filename="vmi-operator.token",
                 on_password_changed=lambda new_pw, p=op_pw_path: write_secret_file(p, new_pw),
                 password_source=password_source,
                 on_password_created=on_password_created,
